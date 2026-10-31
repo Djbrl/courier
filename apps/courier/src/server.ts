@@ -1,0 +1,580 @@
+import path from "node:path";
+import {
+  ALL_SCOPES,
+  config,
+  DURATIONS,
+  type DurationKey,
+  isScope,
+  newId,
+  paypal,
+  ROOT_DIR,
+  randomToken,
+  type Scope,
+  type Visa,
+} from "@courier/shared";
+import { createOAuthMetadata, mcpAuthRouter } from "@modelcontextprotocol/sdk/server/auth/router.js";
+import express from "express";
+import { jwks } from "./auth/keys.ts";
+import { CourierOAuthProvider, clientRedirect, findAuthRequest, issueAuthorizationCode } from "./auth/oauth.ts";
+import { currentHuman, endSession, startSession } from "./auth/session.ts";
+import {
+  type Approval,
+  type AuthRequest,
+  db,
+  findMerchant,
+  type Human,
+  isMinor,
+  type SavedPayPalRecord,
+  saveCourier,
+} from "./db.ts";
+import {
+  approvalPage,
+  connectPage,
+  consentPage,
+  courierChoice,
+  courierForClient,
+  DEMO_CLIENT_PREFIX,
+  developersPage,
+  errorPage,
+  landingPage,
+  refusalPage,
+  signInPage,
+} from "./pages/index.ts";
+import { simPaypalRouter } from "./paypal-simulator.ts";
+import { appRouter } from "./routes/app.ts";
+import { botsRouter } from "./routes/bots.ts";
+import { addStamp, decideApproval, internalRouter, revokeVisa, sweepExpiredVisas } from "./visas.ts";
+
+const app = express();
+app.set("trust proxy", "loopback");
+app.disable("x-powered-by");
+
+const issuerUrl = new URL(config.courier.url);
+const provider = new CourierOAuthProvider();
+
+app.use(
+  "/assets",
+  express.static(path.join(ROOT_DIR, "packages/shared/assets"), {
+    maxAge: process.env.NODE_ENV === "production" ? "1h" : 0,
+  }),
+);
+
+/* ---------------- OAuth 2.1 authorization server ---------------- */
+
+const metadata = {
+  ...createOAuthMetadata({
+    provider,
+    issuerUrl,
+    scopesSupported: [...ALL_SCOPES],
+    serviceDocumentationUrl: new URL("/developers", issuerUrl),
+  }),
+  // RFC 8414: the issuer must exactly match the identifier clients use (no trailing slash), and the `iss` we send.
+  issuer: config.courier.url,
+  jwks_uri: new URL("/jwks.json", issuerUrl).href,
+  authorization_response_iss_parameter_supported: true,
+  client_id_metadata_document_supported: true,
+};
+
+app.get("/.well-known/oauth-authorization-server", (_req, res) => {
+  res.set("Access-Control-Allow-Origin", "*").json(metadata);
+});
+app.get("/jwks.json", async (_req, res) => {
+  res
+    .set("Access-Control-Allow-Origin", "*")
+    .set("Cache-Control", "public, max-age=300")
+    .json(await jwks());
+});
+
+app.use(
+  mcpAuthRouter({
+    provider,
+    issuerUrl,
+    scopesSupported: [...ALL_SCOPES],
+    serviceDocumentationUrl: new URL("/developers", issuerUrl),
+    clientRegistrationOptions: { clientSecretExpirySeconds: 0 },
+  }),
+);
+
+/* ---------------- Simulated PayPal (only without credentials) ---------------- */
+
+if (paypal.mode === "simulated") {
+  app.use("/sim-paypal", simPaypalRouter(config.courier.url));
+}
+
+/* ---------------- internal API for merchants ---------------- */
+
+app.use("/internal", express.json(), internalRouter);
+
+/* ---------------- pages ---------------- */
+
+app.use(express.urlencoded({ extended: false }));
+
+app.get("/", (req, res) => {
+  res.send(landingPage(currentHuman(req)));
+});
+
+app.get("/developers", (req, res) => {
+  res.send(developersPage(currentHuman(req)));
+});
+
+app.get("/healthz", (_req, res) => {
+  res.json({ ok: true, paypal: paypal.mode, intentModel: config.intent.model });
+});
+
+app.get("/connect/:id", (req, res) => {
+  const request = findAuthRequest(req.params.id);
+  if (!request) {
+    res.status(400).send(errorPage(currentHuman(req), "This link has expired", "Ask your agent to connect again."));
+    return;
+  }
+  const merchant = findMerchant(request.resource)!;
+  const human = currentHuman(req);
+  // The person's own courier, started from their signed-in Courier home: straight to the errand note.
+  if (human && courierForClient(human.id, request.clientId)?.id && request.clientId.startsWith(DEMO_CLIENT_PREFIX)) {
+    res.redirect(302, `/consent/${request.id}`);
+    return;
+  }
+  res.send(connectPage(request, merchant, human));
+});
+
+/* ---------- Log in with PayPal ---------- */
+
+const PAYPAL_CALLBACK = `${config.courier.url}/auth/paypal/callback`;
+
+app.get("/auth/paypal/start", (req, res) => {
+  const reqId = typeof req.query.req === "string" ? req.query.req : undefined;
+  if (reqId && !findAuthRequest(reqId)) {
+    res.status(400).send(errorPage(null, "This link has expired", "Ask your agent to connect again."));
+    return;
+  }
+  // Where to land after sign-in (onboarding uses this); same-site paths only.
+  const next =
+    typeof req.query.next === "string" && /^\/(?!\/)[\w\-/?=&.]*$/.test(req.query.next) ? req.query.next : null;
+  const state = randomToken(18);
+  db.put("paypal_states", state, { state, reqId: reqId ?? null, next, expiresAt: Date.now() + 15 * 60 * 1000 });
+  res.redirect(302, paypal.loginUrl({ redirectUri: PAYPAL_CALLBACK, state }));
+});
+
+app.get("/auth/paypal/callback", async (req, res) => {
+  const state = String(req.query.state ?? "");
+  const code = String(req.query.code ?? "");
+  const saved = db.get<{ reqId: string | null; next?: string | null; expiresAt: number }>("paypal_states", state);
+  if (!saved || saved.expiresAt < Date.now() || !code) {
+    res.status(400).send(errorPage(null, "Sign-in expired", "Please start again from your agent."));
+    return;
+  }
+  db.delete("paypal_states", state);
+
+  let identity: Awaited<ReturnType<typeof paypal.exchangeLoginCode>>;
+  try {
+    identity = await paypal.exchangeLoginCode(code, PAYPAL_CALLBACK);
+  } catch (error) {
+    console.error("[paypal] login failed", error);
+    res
+      .status(502)
+      .send(errorPage(null, "PayPal sign-in failed", "PayPal didn't confirm the sign-in. Please try again."));
+    return;
+  }
+
+  // One account per PayPal account.
+  const existing = db.list<Human>("humans", (h) => h.payerId === identity.payerId, 1)[0];
+  const now = new Date().toISOString();
+  const human: Human = existing
+    ? {
+        ...existing,
+        verified: identity.verified,
+        ageRange: identity.ageRange,
+        accountType: identity.accountType,
+        displayName: existing.displayName ?? identity.name ?? null,
+        lastLoginAt: now,
+      }
+    : (() => {
+        const id = newId("hum");
+        return {
+          id,
+          payerId: identity.payerId,
+          verified: identity.verified,
+          ageRange: identity.ageRange,
+          accountType: identity.accountType,
+          displayName: identity.name ?? null,
+          createdAt: now,
+          lastLoginAt: now,
+        };
+      })();
+  db.put("humans", human.id, human);
+
+  const request = saved.reqId ? findAuthRequest(saved.reqId) : null;
+
+  if (!human.verified) {
+    res.send(
+      refusalPage(
+        null,
+        "This PayPal account isn't verified",
+        "Couriers only work for verified PayPal accounts, so shops can trust there's a real person behind every agent. Verify your account with PayPal, then try again.",
+        request ?? undefined,
+      ),
+    );
+    return;
+  }
+  if (isMinor(human.ageRange)) {
+    res.send(
+      refusalPage(
+        null,
+        "Courier is for adults",
+        "Couriers can spend money, so you need to be 18 or older. Nothing about you was shared with the shop.",
+        request ?? undefined,
+      ),
+    );
+    return;
+  }
+
+  startSession(res, human.id);
+  res.redirect(302, request ? `/consent/${request.id}` : (saved.next ?? "/app"));
+});
+
+app.get("/logout", (_req, res) => {
+  endSession(res);
+  res.redirect(302, "/");
+});
+
+/* ---------- consent: issue a visa ---------- */
+
+app.get("/consent/:id", (req, res) => {
+  const human = currentHuman(req);
+  const request = findAuthRequest(req.params.id);
+  if (!request || request.completed) {
+    res.status(400).send(errorPage(human, "This link has expired", "Ask your agent to connect again."));
+    return;
+  }
+  if (!human) {
+    res.redirect(302, `/connect/${request.id}`);
+    return;
+  }
+  res.send(consentPage(request, findMerchant(request.resource)!, human));
+});
+
+app.post("/consent/:id", async (req, res) => {
+  const human = currentHuman(req);
+  const request = findAuthRequest(req.params.id);
+  if (!request || request.completed) {
+    res.status(400).send(errorPage(human, "This link has expired", "Ask your agent to connect again."));
+    return;
+  }
+  if (!human) {
+    res.redirect(302, `/connect/${request.id}`);
+    return;
+  }
+  if (req.body.decision !== "approve") {
+    db.update<AuthRequest>("auth_requests", request.id, (r) => ({ ...r, completed: true }));
+    res.redirect(
+      302,
+      clientRedirect(request, { error: "access_denied", error_description: "The person denied the visa." }),
+    );
+    return;
+  }
+
+  const merchant = findMerchant(request.resource)!;
+  const rawScopes = ([] as string[]).concat(req.body.scopes ?? []);
+  const scopes = rawScopes.filter(isScope).filter((s) => merchant.scopes.includes(s)) as Scope[];
+  const spend = Math.round(Number(req.body.spend_limit) * 100);
+  const perPurchase = Math.round(Number(req.body.per_purchase_limit) * 100);
+  const duration = (req.body.duration in DURATIONS ? req.body.duration : "24h") as DurationKey;
+  const intent = String(req.body.intent ?? "")
+    .trim()
+    .slice(0, 160);
+  const wantsBond = req.body.bond === "1";
+  const wantsAutopay = req.body.autopay === "1" && scopes.includes("store:buy");
+
+  const problem =
+    scopes.length === 0
+      ? "Pick at least one permission."
+      : !(spend >= 100 && spend <= 50_000)
+        ? "The total budget must be between $1 and $500."
+        : !(perPurchase >= 100 && perPurchase <= spend)
+          ? "The per-purchase limit must be at least $1 and no more than the total budget."
+          : null;
+  if (problem) {
+    res.status(400).send(consentPage(request, merchant, human, problem));
+    return;
+  }
+
+  // One courier per Claude: an outside client (the person's own Claude) is bound to the courier they pick, and acts
+  // as that courier from then on, in every chat.
+  const choice = courierChoice(human, request.clientId);
+  const picked = choice?.couriers.find((c) => c.id === req.body.courier);
+  if (picked)
+    saveCourier({
+      ...picked,
+      mode: "claude",
+      clientId: request.clientId,
+      clientName: request.clientName,
+      boundAt: new Date().toISOString(),
+    });
+  const actingAs = courierForClient(human.id, request.clientId);
+
+  const visa: Visa = {
+    id: newId("visa"),
+    humanId: human.id,
+    clientId: request.clientId,
+    agentName: actingAs?.name ?? request.clientName,
+    resource: merchant.resource,
+    merchantName: merchant.name,
+    scopes,
+    spendLimitCents: spend,
+    perPurchaseLimitCents: perPurchase,
+    spentCents: 0,
+    currency: "USD",
+    intent,
+    status: "active",
+    createdAt: new Date().toISOString(),
+    expiresAt: new Date(Date.now() + DURATIONS[duration].ms).toISOString(),
+    bond: null,
+  };
+
+  db.put("visa_requests", visa.id, { visaId: visa.id, authRequestId: request.id, wantsBond });
+
+  if (wantsAutopay) {
+    // Save PayPal for this errand: one PayPal page now, none per purchase later.
+    try {
+      const setup = await paypal.createVaultSetup(
+        {
+          description: `${visa.agentName} may buy at ${merchant.name} for you, up to $${(spend / 100).toFixed(0)} in total, until you call it back.`,
+          brandName: merchant.name,
+          returnUrl: `${config.courier.url}/autopay/return?visa=${visa.id}`,
+          cancelUrl: `${config.courier.url}/autopay/cancel?visa=${visa.id}`,
+        },
+        `autopay-${visa.id}`,
+      );
+      if (!setup.approveUrl) throw new Error("PayPal returned no approval link");
+      visa.status = "pending_paypal";
+      visa.autopay = { status: "pending" };
+      db.put("visas", visa.id, visa);
+      db.put<SavedPayPalRecord>("saved_paypal", visa.id, { visaId: visa.id, setupTokenId: setup.id, vaultId: null });
+      res.redirect(302, setup.approveUrl);
+      return;
+    } catch (error) {
+      // Saving PayPal isn't available (e.g. Vault is off on the PayPal app): the errand still works, with a PayPal
+      // page per purchase.
+      console.warn("[autopay] could not start saving PayPal:", (error as Error).message);
+      visa.autopay = { status: "failed" };
+    }
+  }
+  await continueIssuing(visa, request, human, wantsBond, res);
+});
+
+/** After the optional PayPal steps: take the $5 bond if asked for, then send the agent its code. */
+async function continueIssuing(
+  visa: Visa,
+  request: AuthRequest,
+  human: Human,
+  wantsBond: boolean,
+  res: express.Response,
+) {
+  if (wantsBond) {
+    try {
+      const order = await paypal.createOrder(
+        {
+          intent: "AUTHORIZE",
+          amountCents: 500,
+          currency: "USD",
+          description: `Refundable bond for ${visa.agentName}'s visa at ${visa.merchantName}`,
+          customId: visa.id,
+          returnUrl: `${config.courier.url}/bond/return?visa=${visa.id}`,
+          cancelUrl: `${config.courier.url}/bond/cancel?visa=${visa.id}`,
+          brandName: "Courier",
+        },
+        `bond-${visa.id}`,
+      );
+      visa.status = "pending_bond";
+      visa.bond = { amountCents: 500, orderId: order.id, authorizationId: null, status: "pending" };
+      db.put("visas", visa.id, visa);
+      res.redirect(302, order.approveUrl!);
+    } catch (error) {
+      console.error("[bond] could not create authorization order", error);
+      res
+        .status(502)
+        .send(
+          consentPage(
+            request,
+            findMerchant(request.resource)!,
+            human,
+            "PayPal couldn't create the bond. Try again without a bond.",
+          ),
+        );
+    }
+    return;
+  }
+  visa.status = "active";
+  db.put("visas", visa.id, visa);
+  issuedStamps(visa);
+  const code = issueAuthorizationCode(request, visa, human);
+  res.redirect(302, clientRedirect(request, { code }));
+}
+
+function issuedStamps(visa: Visa) {
+  if (visa.autopay?.status === "on")
+    addStamp(
+      visa,
+      "visa_issued",
+      "PayPal saved for this errand",
+      "Purchases within your limits are paid straight away.",
+    );
+  addStamp(
+    visa,
+    "visa_issued",
+    `Visa issued to ${visa.agentName}`,
+    `${visa.merchantName} · up to $${(visa.spendLimitCents / 100).toFixed(0)}${visa.bond ? " · bonded" : ""}`,
+  );
+}
+
+/** The person's errand that's waiting on a PayPal step, if this browser is theirs and the request is still open. */
+function pendingErrand(req: express.Request) {
+  const human = currentHuman(req);
+  const visa = db.get<Visa>("visas", String(req.query.visa ?? ""));
+  const link = visa ? db.get<{ authRequestId: string; wantsBond?: boolean }>("visa_requests", visa.id) : undefined;
+  const request = link ? findAuthRequest(link.authRequestId) : null;
+  if (!human || !visa || visa.humanId !== human.id || !request || request.completed)
+    return { human, visa: null, request: null, wantsBond: false };
+  return { human, visa, request, wantsBond: Boolean(link?.wantsBond) };
+}
+
+app.get("/autopay/return", async (req, res) => {
+  const { human, visa, request, wantsBond } = pendingErrand(req);
+  const saved = visa ? db.get<SavedPayPalRecord>("saved_paypal", visa.id) : undefined;
+  if (!visa || !request || !saved || visa.autopay?.status !== "pending") {
+    res.status(400).send(errorPage(human, "This link has expired", "Ask your agent to connect again."));
+    return;
+  }
+  try {
+    const token = await paypal.createVaultToken(saved.setupTokenId, `vault-${visa.id}`);
+    db.put<SavedPayPalRecord>("saved_paypal", visa.id, { ...saved, vaultId: token.id });
+    visa.autopay = { status: "on", email: token.email };
+  } catch (error) {
+    console.warn("[autopay] could not save PayPal:", (error as Error).message);
+    db.delete("saved_paypal", visa.id);
+    visa.autopay = { status: "failed" };
+  }
+  await continueIssuing(visa, request, human!, wantsBond, res);
+});
+
+app.get("/autopay/cancel", async (req, res) => {
+  const { human, visa, request, wantsBond } = pendingErrand(req);
+  if (!visa || !request) {
+    res.redirect(302, "/app");
+    return;
+  }
+  // Not saving PayPal is fine: the errand goes ahead, and each purchase gets its own PayPal page.
+  db.delete("saved_paypal", visa.id);
+  visa.autopay = { status: "declined" };
+  await continueIssuing(visa, request, human!, wantsBond, res);
+});
+
+app.get("/bond/return", async (req, res) => {
+  const human = currentHuman(req);
+  const visa = db.get<Visa>("visas", String(req.query.visa ?? ""));
+  const link = visa ? db.get<{ authRequestId: string }>("visa_requests", visa.id) : undefined;
+  const request = link ? findAuthRequest(link.authRequestId) : null;
+  if (!human || !visa || visa.humanId !== human.id || !visa.bond || !request || request.completed) {
+    res.status(400).send(errorPage(human, "This link has expired", "Ask your agent to connect again."));
+    return;
+  }
+  try {
+    const order = await paypal.authorizeOrder(visa.bond.orderId, `bond-authorize-${visa.id}`);
+    visa.bond = { ...visa.bond, authorizationId: order.authorizationId ?? null, status: "authorized" };
+    visa.status = "active";
+    db.put("visas", visa.id, visa);
+  } catch (error) {
+    console.error("[bond] authorize failed", error);
+    res
+      .status(502)
+      .send(
+        errorPage(
+          human,
+          "The bond didn't go through",
+          "PayPal didn't authorize the hold. Ask your agent to connect again.",
+        ),
+      );
+    return;
+  }
+  addStamp(visa, "bond", "Bond held", `$5.00 refundable hold on PayPal`);
+  issuedStamps(visa);
+  const code = issueAuthorizationCode(request, visa, human);
+  res.redirect(302, clientRedirect(request, { code }));
+});
+
+app.get("/bond/cancel", async (req, res) => {
+  const found = db.get<Visa>("visas", String(req.query.visa ?? ""));
+  // Only the person who started this errand can cancel it, and only while the bond is pending.
+  const visa = found?.humanId === currentHuman(req)?.id && found?.status === "pending_bond" ? found : undefined;
+  const link = visa ? db.get<{ authRequestId: string }>("visa_requests", visa.id) : undefined;
+  const request = link ? findAuthRequest(link.authRequestId) : null;
+  if (visa) await revokeVisa(visa.id, "Bond was not approved");
+  if (!request) {
+    res.redirect(302, "/app");
+    return;
+  }
+  db.update<AuthRequest>("auth_requests", request.id, (r) => ({ ...r, completed: true }));
+  res.redirect(
+    302,
+    clientRedirect(request, { error: "access_denied", error_description: "The bond was not approved." }),
+  );
+});
+
+/* ---------- errands ---------- */
+
+// The signed-in app (/app, /app/errands, …) lives in routes/app.ts.
+
+app.post("/app/visas/:id/revoke", async (req, res) => {
+  const human = currentHuman(req);
+  const visa = db.get<Visa>("visas", req.params.id);
+  if (!human || !visa || visa.humanId !== human.id) {
+    res.status(404).send(errorPage(human, "Not found", "That visa doesn't exist."));
+    return;
+  }
+  await revokeVisa(visa.id, "Called back by the person");
+  const next = typeof req.body.next === "string" && req.body.next.startsWith("/app") ? req.body.next : "/app";
+  res.redirect(303, next);
+});
+
+/* ---------- approvals (ask_human) ---------- */
+
+app.get("/approvals/:id", (req, res) => {
+  const human = currentHuman(req);
+  const approval = db.get<Approval>("approvals", req.params.id);
+  if (!human) {
+    res.send(signInPage());
+    return;
+  }
+  if (!approval || approval.humanId !== human.id) {
+    res.status(404).send(errorPage(human, "Not found", "This request doesn't exist or belongs to someone else."));
+    return;
+  }
+  res.send(approvalPage(human, approval, db.get<Visa>("visas", approval.visaId)!));
+});
+
+app.post("/approvals/:id", (req, res) => {
+  const human = currentHuman(req);
+  const approval = db.get<Approval>("approvals", req.params.id);
+  if (!human || !approval || approval.humanId !== human.id) {
+    res.status(404).send(errorPage(human, "Not found", "This request doesn't exist."));
+    return;
+  }
+  decideApproval(approval, req.body.decision === "approved" ? "approved" : "denied");
+  res.redirect(303, `/approvals/${approval.id}`);
+});
+
+/* ---------- onboarding + errand room ("Try the demo") ---------- */
+
+app.use(appRouter);
+
+/* ---------- release the bots ---------- */
+
+app.use("/bots", botsRouter);
+
+/* ---------------- start ---------------- */
+
+setInterval(() => void sweepExpiredVisas(), 60_000).unref();
+
+app.listen(config.courier.port, () => {
+  console.log(`Courier  → ${config.courier.url}  (PayPal: ${paypal.mode}, intent: ${config.intent.model})`);
+});

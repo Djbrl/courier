@@ -1,0 +1,60 @@
+# Render Blueprint: two web services (Courier and the demo merchant).
+# After the first deploy, set COURIER_URL and STORE_URL on BOTH services to their real https://…onrender.com URLs
+# (no trailing slash) and redeploy. Free instances have an ephemeral disk: data and the signing key reset on restart
+# unless you set COURIER_SIGNING_KEY (a private Ed25519 JWK) and attach a disk.
+envVarGroups:
+  - name: courier-shared
+    envVars:
+      - key: INTERNAL_SECRET
+        generateValue: true
+      - key: COURIER_SECRET
+        generateValue: true
+      - key: NODE_ENV
+        value: production
+      - key: COURIER_URL
+        value: https://courier.onrender.com
+      - key: STORE_URL
+        value: https://juniper-records.onrender.com
+
+services:
+  - type: web
+    name: courier
+    runtime: node
+    plan: free
+    buildCommand: npm ci
+    startCommand: npx tsx apps/courier/src/server.ts
+    healthCheckPath: /healthz
+    envVars:
+      - fromGroup: courier-shared
+      - key: COURIER_PORT
+        value: "10000"
+      - key: COURIER_SIGNING_KEY # output of: npx tsx scripts/gen-signing-key.ts
+        sync: false
+      - key: PAYPAL_CLIENT_ID
+        sync: false
+      - key: PAYPAL_CLIENT_SECRET
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: JEV_API_KEY
+        sync: false
+      - key: JEV_BASE_URL
+        sync: false
+
+  - type: web
+    name: juniper-records
+    runtime: node
+    plan: free
+    buildCommand: npm ci
+    startCommand: npx tsx apps/store/src/server.ts
+    healthCheckPath: /healthz
+    envVars:
+      - fromGroup: courier-shared
+      - key: STORE_PORT
+        value: "10000"
+      - key: PAYPAL_CLIENT_ID
+        sync: false
+      - key: PAYPAL_CLIENT_SECRET
+        sync: false
+      - key: PAYPAL_WEBHOOK_ID
+        sync: false

@@ -1,0 +1,43 @@
+{
+  "name": "courier",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "A verified ID and spending limits for AI agents, powered by PayPal.",
+  "license": "MIT",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "dev": "node scripts/dev.mjs",
+    "demo": "PAYPAL_MODE=simulated COURIER_URL=http://localhost:4000 STORE_URL=http://localhost:4100 DATA_DIR=data/demo node scripts/dev.mjs",
+    "start": "node scripts/dev.mjs --no-watch",
+    "test": "npm run test:unit && npm run test:e2e",
+    "test:unit": "tsx --test \"tests/unit/*.test.ts\"",
+    "test:e2e": "node tests/run.mjs",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "biome check .",
+    "format": "biome check --write .",
+    "check": "npm run lint && npm run typecheck && npm test",
+    "preflight": "tsx scripts/preflight.ts",
+    "keys": "tsx scripts/gen-signing-key.ts"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^1.3.0",
+    "@modelcontextprotocol/sdk": "^1.32.2",
+    "express": "^5.3.0",
+    "jose": "^6.2.13",
+    "tsx": "^4.23.15",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.6.4",
+    "@types/express": "^5.0.6",
+    "@types/node": "^26.6.5",
+    "typescript": "^5.9.3"
+  }
+}

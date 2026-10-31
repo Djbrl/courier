@@ -1,0 +1,148 @@
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="mk" viewBox="0 0 40 20"><path fill="currentColor" d="M15 0h25l-7 20H8z"/><path fill="currentColor" d="M5 0h6L4 20h-6z"/></symbol>
+    <symbol id="arr" viewBox="0 0 16 16"><path d="M2 8h11M9 3.5 13.5 8 9 12.5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  </defs>
+</svg>
+
+<main>
+  <!-- 0 · hero -->
+  <section class="sec hero" data-k="0">
+    <div class="tex"></div>
+    <nav class="nav">
+      <a href="/" class="logo" aria-label="Courier"><svg><use href="#mk"/></svg>Courier</a>
+      <a href="{{navHref}}" class="btn">{{navLabel}}<span class="go"><svg><use href="#arr"/></svg></span></a>
+    </nav>
+    <div class="wrap">
+      <div class="txt">
+        <h1 class="big rv">Give your agent an&nbsp;ID.</h1>
+        <p class="lead rv" style="--d:.1s">PayPal verifies you. Your agent gets its own&nbsp;ID.</p>
+        <div class="ctas rv" style="--d:.2s">
+          <a href="/start" class="btn acc">Try the demo<span class="go"><svg><use href="#arr"/></svg></span></a>
+          <span class="ppl">Powered by <span class="pp"><span class="a">Pay</span><span class="b">Pal</span></span></span>
+        </div>
+      </div>
+      <div class="deck" id="deck" role="img" aria-label="Courier IDs for four agents, all sent by Maya Chen"></div>
+    </div>
+  </section>
+
+  <!-- 1 · the shift -->
+  <section class="sec s1" data-k="1">
+    <div class="wrap">
+      <div class="txt">
+        
+        <h2 class="big rv" style="--d:.05s">The internet is becoming a city of&nbsp;agents.</h2>
+        <p class="lead rv" style="--d:.12s">Courier helps shops tell their customers’ agents apart. Each gets an ID, tied to a real&nbsp;person.</p>
+        <div class="stat rv" style="--d:.22s"><b>51%</b><span>of web traffic is now automated<small>Imperva Bad Bot Report 2025</small></span></div>
+      </div>
+      <div class="globe" id="globe" role="img" aria-label="A rotating dotted globe; agents light up and show their Courier ID">
+        <canvas aria-hidden="true"></canvas><div class="gchips"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 2 · how it works -->
+  <section class="sec s2" data-k="2" id="demo">
+    <div class="wrap">
+      <div class="shead">
+        <div><h2 class="big rv" style="--d:.05s">Send it out. Stay in the&nbsp;loop.</h2></div>
+      </div>
+      <div class="grid3">
+        <div class="pcol" style="--i:0">
+          <div class="panel g"><div class="dots"></div><span class="num">1</span><div class="pm n" id="note"></div></div>
+          <div class="cap"><h3>Run an errand.</h3><p>Your limits, in plain words.</p></div>
+        </div>
+        <div class="pcol" style="--i:1">
+          <div class="panel o"><div class="dots"></div><span class="num">2</span><div class="pm p" id="phone"></div></div>
+          <div class="cap"><h3>It texts you first.</h3><p>Anything over budget waits for your yes.</p></div>
+        </div>
+        <div class="pcol" style="--i:2">
+          <div class="panel h"><div class="dots"></div><span class="num">3</span><div class="pm rc" id="rcpt"></div></div>
+          <div class="cap"><h3>Shops see who sent it.</h3><p>A real person behind every order.</p></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 3 · control -->
+  <section class="sec s3" data-k="3">
+    <div class="wrap">
+      <div class="shead">
+        <div><h2 class="big rv" style="--d:.05s">You stay in&nbsp;charge.</h2></div>
+      </div>
+      <div class="grid2">
+        <div class="pcol" style="--i:0">
+          <div class="panel c"><div class="dots"></div><div class="pm cw" id="crew"></div></div>
+          <div class="cap"><h3>It can bring helpers.</h3><p>Each gets its own ID, with less power than Juno.</p></div>
+        </div>
+        <div class="pcol" style="--i:1">
+          <div class="panel pa"><div class="dots"></div><div class="pm rk"><div class="rvbox" id="rvk"></div></div></div>
+          <div class="cap"><h3>Revoke it anytime.</h3><p>One tap. Its helpers stop too.</p></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 4 · buy it together -->
+  <section class="sec sl tg" data-k="4" id="together">
+    <div class="wrap">
+      <div class="txt">
+        <h2 class="big rv" style="--d:.05s">Or buy it <span>together.</span></h2>
+        <p class="lead rv" style="--d:.15s">Your courier teams up with theirs to buy one&nbsp;gift.</p>
+      </div>
+      <div class="stg rv" style="--d:.1s"><div class="dots"></div><div class="sm" id="gbuy"></div></div>
+    </div>
+  </section>
+
+  <!-- 5 · they work it out (Run chat) -->
+  <section class="sec sl flip tg2" data-k="5">
+    <div class="wrap">
+      <div class="txt">
+        <h2 class="big rv" style="--d:.05s">They work it&nbsp;out.</h2>
+        <p class="lead rv" style="--d:.15s">Couriers talk to each other, and check with you when something&nbsp;changes.</p>
+      </div>
+      <div class="stg li rv" style="--d:.1s"><div class="dots"></div><div class="sm" id="grun"></div></div>
+    </div>
+  </section>
+
+  <!-- 6 · one order -->
+  <section class="sec sl tg3" data-k="6">
+    <div class="wrap">
+      <div class="txt">
+        <h2 class="big rv" style="--d:.05s">One gift. One&nbsp;order.</h2>
+        <p class="lead rv" style="--d:.15s">Each pays their share. The shop sees two verified&nbsp;people.</p>
+      </div>
+      <div class="stg hv rv" style="--d:.1s"><div class="dots"></div><div class="sm grc" id="grcpt"></div></div>
+    </div>
+  </section>
+
+  <!-- 7 · still in charge -->
+  <section class="sec tgb" data-k="7">
+    <div class="wrap">
+      <div class="shead">
+        <h2 class="big rv" style="--d:.05s">Together, still in&nbsp;charge.</h2>
+        <p class="lead rv" style="--d:.15s">Group buys keep every rule from your own&nbsp;ID.</p>
+      </div>
+      <div class="grid4" id="rules"></div>
+    </div>
+  </section>
+
+  <!-- 8 · closing -->
+  <section class="sec s4" data-k="8" id="add">
+    <div class="tex"></div>
+    <div class="floaters" id="floaters" aria-hidden="true"></div>
+    <div class="wrap">
+      <h2 class="big rv">Your agent. Its own&nbsp;ID.</h2>
+      <div class="ctas rv" style="--d:.12s">
+        <a href="/start" class="btn acc">Try the demo<span class="go"><svg><use href="#arr"/></svg></span></a>
+        <a href="/developers" class="btn ghost">Add to Claude</a>
+        <span class="ppl">Powered by <span class="pp"><span class="a">Pay</span><span class="b">Pal</span></span></span>
+      </div>
+    </div>
+    <footer><div class="w">
+      <span class="logo"><svg><use href="#mk"/></svg>Courier</span>
+      <nav aria-label="Footer"><a href="#demo">How it works</a><a href="{{storeUrl}}/merchant">For shops</a><a href="/developers">Developers</a></nav>
+      <small>Sandbox demo.</small>
+    </div></footer>
+  </section>
+</main>

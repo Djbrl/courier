@@ -1,0 +1,16 @@
+# Dependencies
+node_modules/
+
+# Secrets and local configuration
+.env
+.claude/
+
+# Local data (SQLite databases and the dev signing key)
+data/
+*.db
+*.db-*
+
+# Personal notes and scratch space
+.local/
+
+.DS_Store
