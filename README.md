@@ -17,6 +17,8 @@ verified agent and its limits, not your name.
 
 It's standard MCP and OAuth 2.1, so Claude connects with no custom client.
 
+> **New here? Start with the [Quickstart](QUICKSTART.md):** the story of one purchase, what works today and what's next.
+
 ## Try it
 
 You need Node 24 or newer. No keys or accounts are required.
@@ -86,6 +88,7 @@ tests             Unit tests, an end-to-end run, an official MCP client check
 
 ## Docs
 
+- **[Quickstart](QUICKSTART.md):** what Courier does, what works today and what's next
 - **[Code walkthrough](docs/walkthrough.md):** follow one purchase through the code, in about 15 minutes
 - **[Architecture](docs/architecture.md):** the flows, the decisions and a glossary
 - **[Live test](docs/live-test.md):** run it with the real PayPal sandbox and real Claude
