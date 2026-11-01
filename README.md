@@ -40,8 +40,9 @@ accounts are involved.
 | The shops          | <http://localhost:4100>          |
 | What the shop sees | <http://localhost:4100/merchant> |
 
-To use your own Claude, see [the live test](docs/live-test.md). The connector needs a public URL, which
-`./scripts/tunnel.sh` provides.
+To try the real flow with your own Claude and PayPal's test environment, use the
+[hosted site](QUICKSTART.md#use-the-hosted-site). To test your own code changes that way, follow
+[the local setup](QUICKSTART.md#run-it-locally-with-paypal-sandbox).
 
 ## What it does
 

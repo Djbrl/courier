@@ -7,13 +7,18 @@ Two sandbox accounts are involved:
 - **Personal (buyer):** signs in to Courier with "Continue with PayPal" and pays.
 - **Business (shop):** owns the sandbox app and receives the payments. Check it at https://www.sandbox.paypal.com.
 
+These steps test code running on your machine, set up as in the
+[Quickstart](../QUICKSTART.md#run-it-locally-with-paypal-sandbox). To test the hosted site instead, skip steps 0.1 to
+0.3 and use `https://courier.167-99-248-134.sslip.io` as `COURIER_URL` and `https://shop.167-99-248-134.sslip.io` as
+`STORE_URL`. Its payments go to the Business account that owns the hosted site's PayPal app.
+
 ## 0. Before you start (5 minutes)
 
-1. **Start the tunnels.** Quick tunnels expire, so start fresh ones for each test:
+1. **Start the tunnel.** Its addresses stop working after a while, so start a fresh one for each test:
    1. Stop any old tunnels: `pkill -f "cloudflared tunnel"`
-   2. Run `./scripts/tunnel.sh` and leave it running. It writes the new URLs into `.env` and restarts both apps.
-2. **Run the preflight:** `npm run preflight -- --paypal`. Everything should be ✓. It prints the URLs for the next steps.
-   (`--paypal` only asks PayPal for an API token with the sandbox app's keys; it creates nothing.)
+   2. Run `./scripts/tunnel.sh` and leave it running. It saves the new addresses in `.env` and restarts both apps.
+2. **Check your setup:** `npm run preflight -- --paypal`. Everything should be ✓. It prints the addresses for the next
+   steps. (`--paypal` only checks that PayPal accepts your sandbox app's keys. It creates nothing.)
 3. **PayPal sandbox app** (developer.paypal.com → Apps & Credentials → Sandbox → your app → Log in with PayPal):
    set the Return URL to the one the preflight printed (`…/auth/paypal/callback`). Then, for **Pay without asking**:
    App Feature Options → Accept payments → Advanced options → tick **Vault** (saving PayPal for later). If it's off,
@@ -95,8 +100,8 @@ Two sandbox accounts are involved:
 
 | Symptom                                                                                       | Likely cause                                                                            | Fix                                             |
 | --------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- | ----------------------------------------------- |
-| PayPal: "client_id or redirect_uri incorrect"                                                 | Return URL in the PayPal app is the old tunnel                                          | Step 0.3                                        |
-| Claude can't connect / 502                                                                    | A tunnel died                                                                           | Restart `./scripts/tunnel.sh`, redo 0.3 and 0.4 |
+| PayPal: "client_id or redirect_uri incorrect"                                                 | Return URL in the PayPal app is an old tunnel address                                   | Step 0.3                                        |
+| Claude can't connect / 502                                                                    | The tunnel stopped (hosted site: the apps may still be starting, wait a few seconds)    | Restart `./scripts/tunnel.sh`, redo 0.3 and 0.4 |
 | Claude Code: tool "requires permission"                                                       | Claude Code's own prompt or auto mode                                                   | Allow `mcp__courier` (step 0.4)                 |
 | No dialog in Claude Code, only a link                                                         | Known Claude Code issue with MCP dialogs                                                | Use the link; it works the same                 |
 | "Pay without asking" goes straight back without a PayPal page, and purchases still give links | Vault is off on the sandbox app (server log: `[autopay] could not start saving PayPal`) | Step 0.3                                        |
