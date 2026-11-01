@@ -7,10 +7,22 @@ import {
   html,
   LOGO,
   money,
+  PP,
+  paypal,
   type RawHtml,
   raw,
 } from "@courier/shared";
 import { type Connection, type Courier, courierIdNo, db, type Human, listCouriers } from "../db.ts";
+
+/** Skips signing in with a throwaway person. With no credentials, the PayPal button is already the simulator. */
+export function tryDemo(where: { req?: string; next?: string }): RawHtml | string {
+  if (paypal.mode !== "sandbox") return "";
+  return html`<form method="post" action="/auth/demo" class="try-demo">
+    ${where.req ? html`<input type="hidden" name="req" value="${where.req}">` : ""}
+    ${where.next ? html`<input type="hidden" name="next" value="${where.next}">` : ""}
+    <button class="btn ghost" type="submit">Try with simulated ${PP}</button>
+  </form>`;
+}
 
 /* ---------------- looks ---------------- */
 
@@ -30,8 +42,15 @@ export function courierForClient(humanId: string, clientId: string): Courier | u
 
 /** A courier's look, or the default (Juno, cobalt) before the person has set one up. */
 export function courierLook(human: Human | null, courier?: Courier | null): CourierLook {
-  if (courier) return { name: courier.name, color: courier.color, model: courier.model, idNo: courier.idNo };
-  return { name: "Juno", color: "cobalt", model: "Claude", idNo: human ? courierIdNo(human.id, "Juno") : "CR-0000-JU" };
+  const simulated = human?.simulated;
+  if (courier) return { name: courier.name, color: courier.color, model: courier.model, idNo: courier.idNo, simulated };
+  return {
+    name: "Juno",
+    color: "cobalt",
+    model: "Claude",
+    idNo: human ? courierIdNo(human.id, "Juno") : "CR-0000-JU",
+    simulated,
+  };
 }
 
 /** A Claude connected through any connector. Through the Courier connector it can send every courier. */

@@ -15,7 +15,8 @@ import express, { Router } from "express";
 import { db } from "./db.ts";
 
 /**
- * A small, clearly labelled stand-in for the PayPal sandbox, used only when PAYPAL_CLIENT_ID/SECRET are not set.
+ * A small, clearly labelled stand-in for the PayPal sandbox, used when PAYPAL_CLIENT_ID/SECRET are not set, and for
+ * demo people on any server.
  * It mimics the shapes the app needs (Log in with PayPal identity, Orders v2, authorizations) so the full product
  * can be demoed end to end. It is not PayPal and does not look like PayPal.
  */
@@ -105,7 +106,7 @@ function summary(order: SimOrder, base: string): OrderSummary {
 }
 
 function simBanner() {
-  return html`<div class="sim-bar"><b>SIMULATED</b> Not PayPal · no real money · add sandbox credentials to use the real PayPal sandbox</div>`;
+  return html`<div class="sim-bar"><b>SIMULATED</b> Not PayPal · no real money</div>`;
 }
 
 export function simPaypalRouter(courierUrl: string): Router {

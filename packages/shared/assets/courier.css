@@ -5579,6 +5579,17 @@ html:has(body.app-page) {
 .wiz-foot .btn:only-child {
   margin-left: auto;
 }
+.wiz-foot:has(.try-demo) {
+  flex-direction: column;
+  align-items: stretch;
+}
+.wiz-foot:has(.try-demo) > a[href^="/auth/"] {
+  flex: none;
+}
+.try-demo .btn {
+  width: 100%;
+  justify-content: center;
+}
 .wiz-who {
   display: flex;
   align-items: center;

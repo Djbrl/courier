@@ -5,9 +5,10 @@ import {
   html,
   LOGO,
   PP,
-  paypal,
+  paypalFor,
   portrait,
   raw,
+  SIMULATED,
   VERIFIED,
   type Visa,
 } from "@courier/shared";
@@ -24,7 +25,7 @@ export function errandRoom(d: Desk, visa: Visa, courier: Courier): string {
     human: firstName(d.human) ?? "you",
     storeUrl: config.store.url,
     storeName: config.store.name,
-    paypal: paypal.mode,
+    paypal: paypalFor(d.human).mode,
     live: config.anthropicConfigured,
     visa: {
       id: visa.id,
@@ -34,7 +35,12 @@ export function errandRoom(d: Desk, visa: Visa, courier: Courier): string {
       expiresAt: visa.expiresAt,
     },
     portrait: portrait(look).value,
-    receiptParts: { logo: LOGO.value, verified: VERIFIED.value, avatar: avatar().value, pp: PP.value },
+    receiptParts: {
+      logo: LOGO.value,
+      verified: (d.human.simulated ? SIMULATED : VERIFIED).value,
+      avatar: avatar().value,
+      pp: PP.value,
+    },
   };
   const main = html`<div class="room cc" style="${courierVars(look.color)}">
       <section class="chat" aria-label="Chat with ${look.name}">

@@ -11,7 +11,7 @@ import {
   LOGO,
   money,
   PP,
-  paypal,
+  paypalFor,
   portrait,
   type RawHtml,
   raw,
@@ -167,7 +167,7 @@ export function receiptPage(order: Order | undefined): string {
         <dt>Total</dt><dd><b>${money(order.totalCents)}</b></dd>
         <dt>Paid with</dt><dd>${order.paidWith === "saved_paypal" ? html`Saved ${PP}` : PP}</dd>
         <dt>Shop</dt><dd>${shop.name}</dd>
-        <dt>Bought by</dt><dd>${order.agent}, a verified courier</dd>
+        <dt>Bought by</dt><dd>${order.agent}, ${order.simulated ? "a demo courier" : "a verified courier"}</dd>
         <dt>Order</dt><dd><code>${order.id}</code></dd>
         ${order.paidAt ? html`<dt>When</dt><dd><time datetime="${order.paidAt}">${new Date(order.paidAt).toUTCString()}</time></dd>` : ""}
       </dl>
@@ -175,14 +175,16 @@ export function receiptPage(order: Order | undefined): string {
         ${!paid && order.status === "awaiting_approval" && order.approveUrl ? html`<a class="btn" href="${order.approveUrl}">Pay with PayPal</a>` : ""}
         <a class="btn ghost" href="${config.courier.url}/app/errands?e=${order.visaId}">See it in Courier</a>
       </div>
-      <p class="fine" style="margin-top:18px">${paypalNote()}</p>
+      <p class="fine" style="margin-top:18px">${paypalNote(order)}</p>
     </article></main>`,
     { shop },
   );
 }
 
-const paypalNote = () =>
-  paypal.mode === "sandbox" ? "PayPal sandbox: no real money moved." : "Simulated PayPal: no real money moved.";
+const paypalNote = (order?: Order) =>
+  paypalFor(order).mode === "sandbox"
+    ? "PayPal sandbox: no real money moved."
+    : "Simulated PayPal: no real money moved.";
 
 /** A stable colour for a courier the shop only knows by name. */
 function colorFor(name: string): CourierColor {
@@ -254,7 +256,7 @@ function orderRow(order: Order): RawHtml {
     </div>
     <details class="mo-ev"><summary>${CK}Signed proof</summary>
       <dl>
-        <dt>Person</dt><dd>${order.evidence.humanVerified ? "Verified by PayPal" : "Not verified"} · <code>${order.sub.slice(0, 14)}…</code></dd>
+        <dt>Person</dt><dd>${order.simulated ? "Demo person, simulated PayPal" : order.evidence.humanVerified ? "Verified by PayPal" : "Not verified"} · <code>${order.sub.slice(0, 14)}…</code></dd>
         <dt>Limits</dt><dd>$${visa.spend_limit.value} in total · $${visa.per_purchase_limit.value} each</dd>
         ${intent ? html`<dt>Check</dt><dd>${intent.model ?? "?"}${intent.probability !== undefined ? ` (${Math.round(intent.probability * 100)}%)` : ""}: ${intent.reason ?? ""}</dd>` : ""}
         <dt>Pass</dt><dd><code>${visa.id}</code></dd>

@@ -5,7 +5,7 @@ import {
   JUNIPER,
   money,
   newId,
-  paypal,
+  paypalFor,
   RECEIPT_CARD,
   RECEIPT_CARD_MIME,
   RECEIPT_CARD_URI,
@@ -530,21 +530,27 @@ export function createMcpServer(shop: Shop): McpServer {
     },
     async (_args, extra) => {
       const claims = auth(extra);
+      const sentBy = claims.human.simulated ? "a demo person, with no PayPal check" : "a verified human";
       const view = {
         merchant: shop.name,
         agent: agentName(claims),
-        sent_by: { pseudonym: claims.sub, verified_human: claims.human.verified, age_range: claims.human.age_range },
+        sent_by: {
+          pseudonym: claims.sub,
+          verified_human: claims.human.verified,
+          age_range: claims.human.age_range,
+          simulated: Boolean(claims.human.simulated),
+        },
         visa: claims.visa,
         scopes: claims.scope.split(" "),
         token_expires_at: new Date(claims.exp * 1000).toISOString(),
       };
       if (!hasTicket(claims))
         return text(
-          `Connected to ${shop.name} as ${agentName(claims)}, for a verified human (${claims.sub}). No budget yet: it can browse, but holding or buying needs one.`,
+          `Connected to ${shop.name} as ${agentName(claims)}, for ${sentBy} (${claims.sub}). No budget yet: it can browse, but holding or buying needs one.`,
           view,
         );
       return text(
-        `Visa ${claims.visa.id} for ${shop.name}, issued by a verified human (${claims.sub}).\n` +
+        `Visa ${claims.visa.id} for ${shop.name}, issued by ${sentBy} (${claims.sub}).\n` +
           `Allowed: ${view.scopes.join(", ")}. Budget ${claims.visa.spend_limit.value} ${claims.visa.spend_limit.currency}, ` +
           `max ${claims.visa.per_purchase_limit.value} per purchase.${claims.visa.intent ? ` Intent: "${claims.visa.intent}".` : ""}`,
         view,
@@ -759,6 +765,7 @@ export function createMcpServer(shop: Shop): McpServer {
             status: "paid",
             approveUrl: null,
             paidWith: "saved_paypal",
+            ...(claims.human.simulated ? { simulated: true } : {}),
             captureId: charged.captureId,
             receiptKey: randomToken(18),
             createdAt: new Date().toISOString(),
@@ -777,7 +784,7 @@ export function createMcpServer(shop: Shop): McpServer {
         savedFailed = true;
       }
 
-      const order = await paypal.createOrder(
+      const order = await paypalFor(claims.human).createOrder(
         {
           intent: "CAPTURE",
           amountCents: totalCents,
@@ -804,6 +811,7 @@ export function createMcpServer(shop: Shop): McpServer {
         status: "awaiting_approval",
         approveUrl: order.approveUrl!,
         paidWith: "paypal_page",
+        ...(claims.human.simulated ? { simulated: true } : {}),
         receiptKey: randomToken(18),
         createdAt: new Date().toISOString(),
         evidence,
@@ -863,8 +871,9 @@ export async function settleOrder(orderId: string): Promise<Order> {
   const order = db.get<Order>("orders", orderId);
   if (!order) throw new Error("unknown order");
   if (order.status !== "awaiting_approval") return order;
-  let remote = await paypal.getOrder(orderId);
-  if (remote.status === "APPROVED") remote = await paypal.captureOrder(orderId, `capture-${orderId}`);
+  const gateway = paypalFor(order);
+  let remote = await gateway.getOrder(orderId);
+  if (remote.status === "APPROVED") remote = await gateway.captureOrder(orderId, `capture-${orderId}`);
   if (remote.status !== "COMPLETED") return order;
 
   const paid: Order = {

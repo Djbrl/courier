@@ -6,7 +6,7 @@ import {
   config,
   DURATIONS,
   newId,
-  paypal,
+  paypalFor,
   requireInternal,
   shopForResource,
   type Visa,
@@ -77,6 +77,8 @@ export function decideApproval(
   return decided;
 }
 
+const paypalOf = (humanId: string) => paypalFor(db.get<Human>("humans", humanId));
+
 export const savedPayPal = (humanId: string) => db.get<SavedPayPalRecord>("saved_paypal", humanId);
 
 /** Deletes the person's saved PayPal at PayPal, so nothing more can be charged to it. False if PayPal refused. */
@@ -84,7 +86,7 @@ export async function removeSavedPayPal(humanId: string): Promise<boolean> {
   const saved = savedPayPal(humanId);
   if (!saved) return true;
   try {
-    await paypal.deleteVaultToken(saved.vaultId);
+    await paypalOf(humanId).deleteVaultToken(saved.vaultId);
   } catch (error) {
     console.warn(`[autopay] could not delete the saved PayPal for ${humanId}:`, (error as Error).message);
     return false;
@@ -117,7 +119,7 @@ export function migrateSavedPayPal(): void {
 async function releaseBond(visa: Visa): Promise<string> {
   if (visa.bond?.status !== "authorized" || !visa.bond.authorizationId) return "";
   try {
-    await paypal.voidAuthorization(visa.bond.authorizationId);
+    await paypalOf(visa.humanId).voidAuthorization(visa.bond.authorizationId);
     visa.bond.status = "voided";
     return " Bond released.";
   } catch (error) {
@@ -313,7 +315,7 @@ export async function sweepExpiredVisas(): Promise<void> {
   )) {
     if (visa.bond?.status === "authorized" && visa.bond.authorizationId) {
       try {
-        await paypal.voidAuthorization(visa.bond.authorizationId);
+        await paypalOf(visa.humanId).voidAuthorization(visa.bond.authorizationId);
         visa.bond.status = "voided";
       } catch (error) {
         console.warn(`[sweep] could not void bond for ${visa.id}:`, (error as Error).message);
@@ -708,7 +710,7 @@ internalRouter.post("/spend/charge", async (req, res) => {
     return;
   }
   try {
-    const order = await paypal.chargeVault(
+    const order = await paypalOf(visa.humanId).chargeVault(
       { amountCents: hold.amountCents, currency: visa.currency, description, customId: visa.id, brandName, items },
       saved.vaultId,
       `charge-${hold.id}`,
@@ -785,7 +787,10 @@ internalRouter.post("/report", async (req, res) => {
   let bondOutcome = "no bond on this visa";
   if (visa.bond?.status === "authorized" && visa.bond.authorizationId) {
     try {
-      const capture = await paypal.captureAuthorization(visa.bond.authorizationId, `bond-capture-${visa.id}`);
+      const capture = await paypalOf(visa.humanId).captureAuthorization(
+        visa.bond.authorizationId,
+        `bond-capture-${visa.id}`,
+      );
       visa.bond.status = "captured";
       bondOutcome = `bond of $${(visa.bond.amountCents / 100).toFixed(2)} captured (${capture.captureId})`;
     } catch (error) {

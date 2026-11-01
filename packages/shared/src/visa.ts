@@ -75,6 +75,8 @@ export interface VisaTokenClaims {
   human: {
     verified: boolean;
     age_range: string | null;
+    /** A demo person with no PayPal account behind them. Their payments only reach the simulator. */
+    simulated?: boolean;
   };
   visa: {
     id: string;

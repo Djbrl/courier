@@ -7,7 +7,8 @@ import { config } from "./config.ts";
  * - `SimulatedPayPal` talks to the built-in simulator mounted in Courier app at /sim-paypal,
  *   so the whole product can be run and demoed before credentials exist.
  *
- * Both expose the same interface, so the rest of the code never branches on the mode.
+ * Both expose the same interface, so the rest of the code never branches on the mode. `paypalFor` picks the gateway
+ * for one person: a demo person uses the simulator even on a server with sandbox credentials.
  */
 
 export interface PayPalIdentity {
@@ -536,4 +537,10 @@ class SimulatedPayPal implements PayPalGateway {
   }
 }
 
-export const paypal: PayPalGateway = config.paypal.mode === "sandbox" ? new SandboxPayPal() : new SimulatedPayPal();
+const simulatedPayPal = new SimulatedPayPal();
+
+export const paypal: PayPalGateway = config.paypal.mode === "sandbox" ? new SandboxPayPal() : simulatedPayPal;
+
+/** A demo person's money only ever reaches the simulator, whatever the server's mode. */
+export const paypalFor = (who: { simulated?: boolean } | null | undefined): PayPalGateway =>
+  who?.simulated ? simulatedPayPal : paypal;

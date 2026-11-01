@@ -14,7 +14,7 @@ import {
   type Visa,
 } from "@courier/shared";
 import { type Approval, type AuthRequest, type Courier, db, type Human, listCouriers, type Merchant } from "../db.ts";
-import { courierForClient, cpage, DEMO_CLIENT_PREFIX, lookForAgent } from "./shared.ts";
+import { courierForClient, cpage, DEMO_CLIENT_PREFIX, lookForAgent, tryDemo } from "./shared.ts";
 
 /* ---------------- connect + consent (the errand ticket) ---------------- */
 
@@ -30,7 +30,7 @@ export function connectPage(request: AuthRequest, merchant: Merchant): string {
       <div class="pair-ids">${portrait(look)}<span class="dash"></span>${SHOP_TILE}</div>
       <h1 class="big">${request.ticket ? html`Sign in to set <span class="hfit" data-fit>${look.name}’s</span> budget.` : html`Connect <span class="hfit" data-fit>${look.name}</span> to Courier.`}</h1>
       <p class="lead">PayPal checks there’s a real person behind it. ${request.ticket ? "" : "Nothing gets bought. "}${merchant.resource === COURIER_RESOURCE ? "Shops only learn" : `${merchant.name} only learns`} that, never who you are.</p>
-      <div class="acts-row">${paypalButton(`/auth/paypal/start?req=${request.id}`)}</div>
+      <div class="acts-row">${paypalButton(`/auth/paypal/start?req=${request.id}`)}${tryDemo({ req: request.id })}</div>
     </div></main>`,
   );
 }
@@ -181,7 +181,7 @@ export function consentPage(
               : ""
           }
           <label class="budget"><span class="sr">Budget, in dollars</span><i>$</i><input type="number" name="spend_limit" min="1" max="500" step="1" value="${budget}" required autofocus aria-label="Budget, in dollars"></label>
-          <p class="fine">${who === "your courier" ? "Your courier" : who} can’t spend more than this, and asks you about anything off the errand. ${gateway ? "Shops see" : `${merchant.name} sees`} a verified person, not your name.</p>
+          <p class="fine">${who === "your courier" ? "Your courier" : who} can’t spend more than this, and asks you about anything off the errand. ${gateway ? "Shops see" : `${merchant.name} sees`} ${human.simulated ? "a demo person" : "a verified person"}, not your name.</p>
           ${saved ? html`<input type="hidden" name="autopay" value="1"><p class="fine">Pays with your saved ${PP}.</p>` : ""}
         </div>
         <div class="wiz-foot">
@@ -249,7 +249,7 @@ export function signInPage(): string {
     html`<main class="solo"><div class="solo-card">
       <h1 class="big">Open your Courier.</h1>
       <p class="lead">See your errands, answer your courier, and call it back anytime.</p>
-      <div class="acts-row">${paypalButton("/auth/paypal/start?login=1")}<a class="link fine" href="/start">New here? Start with the demo</a></div>
+      <div class="acts-row">${paypalButton("/auth/paypal/start?login=1")}${tryDemo({})}<a class="link fine" href="/start">New here? Start with the demo</a></div>
     </div></main>`,
   );
 }

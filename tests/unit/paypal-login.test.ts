@@ -4,9 +4,16 @@ import { test } from "node:test";
 // Set before loading configuration: tests never use real PayPal credentials.
 process.env.PAYPAL_CLIENT_ID = "login-test-client";
 process.env.PAYPAL_CLIENT_SECRET = "login-test-secret";
-const { paypal, PayPalError } = await import("../../packages/shared/src/paypal.ts");
+const { paypal, paypalFor, PayPalError } = await import("../../packages/shared/src/paypal.ts");
 const originalFetch = globalThis.fetch;
 const callback = "https://courier.example/auth/paypal/callback";
+
+await test("a demo person only reaches the simulator, on a server with sandbox credentials", () => {
+  assert.equal(paypal.mode, "sandbox");
+  assert.equal(paypalFor({ simulated: true }).mode, "simulated");
+  assert.equal(paypalFor({}).mode, "sandbox");
+  assert.equal(paypalFor(undefined).mode, "sandbox");
+});
 
 await test("refreshes the login token, requests the OpenID schema, and preserves missing age", async () => {
   const calls: { url: string; init?: RequestInit }[] = [];

@@ -23,6 +23,8 @@ export interface Human {
   accountType: string | null;
   /** First name the person gave their courier (or PayPal's display name, when shared). Never sent to merchants. */
   displayName?: string | null;
+  /** A throwaway demo person, with no PayPal account behind them. Their payments only reach the simulator. */
+  simulated?: boolean;
   /** The most Claude may start on its own. Above this, or with none set, the person confirms the errand. */
   cap?: { perErrandCents: number; perDayCents: number } | null;
   createdAt: string;

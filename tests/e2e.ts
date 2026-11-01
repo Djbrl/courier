@@ -274,6 +274,19 @@ await step("Unverified PayPal account is refused", async () => {
   assert.match(out.refusal!, /isn&#39;t verified|isn't verified/);
 });
 
+await step("Try with simulated PayPal: a new demo person, marked so in what shops are told", async () => {
+  const browser = new Browser();
+  const started = await browser.req(`${flow.courier}/auth/demo`, { form: { next: "/start/courier" } });
+  assert.equal(started.status, 303);
+  assert.equal(started.headers.get("location"), "/start/courier");
+  const page = await browser.req(`${flow.courier}/start/courier`);
+  assert.equal(page.status, 200);
+  assert.match(await page.text(), /Demo: simulated/);
+
+  const elsewhere = await browser.req(`${flow.courier}/auth/demo`, { form: { next: "//evil.example" } });
+  assert.equal(elsewhere.headers.get("location"), "/app");
+});
+
 await step("Under-18 PayPal account is refused", async () => {
   const out = await authorize(flow, new Browser(), "riley", { refused: true });
   assert.match(out.refusal!, /for adults/);

@@ -11,11 +11,12 @@ import {
   LOGO,
   money,
   PP,
-  paypal,
+  paypalFor,
   portrait,
   type RawHtml,
   raw,
   SHOPS,
+  SIMULATED,
   shopLogo,
   timeAgo,
   VERIFIED,
@@ -83,7 +84,7 @@ export function shell(
           ${item("couriers", "Couriers", "/app/couriers")}
           ${item("settings", "Settings", "/app/settings")}
         </nav>
-        <div class="rail-who">${avatar()}<span><b>${firstName(d.human) ?? "You"}</b>${VERIFIED}</span><a class="fine" href="/logout">Sign out</a></div>
+        <div class="rail-who">${avatar()}<span><b>${firstName(d.human) ?? "You"}</b>${d.human.simulated ? SIMULATED : VERIFIED}</span><a class="fine" href="/logout">Sign out</a></div>
       </aside>
       <main class="pane">${main}</main>
     </div>`,
@@ -188,7 +189,7 @@ export function homePage(d: Desk, opts: { welcome: boolean; courierId?: string }
           ${out.length ? "" : html`<a class="link fine" href="${selErrand ? `/errand?c=${sel.id}` : `/errand/new?c=${sel.id}`}">Or try the demo</a>`}
         </div>
         <ul class="hm2-st">
-          <li class="ok">${CK}<span>Verified PayPal account<small>${paypal.mode === "simulated" ? "Simulated" : "Sandbox"}</small></span></li>
+          <li class="ok">${CK}<span>${d.human.simulated ? "Demo person" : "Verified PayPal account"}<small>${paypalFor(d.human).mode === "simulated" ? "Simulated" : "Sandbox"}</small></span></li>
           <li class="${inClaude ? "ok" : "todo"}"><i aria-hidden="true"></i><span>${inClaude ? `In Claude: ${couriers.map((c) => c.name).join(", ")}` : "Not in Claude yet"}</span></li>
         </ul>
       </section>
@@ -356,7 +357,7 @@ export function settingsPage(d: Desk, savedEmail?: string | null | false): strin
   const main = html`<div class="sett">
     <h1 class="big">Settings</h1>
     <section><h2 class="sec-t">Connections</h2><div class="panel slist">
-      ${row(PP, `Verified. ${paypal.mode === "sandbox" ? "Sandbox" : "Simulated"}: no real money.`)}
+      ${row(PP, `${d.human.simulated ? "Demo person." : "Verified."} ${paypalFor(d.human).mode === "sandbox" ? "Sandbox" : "Simulated"}: no real money.`)}
       ${row(
         "Saved PayPal",
         hasSaved

@@ -113,7 +113,7 @@ briefly), so a call-back takes effect in seconds rather than at token expiry.
 don't ask twice.
 
 **The simulator has the same shape as PayPal.** `SandboxPayPal` and `SimulatedPayPal` implement one `PayPalGateway`. The
-rest of the code can't tell which it's using, and the e2e runs without credentials.
+rest of the code can't tell which it's using, and the e2e runs without credentials. "Try with simulated PayPal" makes a throwaway person (`simulated` on the person and on their tokens) whose payments only reach the simulator, even on a server with sandbox credentials; `paypalFor` picks the gateway, and shops are told the person is not verified.
 
 ## Storage
 

@@ -22,6 +22,8 @@ export interface Order {
   receiptKey?: string;
   createdAt: string;
   paidAt?: string | null;
+  /** Bought for a demo person: this order lives at the simulator, whatever the server's mode. */
+  simulated?: boolean;
   /** What the merchant can show in a dispute: the human's signed delegation and the decision trail. */
   evidence: {
     visa: unknown;

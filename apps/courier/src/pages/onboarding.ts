@@ -18,7 +18,7 @@ import {
   raw,
 } from "@courier/shared";
 import { type Courier, type Human, listCouriers } from "../db.ts";
-import { courierLook, cpage, dots, firstName, hasClaude, OK, progress } from "./shared.ts";
+import { courierLook, cpage, dots, firstName, hasClaude, OK, progress, tryDemo } from "./shared.ts";
 
 /* ---------------- onboarding ---------------- */
 
@@ -48,7 +48,7 @@ export function startPage(): string {
         <div class="wiz-id">${blankCard()}</div>
         <p class="fine">${paypal.mode === "sandbox" ? "PayPal sandbox. Use a sandbox buyer account, no real money." : "Simulated PayPal sandbox. No real money."}</p>
       </div>
-      <div class="wiz-foot">${paypalButton("/auth/paypal/start?next=/start/courier")}</div>
+      <div class="wiz-foot">${paypalButton("/auth/paypal/start?next=/start/courier")}${tryDemo({ next: "/start/courier" })}</div>
     </div></main>`,
     { bodyClass: "onb" },
   );
@@ -172,7 +172,7 @@ export function connectingPage(human: Human, courier: Courier): string {
         ${progress(3)}
         <h1 class="big">Opening <span class="hfit" data-fit>${courier.name}’s</span> errand&nbsp;room.</h1>
         <ul class="chk">
-          <li style="--d:.2s">${OK}Verified by&nbsp;${PP}</li>
+          <li style="--d:.2s">${OK}${human.simulated ? html`Demo: simulated&nbsp;${PP}` : html`Verified by&nbsp;${PP}`}</li>
           <li style="--d:.9s">${OK}${courier.name} got its ID</li>
           <li style="--d:1.6s">${OK}${config.anthropicConfigured ? `Runs on Claude` : "Runs on a demo stand-in for Claude"}</li>
         </ul>

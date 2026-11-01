@@ -8,6 +8,7 @@ import {
   isScope,
   newId,
   paypal,
+  paypalFor,
   ROOT_DIR,
   randomToken,
   type Scope,
@@ -122,11 +123,9 @@ app.use(
 
 app.use(gatewayRouter);
 
-/* ---------------- Simulated PayPal (only without credentials) ---------------- */
+/* ---------------- Simulated PayPal (without credentials, and for demo people) ---------------- */
 
-if (paypal.mode === "simulated") {
-  app.use("/sim-paypal", simPaypalRouter(config.courier.url));
-}
+app.use("/sim-paypal", simPaypalRouter(config.courier.url));
 
 /* ---------------- internal API for merchants ---------------- */
 
@@ -168,15 +167,16 @@ app.get("/connect/:id", (req, res) => {
 
 const PAYPAL_CALLBACK = `${config.courier.url}/auth/paypal/callback`;
 
+/** Where to land after sign-in (onboarding uses this); same-site paths only. */
+const landingPath = (next: unknown) => (typeof next === "string" && /^\/(?!\/)[\w\-/?=&.]*$/.test(next) ? next : null);
+
 app.get("/auth/paypal/start", (req, res) => {
   const reqId = typeof req.query.req === "string" ? req.query.req : undefined;
   if (reqId && !findAuthRequest(reqId)) {
     res.status(400).send(errorPage(null, "This link has expired", "Ask your agent to connect again."));
     return;
   }
-  // Where to land after sign-in (onboarding uses this); same-site paths only.
-  const next =
-    typeof req.query.next === "string" && /^\/(?!\/)[\w\-/?=&.]*$/.test(req.query.next) ? req.query.next : null;
+  const next = landingPath(req.query.next);
   const state = randomToken(18);
   db.put("paypal_states", state, { state, reqId: reqId ?? null, next, expiresAt: Date.now() + 15 * 60 * 1000 });
   res.redirect(302, paypal.loginUrl({ redirectUri: PAYPAL_CALLBACK, state }));
@@ -257,6 +257,57 @@ app.get("/auth/paypal/callback", async (req, res) => {
 
   startSession(res, human.id);
   res.redirect(302, request ? `/consent/${request.id}` : (saved.next ?? "/app"));
+});
+
+/* ---------- Try it with no PayPal account ---------- */
+
+const DEMO_STARTS_PER_HOUR = 10;
+const demoStarts = new Map<string, number[]>();
+
+/** Every button press makes a new person, so one address can only make a few. */
+function demoStartAllowed(ip: string): boolean {
+  const since = Date.now() - 60 * 60 * 1000;
+  for (const [key, times] of demoStarts) {
+    const recent = times.filter((t) => t > since);
+    if (recent.length) demoStarts.set(key, recent);
+    else demoStarts.delete(key);
+  }
+  const recent = demoStarts.get(ip) ?? [];
+  if (recent.length >= DEMO_STARTS_PER_HOUR) return false;
+  demoStarts.set(ip, [...recent, Date.now()]);
+  return true;
+}
+
+app.post("/auth/demo", (req, res) => {
+  const reqId = typeof req.body.req === "string" ? req.body.req : "";
+  const request = reqId ? findAuthRequest(reqId) : null;
+  if (reqId && !request) {
+    res.status(400).send(errorPage(null, "This link has expired", "Ask your agent to connect again."));
+    return;
+  }
+  // Never swaps a signed-in person for a demo one.
+  if (!currentHuman(req)) {
+    if (!demoStartAllowed(req.ip ?? "")) {
+      res.status(429).send(errorPage(null, "That’s a lot of demos", "Please try again in an hour."));
+      return;
+    }
+    const id = newId("hum");
+    const now = new Date().toISOString();
+    db.put<Human>("humans", id, {
+      id,
+      payerId: `demo-${id}`,
+      // PayPal checked nothing, so shops are told so.
+      verified: false,
+      simulated: true,
+      ageRange: null,
+      accountType: null,
+      displayName: null,
+      createdAt: now,
+      lastLoginAt: now,
+    });
+    startSession(res, id);
+  }
+  res.redirect(303, request ? `/consent/${request.id}` : (landingPath(req.body.next) ?? "/app"));
 });
 
 app.get("/logout", (_req, res) => {
@@ -460,7 +511,7 @@ app.post("/consent/:id", async (req, res) => {
   else if (wantsAutopay) {
     // Save PayPal on the account: one PayPal page now, none for later purchases or errands.
     try {
-      const setup = await paypal.createVaultSetup(
+      const setup = await paypalFor(human).createVaultSetup(
         {
           description: `Your couriers may buy for you within the budgets you set, until you remove this in Courier.`,
           brandName: "Courier",
@@ -501,7 +552,7 @@ async function continueIssuing(
 ) {
   if (wantsBond) {
     try {
-      const order = await paypal.createOrder(
+      const order = await paypalFor(human).createOrder(
         {
           intent: "AUTHORIZE",
           amountCents: 500,
@@ -571,7 +622,7 @@ app.get("/autopay/return", async (req, res) => {
     return;
   }
   try {
-    const token = await paypal.createVaultToken(setupTokenId, `vault-${visa.id}`);
+    const token = await paypalFor(human).createVaultToken(setupTokenId, `vault-${visa.id}`);
     db.put<SavedPayPalRecord>("saved_paypal", visa.humanId, {
       humanId: visa.humanId,
       vaultId: token.id,
@@ -606,7 +657,7 @@ app.get("/bond/return", async (req, res) => {
     return;
   }
   try {
-    const order = await paypal.authorizeOrder(visa.bond.orderId, `bond-authorize-${visa.id}`);
+    const order = await paypalFor(human).authorizeOrder(visa.bond.orderId, `bond-authorize-${visa.id}`);
     visa.bond = { ...visa.bond, authorizationId: order.authorizationId ?? null, status: "authorized" };
     visa.status = "active";
     db.put("visas", visa.id, visa);

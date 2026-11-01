@@ -114,7 +114,7 @@ export async function mintAccessToken(
   const claims: Omit<VisaTokenClaims, "iss" | "aud" | "sub" | "exp" | "iat" | "jti"> = {
     client_id: clientId,
     scope: visa.scopes.join(" "),
-    human: { verified: human.verified, age_range: human.ageRange },
+    human: { verified: human.verified, age_range: human.ageRange, ...(human.simulated ? { simulated: true } : {}) },
     visa: {
       id: visa.id,
       agent: visa.agentName,
@@ -164,7 +164,7 @@ async function signConnectionToken(connection: Connection, human: Human, audienc
   const claims: Omit<ConnectionTokenClaims, "iss" | "aud" | "sub" | "exp" | "iat" | "jti"> = {
     client_id: connection.clientId,
     scope: connection.scopes.join(" "),
-    human: { verified: human.verified, age_range: human.ageRange },
+    human: { verified: human.verified, age_range: human.ageRange, ...(human.simulated ? { simulated: true } : {}) },
     connection: { id: connection.id, agent: connectionAgent(connection) },
   };
   return new SignJWT(claims as Record<string, unknown>)

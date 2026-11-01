@@ -60,6 +60,8 @@ export interface CourierLook {
   /** The model it runs on, a small detail (e.g. "Claude"). */
   model: string;
   idNo: string;
+  /** Sent by a demo person, so the card must not claim PayPal checked them. */
+  simulated?: boolean;
 }
 
 export const SPRITE = `<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
@@ -82,6 +84,7 @@ export function isCourierName(name: string): boolean {
 
 export const ARROW = raw('<span class="go"><svg><use href="#arr"/></svg></span>');
 export const VERIFIED = html`<span class="vt">${CK}Verified by ${PP}</span>`;
+export const SIMULATED = html`<span class="vt">Demo: simulated ${PP}</span>`;
 /** A person's avatar: a simple silhouette on a coloured disc. */
 export function avatar(bg = "#FFC629"): RawHtml {
   return raw(
@@ -106,10 +109,10 @@ export function paypalButton(href: string, label = "Continue with"): RawHtml {
 
 export function idCard(c: CourierLook, sentBy: string | null, opts: { id?: string } = {}): RawHtml {
   return html`<div class="idc cc" style="${courierVars(c.color)}" ${opts.id ? raw(`id="${escapeHtml(opts.id)}"`) : ""}
-      role="img" aria-label="Courier ID: ${c.name}, runs on ${c.model}, ${c.idNo}${sentBy ? `, sent by ${sentBy}` : ""}, verified by PayPal">
+      role="img" aria-label="Courier ID: ${c.name}, runs on ${c.model}, ${c.idNo}${sentBy ? `, sent by ${sentBy}` : ""}, ${c.simulated ? "demo, simulated PayPal" : "verified by PayPal"}">
     <div class="band">${LOGO}</div>
     <div class="bd">${portrait(c)}<div class="dt"><div class="nm" data-f="name" data-fit>${c.name}</div><div class="on">runs on <b>${c.model}</b></div><div class="idn">${c.idNo}</div></div></div>
-    <div class="ft"><span class="chip">${avatar()}Sent by <b data-f="human">${sentBy ?? "you"}</b></span>${VERIFIED}</div>
+    <div class="ft"><span class="chip">${avatar()}Sent by <b data-f="human">${sentBy ?? "you"}</b></span>${c.simulated ? SIMULATED : VERIFIED}</div>
   </div>`;
 }
 
