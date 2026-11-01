@@ -244,7 +244,7 @@ function orderRow(order: Order): RawHtml {
       <dl>
         <dt>Person</dt><dd>${order.evidence.humanVerified ? "Verified by PayPal" : "Not verified"} · <code>${order.sub.slice(0, 14)}…</code></dd>
         <dt>Limits</dt><dd>$${visa.spend_limit.value} in total · $${visa.per_purchase_limit.value} each</dd>
-        <dt>Check</dt><dd>${intent?.model ?? "?"}${intent?.probability !== undefined ? ` (${Math.round(intent.probability * 100)}%)` : ""}: ${intent?.reason ?? ""}</dd>
+        ${intent ? html`<dt>Check</dt><dd>${intent.model ?? "?"}${intent.probability !== undefined ? ` (${Math.round(intent.probability * 100)}%)` : ""}: ${intent.reason ?? ""}</dd>` : ""}
         <dt>Pass</dt><dd><code>${visa.id}</code></dd>
       </dl>
       <form method="post" action="/merchant/report/${visa.id}"><button class="btn danger sm" type="submit" title="Suspends this courier's pass and claims its bond, if any">Report this courier</button></form>

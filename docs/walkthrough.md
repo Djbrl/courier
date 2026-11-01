@@ -98,7 +98,7 @@ The shop asks `POST /internal/spend/check`, in `apps/courier/src/visas.ts`. The 
 
 1. **Hard limits, in code:** scope and expiry always; for a purchase, the per-purchase limit and remaining budget
    including holds.
-2. **Intent check:** `checkIntent` in `packages/shared/src/intent.ts` answers `approve`, `ask_human` or `deny`.
+2. **Intent check (only with `INTENT_CHECK=on`):** `checkIntent` in `packages/shared/src/intent.ts` answers `approve`, `ask_human` or `deny`.
 3. **Hold:** on an approved purchase, the budget is set aside.
 
 To see each branch, try the demo with a jazz record, then a $149 turntable (refused by code), then a slipmat (Courier

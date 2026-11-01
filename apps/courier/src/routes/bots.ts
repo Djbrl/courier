@@ -218,8 +218,8 @@ async function runAttacks(): Promise<AttackResult[]> {
   {
     const visa = demoVisa({
       agentName: "Hijacked agent",
-      spendLimitCents: 10000,
-      perPurchaseLimitCents: 10000,
+      spendLimitCents: 4000,
+      perPurchaseLimitCents: 4000,
       intent: "jazz records for my dad",
     });
     const { token } = await mintAccessToken(visa, human, "demo-attacker");
@@ -236,7 +236,7 @@ async function runAttacks(): Promise<AttackResult[]> {
     push({
       id: "injection",
       name: "Prompt-injected purchase",
-      story: "A web page tricks a courier into buying $89 headphones on a 'jazz records' errand.",
+      story: "A web page tells a courier the user pre-approved $89 headphones on a $40 limit.",
       outcome: sc?.decision === "deny" ? "blocked" : sc?.decision === "ask_human" ? "flagged" : "allowed",
       status: r.status,
       detail: sc?.reason ?? JSON.stringify(r.body).slice(0, 140),

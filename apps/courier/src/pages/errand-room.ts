@@ -43,7 +43,7 @@ export function errandRoom(d: Desk, visa: Visa, courier: Courier): string {
         <div class="log" id="log" aria-live="polite"></div>
         <div class="sugs" id="sugs">
           <button type="button" data-say="Find a jazz record under $40 and buy it">Jazz record under $40</button>
-          <button type="button" data-say="Buy the felt slipmat too">A slipmat (off the errand)</button>
+          <button type="button" data-say="Buy the felt slipmat too">A felt slipmat</button>
           <button type="button" data-say="Buy the compact turntable">A $149 turntable</button>
           <button type="button" data-say="Show my visa">What can you do?</button>
         </div>

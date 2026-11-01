@@ -104,7 +104,7 @@ export const OK = raw(
   '<span class="okc" aria-hidden="true"><svg viewBox="0 0 12 12"><path d="M2.5 6.2 5 8.6l4.6-5" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>',
 );
 
-const STEPS = ["Sign in", "Your courier", "Connect Claude"];
+const STEPS = ["Sign in", "Your courier", "Add to Claude", "Connect"];
 export function progress(step: number): RawHtml {
   return html`<div class="prog" role="progressbar" aria-valuemin="1" aria-valuemax="${STEPS.length}" aria-valuenow="${step}" aria-label="Step ${step} of ${STEPS.length}: ${STEPS[step - 1]}">
     ${STEPS.map((_, i) => html`<i class="${i < step ? "on" : ""}"></i>`)}</div>`;

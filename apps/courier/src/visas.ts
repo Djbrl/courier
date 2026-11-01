@@ -469,7 +469,7 @@ internalRouter.post("/spend/check", async (req, res) => {
   }
 
   let intent = null as Awaited<ReturnType<typeof checkIntent>> | null;
-  if (!approvedByHuman) {
+  if (!approvedByHuman && config.intent.enabled && visa.intent.trim()) {
     intent = await checkIntent({
       visaIntent: visa.intent,
       merchant: visa.merchantName,
@@ -542,8 +542,11 @@ internalRouter.post("/spend/check", async (req, res) => {
 
   res.json({
     decision: "approve",
-    reason: approvedByHuman ? "Approved by the person." : intent!.reason,
-    intent,
+    reason: approvedByHuman ? "Approved by the person." : (intent?.reason ?? "Inside the limits."),
+    intent: intent ?? {
+      model: approvedByHuman ? "human" : "limits",
+      reason: approvedByHuman ? "Approved by the person." : "Inside the limits.",
+    },
     holdId,
     autopay: action === "checkout" && visa.autopay?.status === "on",
     remainingCents: remainingBudget(visa),

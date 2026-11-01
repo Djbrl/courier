@@ -51,7 +51,7 @@ Two sandbox accounts are involved:
    - [ ] **Business account → Activity:** a payment from the Personal buyer for the right amount. Its details
      should carry the visa id (`visa_…`) as the custom id.
 
-## 2. Off the ticket: Courier asks you
+## 2. Off the errand: Courier asks you (only with `INTENT_CHECK=on`)
 
 1. In Claude: _"Grab me the Night Bus Freestyles CD too."_ (rap, $14: not jazz).
 2. Expected:

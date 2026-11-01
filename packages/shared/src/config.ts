@@ -43,6 +43,8 @@ export const config = {
   sessionSecret: env("COURIER_SECRET", "dev-session-secret-change-me"),
   dataDir: path.resolve(ROOT_DIR, env("DATA_DIR", "data")),
   paypal: {
+    // Needs "Full name" ticked for the PayPal app first, or sign-in may be refused.
+    askName: env("PAYPAL_ASK_NAME") === "on",
     /** "sandbox" when credentials are present, otherwise the built-in simulator. PAYPAL_MODE=simulated forces the simulator. */
     mode: (paypalClientId && paypalClientSecret && env("PAYPAL_MODE") !== "simulated" ? "sandbox" : "simulated") as
       | "sandbox"
@@ -54,6 +56,8 @@ export const config = {
     webBase: env("PAYPAL_WEB_BASE", "https://www.sandbox.paypal.com"),
   },
   intent: {
+    // Off: a courier may buy anything inside its budget at its shop. Limits are enforced either way.
+    enabled: env("INTENT_CHECK") === "on",
     /** Preferred intent-check backend: jev | claude | rules */
     model: env("INTENT_MODEL", "jev") as "jev" | "claude" | "rules",
     jevApiKey: env("JEV_API_KEY"),

@@ -75,19 +75,6 @@
     const el = add("<i></i><i></i><i></i>", "typing");
     return () => el.remove();
   }
-  function trace(steps) {
-    const tools = steps.filter((s) => s.kind === "tool");
-    if (!tools.length) return;
-    add(
-      tools
-        .map(
-          (s) =>
-            `<span class="${s.ok ? "" : "bad"}" title="${esc(s.detail)}"><i></i>${esc(s.title.split("(")[0])} · ${s.ms}ms</span>`,
-        )
-        .join(""),
-      "trace",
-    );
-  }
   function setSpent(visa) {
     if (visa) $("#spent").textContent = usd(visa.spentCents);
   }
@@ -106,7 +93,6 @@
   const _titleOf = (id) => itemById(id)?.title ?? id;
 
   function handle(out) {
-    trace(out.steps || []);
     setSpent(out.visa);
     const calls = (out.steps || []).filter((s) => s.kind === "tool").map(parse);
     for (const c of calls) {
@@ -184,7 +170,7 @@
       ? new Date(visa.expires_at).toLocaleString(undefined, { weekday: "short", hour: "2-digit", minute: "2-digit" })
       : "later";
     say(
-      `At ${boot.storeName} I can ${scopes.join(", ").replace(/, ([^,]*)$/, " and $1")}. Up to $${Number(visa.spend_limit?.value || 0).toFixed(0)} in total and $${Number(visa.per_purchase_limit?.value || 0).toFixed(0)} per item, until ${until}.` +
+      `At ${boot.storeName} I can ${scopes.join(", ").replace(/, ([^,]*)$/, " and $1")}. Up to $${Number(visa.spend_limit?.value || 0).toFixed(0)}, until ${until}.` +
         (visa.intent ? ` For: “${visa.intent}”.` : "") +
         `\nThe shop sees a verified person (${String(v.sent_by?.pseudonym || "").slice(0, 10)}…), never your name.`,
     );

@@ -10,6 +10,7 @@ const STORE_URL = "http://localhost:4400";
 const env = {
   ...process.env,
   PAYPAL_MODE: "simulated",
+  INTENT_CHECK: "on",
   INTENT_MODEL: "rules",
   COURIER_PORT: "4300",
   STORE_PORT: "4400",
