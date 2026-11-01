@@ -100,8 +100,10 @@ export async function mintAccessToken(
   visa: Visa,
   human: Human,
   clientId: string,
-  opts: { expiresInSeconds?: number } = {},
+  opts: { expiresInSeconds?: number; audience?: string } = {},
 ) {
+  // An errand through the Courier connector works at every shop, with one token per shop.
+  const audience = opts.audience ?? visa.resource;
   const { privateKey, kid } = await signingKey();
   const now = Math.floor(Date.now() / 1000);
   const visaExp = Math.floor(new Date(visa.expiresAt).getTime() / 1000);
@@ -116,7 +118,7 @@ export async function mintAccessToken(
     visa: {
       id: visa.id,
       agent: visa.agentName,
-      merchant: visa.resource,
+      merchant: audience,
       spend_limit: { currency: visa.currency, value: centsToValue(visa.spendLimitCents) },
       per_purchase_limit: { currency: visa.currency, value: centsToValue(visa.perPurchaseLimitCents) },
       intent: visa.intent || null,
@@ -128,8 +130,8 @@ export async function mintAccessToken(
   const token = await new SignJWT(claims as Record<string, unknown>)
     .setProtectedHeader({ alg: "EdDSA", kid, typ: "at+jwt" })
     .setIssuer(config.courier.url)
-    .setAudience(visa.resource)
-    .setSubject(pairwiseSubject(human.id, visa.resource))
+    .setAudience(audience)
+    .setSubject(pairwiseSubject(human.id, audience))
     .setIssuedAt(now)
     .setExpirationTime(exp)
     .setJti(newId("at"))
@@ -157,8 +159,7 @@ async function issueTokens(visa: Visa, human: Human, clientId: string): Promise<
   };
 }
 
-/** A connection's token says who Claude acts for and carries no limits, so it lasts across errands. */
-async function issueConnectionTokens(connection: Connection, human: Human): Promise<OAuthTokens> {
+async function signConnectionToken(connection: Connection, human: Human, audience: string, ttlSeconds: number) {
   const { privateKey, kid } = await signingKey();
   const claims: Omit<ConnectionTokenClaims, "iss" | "aud" | "sub" | "exp" | "iat" | "jti"> = {
     client_id: connection.clientId,
@@ -166,15 +167,24 @@ async function issueConnectionTokens(connection: Connection, human: Human): Prom
     human: { verified: human.verified, age_range: human.ageRange },
     connection: { id: connection.id, agent: connectionAgent(connection) },
   };
-  const token = await new SignJWT(claims as Record<string, unknown>)
+  return new SignJWT(claims as Record<string, unknown>)
     .setProtectedHeader({ alg: "EdDSA", kid, typ: "at+jwt" })
     .setIssuer(config.courier.url)
-    .setAudience(connection.resource)
-    .setSubject(pairwiseSubject(human.id, connection.resource))
+    .setAudience(audience)
+    .setSubject(pairwiseSubject(human.id, audience))
     .setIssuedAt()
-    .setExpirationTime(`${ACCESS_TOKEN_TTL_SECONDS}s`)
+    .setExpirationTime(`${ttlSeconds}s`)
     .setJti(newId("at"))
     .sign(privateKey);
+}
+
+/** What the Courier connector shows one shop while browsing: just long enough for one call, for that shop alone. */
+export const mintShopConnectionToken = (connection: Connection, human: Human, shopResource: string) =>
+  signConnectionToken(connection, human, shopResource, 60);
+
+/** A connection's token says who Claude acts for and carries no limits, so it lasts across errands. */
+async function issueConnectionTokens(connection: Connection, human: Human): Promise<OAuthTokens> {
+  const token = await signConnectionToken(connection, human, connection.resource, ACCESS_TOKEN_TTL_SECONDS);
   const refresh = `crt_${randomToken(32)}`;
   db.put<RefreshTokenRecord>("refresh_tokens", sha256(refresh), {
     id: sha256(refresh),

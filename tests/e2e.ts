@@ -79,7 +79,7 @@ class Browser {
 
 const b64url = (buf: Buffer) => buf.toString("base64url");
 
-async function mcpClient(token: string, answer?: (message: string) => string) {
+async function mcpClient(token: string, answer?: (message: string) => string, address = MCP) {
   // With `answer`, the client can show dialogs (MCP elicitation), as Claude does; `answer` plays the person.
   const client = new Client(
     { name: "e2e", version: "1" },
@@ -94,7 +94,7 @@ async function mcpClient(token: string, answer?: (message: string) => string) {
           : { answer: answer(req.params.message) },
     }));
   await client.connect(
-    new StreamableHTTPClientTransport(new URL(MCP), {
+    new StreamableHTTPClientTransport(new URL(address), {
       requestInit: { headers: { Authorization: `Bearer ${token}`, "X-Demo-Source": "e2e" } },
     }),
   );
@@ -111,14 +111,14 @@ interface Flow {
   asMeta: any;
 }
 
-async function discover(): Promise<Flow> {
-  const res = await fetch(MCP, { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
+async function discover(address = MCP): Promise<Flow> {
+  const res = await fetch(address, { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
   assert.equal(res.status, 401);
   const www = res.headers.get("www-authenticate") ?? "";
   const prmUrl = www.match(/resource_metadata="([^"]+)"/)?.[1];
   assert.ok(prmUrl, "resource_metadata in WWW-Authenticate");
   const prm = await (await fetch(prmUrl!)).json();
-  assert.equal(prm.resource, MCP);
+  assert.equal(prm.resource, address);
   const courier = prm.authorization_servers[0];
   const asMeta = await (await fetch(`${courier}/.well-known/oauth-authorization-server`)).json();
   assert.equal(asMeta.issuer, courier, "issuer must equal the authorization server identifier");
@@ -137,7 +137,13 @@ async function discover(): Promise<Flow> {
   return { client: await reg.json(), courier, asMeta };
 }
 
-async function authorize(flow: Flow, browser: Browser, persona: string, opts: { refused?: boolean } = {}) {
+async function authorize(
+  flow: Flow,
+  browser: Browser,
+  persona: string,
+  opts: { refused?: boolean; resource?: string; yes?: Record<string, string> } = {},
+) {
+  const resource = opts.resource ?? MCP;
   const verifier = b64url(randomBytes(32));
   const challenge = b64url(createHash("sha256").update(verifier).digest());
   const state = b64url(randomBytes(8));
@@ -150,7 +156,7 @@ async function authorize(flow: Flow, browser: Browser, persona: string, opts: { 
     code_challenge_method: "S256",
     scope: "store:browse store:reserve store:buy",
     state,
-    resource: MCP,
+    resource,
   }).toString();
 
   // /authorize → /connect/:id
@@ -187,7 +193,9 @@ async function authorize(flow: Flow, browser: Browser, persona: string, opts: { 
   }
 
   // One yes, and the agent gets its code: no ticket, no PayPal page.
-  const consent = await browser.req(`${flow.courier}/consent/${reqId}`, { form: { decision: "approve" } });
+  const consent = await browser.req(`${flow.courier}/consent/${reqId}`, {
+    form: { decision: "approve", ...opts.yes },
+  });
   assert.equal(consent.status, 302);
   const back = new URL(consent.headers.get("location")!);
   assert.equal(back.origin + back.pathname, REDIRECT);
@@ -205,7 +213,7 @@ async function authorize(flow: Flow, browser: Browser, persona: string, opts: { 
       redirect_uri: REDIRECT,
       client_id: flow.client.client_id,
       code_verifier: verifier,
-      resource: MCP,
+      resource,
     }),
   });
   const tokens = await tokenRes.json();
@@ -758,6 +766,178 @@ await step(
     assert.ok(!home.includes("Jazz for deleting"), "the old errand is gone");
   },
 );
+
+/* ---------------- the one Courier connector ---------------- */
+
+const GATEWAY = `${flow.courier}/mcp`;
+const person = new Browser();
+let gateway!: Client;
+let gatewayToken = "";
+const tool = async (name: string, args: Record<string, unknown> = {}) =>
+  (await gateway.callTool({ name, arguments: args })) as any;
+
+await step("Claude adds one connector: Courier, with a cap the person sets while connecting", async () => {
+  const flowG = await discover(GATEWAY);
+  const out = await authorize(flowG, person, "malik", {
+    resource: GATEWAY,
+    yes: { cap_errand: "30", cap_day: "50" },
+  });
+  gatewayToken = out.tokens.access_token;
+  gateway = await mcpClient(gatewayToken, undefined, GATEWAY);
+  const { tools } = await gateway.listTools();
+  for (const name of ["list_shops", "search_shop", "start_errand", "wait_for_errand", "buy", "end_errand"])
+    assert.ok(
+      tools.some((t) => t.name === name),
+      name,
+    );
+});
+
+await step("Five shops through one connector, each browsable with no errand and known by name", async () => {
+  const { shops } = structured(await tool("list_shops"));
+  assert.equal(shops.length, 5);
+  const found = structured(await tool("search_shop", { shop: "floor dash", query: "flowers" }));
+  assert.ok(
+    found.results.some((r: any) => r.id === "fd-006"),
+    JSON.stringify(found),
+  );
+  assert.equal((await tool("search_shop", { shop: "Nowhere Mart", query: "" })).isError, true);
+  const grid = await (await fetch(STORE)).text();
+  for (const s of shops) assert.ok(grid.replaceAll("&amp;", "&").includes(s.name), s.name);
+  assert.equal((await fetch(`${STORE}/mike`)).status, 200);
+  assert.doesNotMatch(grid, /amazon|doordash|fortnite|nike\b|v-bucks/i, "parodies only");
+});
+
+let flowers = "";
+await step("Without saved PayPal even a small errand asks first; the person saves it once", async () => {
+  const asked = await tool("start_errand", { what: "Market Bouquet flowers", budget: 20 });
+  const sc = structured(asked);
+  assert.equal(sc.decision, "needs_ticket", JSON.stringify(asked));
+  assert.equal((await tool("wait_for_errand", { request_id: "ar_not_mine" })).isError, true);
+  const page = await person.req(sc.ticket_url);
+  assert.match(await page.text(), /at any shop/);
+  const saving = await person.follow(sc.ticket_url, "http://none/", {
+    form: {
+      decision: "approve",
+      scopes: ["store:browse", "store:reserve", "store:buy"],
+      spend_limit: "20",
+      intent: "Market Bouquet flowers",
+      autopay: "1",
+    },
+  });
+  const setupId = saving.url!.split("/sim-paypal/vault/")[1];
+  assert.ok(setupId, String(saving.url));
+  const done = await person.follow(`${flow.courier}/sim-paypal/vault/${setupId}`, "http://none/", {
+    form: { decision: "approve" },
+  });
+  assert.match(await done.res.text(), /has its budget/);
+  const ready = structured(await tool("wait_for_errand", { request_id: sc.request_id }));
+  assert.equal(ready.ready, true);
+  assert.equal(ready.budget, "20.00");
+  flowers = ready.errand_id;
+});
+
+let books = "";
+await step("Under the cap, Claude sends any courier by name with no click, on errands side by side", async () => {
+  assert.equal(
+    (
+      await person.req(`${flow.courier}/start/courier`, {
+        form: { new: "1", name: "Steve", human: "Malik", color: "tang" },
+      })
+    ).status,
+    303,
+  );
+  const unknown = await tool("start_errand", { what: "books", budget: 12, courier: "Nobody" });
+  assert.equal(unknown.isError, true);
+  assert.match(unknown.content[0].text, /Steve/, "it says who they do have");
+  const started = structured(
+    await tool("start_errand", { what: "A novel to read books", budget: 12, courier: "steve" }),
+  );
+  assert.equal(started.courier, "Steve");
+  books = started.errand_id;
+  const { errands } = structured(await tool("whoami"));
+  assert.deepEqual(new Set(errands.map((e: any) => e.errand_id)), new Set([flowers, books]));
+});
+
+await step("Each errand keeps its own budget, at any shop; what doesn't fit fails and says why", async () => {
+  const bought = await tool("buy", { errand_id: flowers, shop: "Floor Dash", item_ids: ["fd-006"] });
+  const sc = structured(bought);
+  assert.equal(sc.status, "paid", JSON.stringify(bought));
+  assert.equal(sc.shop, "Floor Dash");
+  assert.equal(sc.remaining_budget, "2.00");
+  const over = await tool("buy", { errand_id: flowers, shop: "Amazoo", item_ids: ["az-002"] });
+  assert.equal(over.isError, true);
+  assert.equal(structured(over).code, "spend_limit");
+  const other = structured(await tool("buy", { errand_id: books, shop: "Amazoo", item_ids: ["az-002"] }));
+  assert.equal(other.status, "paid", JSON.stringify(other));
+  assert.equal(other.agent, "Steve");
+  assert.ok((await fetch(other.receipt_url)).ok);
+  const wrongShop = await tool("buy", { errand_id: books, shop: "Mike", item_ids: ["az-001"] });
+  assert.equal(wrongShop.isError, true, "an item only sells at its own shop");
+  assert.equal((await tool("buy", { errand_id: "visa_nope", shop: "Mike", item_ids: ["mk-004"] })).isError, true);
+});
+
+await step("Shops see a different pseudonym each, and the connector's token doesn't work at a shop", async () => {
+  const seen = (await (await fetch(`${STORE}/merchant`)).text()).match(/<code>pp_[^<…]+…/g) ?? [];
+  assert.notEqual(seen[0], seen[1], "Floor Dash and Amazoo can't match this person up");
+  const direct = await fetch(`${STORE}/amazoo/mcp`, {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${gatewayToken}`,
+      "content-type": "application/json",
+      accept: "application/json, text/event-stream",
+    },
+    body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list" }),
+  });
+  assert.equal(direct.status, 401);
+});
+
+await step("Over the cap needs the person: the model has no pass, the card does, once", async () => {
+  const asked = await tool("start_errand", { what: "A kettle for the house", budget: 40 });
+  assert.equal(structured(asked).decision, "needs_ticket");
+  const pass = asked._meta["courier/budget_pass"];
+  assert.ok(pass);
+  assert.equal((await tool("set_budget", { budget: 500, pass: "guessed" })).isError, true);
+  const set = structured(await tool("set_budget", { budget: 40, pass }));
+  assert.equal(set.issued, true, JSON.stringify(set));
+  assert.equal((await tool("set_budget", { budget: 40, pass })).isError, true, "a pass works once");
+  assert.equal(structured(await tool("wait_for_errand", { request_id: structured(asked).request_id })).ready, true);
+});
+
+await step("The daily cap counts what Claude started itself; a used-up budget ends the errand", async () => {
+  const pizza = structured(await tool("start_errand", { what: "A Margherita pizza dinner", budget: 14 }));
+  assert.ok(pizza.errand_id, JSON.stringify(pizza)); // $12 + $14 started on its own so far
+  const paid = structured(await tool("buy", { errand_id: pizza.errand_id, shop: "Floor Dash", item_ids: ["fd-004"] }));
+  assert.equal(paid.status, "paid", JSON.stringify(paid));
+  const after = await tool("buy", { errand_id: pizza.errand_id, shop: "Floor Dash", item_ids: ["fd-003"] });
+  assert.equal(structured(after).error, "errand_ended", JSON.stringify(after));
+  assert.match(after.content[0].text, /Budget used up/);
+  const socks = structured(await tool("start_errand", { what: "Socks and more socks", budget: 24 }));
+  assert.ok(socks.errand_id, "$12 + $14 + $24 is exactly the $50 daily cap");
+  assert.equal(structured(await tool("start_errand", { what: "More socks", budget: 5 })).decision, "needs_ticket");
+});
+
+await step("The home page shows logos and errands; calling back and disconnecting end everything", async () => {
+  const home = await (await person.req(`${flow.courier}/app`)).text();
+  assert.match(home, /class="slogo/);
+  assert.match(await (await person.req(`${flow.courier}/app/errands?tab=out`)).text(), /Amazoo/);
+  assert.equal(structured(await tool("end_errand", { errand_id: books })).ended, true);
+  const late = await tool("buy", { errand_id: books, shop: "Amazoo", item_ids: ["az-006"] });
+  assert.equal(structured(late).error, "errand_ended");
+  await gateway.close();
+  const settings = await (await person.req(`${flow.courier}/app/settings`)).text();
+  const conn = settings.match(/\/app\/connections\/(conn_[^/]+)\/revoke/g)!;
+  for (const action of conn) assert.equal((await person.req(`${flow.courier}${action}`, { form: {} })).status, 303);
+  const gone = await fetch(GATEWAY, {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${gatewayToken}`,
+      "content-type": "application/json",
+      accept: "application/json, text/event-stream",
+    },
+    body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list" }),
+  });
+  assert.equal(gone.status, 401);
+});
 
 await step("Release the bots: every attack is blocked or flagged", async () => {
   const res = await fetch(`${flow.courier}/bots/run`, {

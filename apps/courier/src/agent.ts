@@ -71,15 +71,18 @@ export async function withStore<T>(
   token: string,
   fn: (client: Client) => Promise<T>,
   source = "Courier errand room",
+  address = STORE_RESOURCE,
 ): Promise<T> {
   const client = new Client({ name: "courier-errand-room", version: "0.1.0" });
-  const transport = new StreamableHTTPClientTransport(new URL(STORE_RESOURCE), {
+  const transport = new StreamableHTTPClientTransport(new URL(address), {
     requestInit: { headers: { Authorization: `Bearer ${token}`, "X-Demo-Source": source } },
   });
   await client.connect(transport);
   try {
     return await fn(client);
   } finally {
+    // Ends the session on the shop's side too, so short calls don't pile up there.
+    await transport.terminateSession().catch(() => {});
     await client.close().catch(() => {});
   }
 }

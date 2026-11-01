@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import path from "node:path";
-import { config, internalFetch, paypal, ROOT_DIR } from "@courier/shared";
+import { config, findShop, internalFetch, JUNIPER, paypal, ROOT_DIR, SHOPS, type Shop } from "@courier/shared";
 import type { AuthInfo } from "@modelcontextprotocol/sdk/server/auth/types.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { isInitializeRequest } from "@modelcontextprotocol/sdk/types.js";
@@ -15,10 +15,10 @@ import {
   type RequestLogEntry,
   requireVisa,
 } from "./auth.ts";
-import { CATALOG } from "./catalog.ts";
+import { CATALOG, shelfOf } from "./catalog.ts";
 import { db, type Order } from "./db.ts";
 import { createMcpServer, settleOrder } from "./mcp.ts";
-import { merchantDashboard, paymentResult, receiptPage, storefront } from "./views.ts";
+import { merchantDashboard, paymentResult, receiptPage, shopGrid, storefront } from "./views.ts";
 
 const app = express();
 app.set("trust proxy", "loopback");
@@ -41,7 +41,8 @@ app.get("/.well-known/oauth-protected-resource", sendPrm);
 
 /* ---------------- MCP endpoint ---------------- */
 
-app.use("/mcp", (req, res, next) => {
+const mcpPaths = SHOPS.map((shop) => (shop === JUNIPER ? "/mcp" : `/${shop.slug}/mcp`));
+app.use(mcpPaths, (req, res, next) => {
   res.set("Access-Control-Allow-Origin", "*");
   res.set(
     "Access-Control-Allow-Headers",
@@ -76,9 +77,9 @@ setInterval(() => {
 const ownerOf = (req: express.Request) => ownerId(claimsOf((req as express.Request & { auth?: AuthInfo }).auth));
 
 /** The session this request belongs to, if it names one this caller owns. Replies with an error otherwise. */
-function ownSession(req: express.Request, res: express.Response): McpSession | null {
+function ownSession(shop: Shop, req: express.Request, res: express.Response): McpSession | null {
   const sess = sessions.get(String(req.headers["mcp-session-id"]));
-  if (!sess || sess.owner !== ownerOf(req)) {
+  if (!sess || sess.owner !== `${shop.slug}:${ownerOf(req)}`) {
     res.status(404).json({ jsonrpc: "2.0", error: { code: -32001, message: "Session not found" }, id: null });
     return null;
   }
@@ -101,57 +102,62 @@ async function serve(
   }
 }
 
-app.post("/mcp", express.json({ limit: "1mb" }), requireVisa, async (req, res) => {
-  if (req.headers["mcp-session-id"]) {
-    const sess = ownSession(req, res);
-    if (sess) await serve(sess.transport, req, res, req.body);
-    return;
-  }
-  const server = createMcpServer();
-  if (isInitializeRequest(req.body)) {
-    const owner = ownerOf(req);
-    const transport: StreamableHTTPServerTransport = new StreamableHTTPServerTransport({
-      sessionIdGenerator: () => randomUUID(),
-      onsessioninitialized: (id) => void sessions.set(id, { transport, owner, lastSeen: Date.now() }),
-    });
-    transport.onclose = () => {
-      if (transport.sessionId) sessions.delete(transport.sessionId);
+for (const shop of SHOPS) {
+  const path = shop === JUNIPER ? "/mcp" : `/${shop.slug}/mcp`;
+  const guard = requireVisa(shop);
+
+  app.post(path, express.json({ limit: "1mb" }), guard, async (req, res) => {
+    if (req.headers["mcp-session-id"]) {
+      const sess = ownSession(shop, req, res);
+      if (sess) await serve(sess.transport, req, res, req.body);
+      return;
+    }
+    const server = createMcpServer(shop);
+    if (isInitializeRequest(req.body)) {
+      const owner = `${shop.slug}:${ownerOf(req)}`;
+      const transport: StreamableHTTPServerTransport = new StreamableHTTPServerTransport({
+        sessionIdGenerator: () => randomUUID(),
+        onsessioninitialized: (id) => void sessions.set(id, { transport, owner, lastSeen: Date.now() }),
+      });
+      transport.onclose = () => {
+        if (transport.sessionId) sessions.delete(transport.sessionId);
+        void server.close();
+      };
+      await server.connect(transport);
+      await serve(transport, req, res, req.body);
+      return;
+    }
+    // Stateless: a fresh server and transport for this one request.
+    const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
+    res.on("close", () => {
+      void transport.close();
       void server.close();
-    };
+    });
     await server.connect(transport);
     await serve(transport, req, res, req.body);
-    return;
-  }
-  // Stateless: a fresh server and transport for this one request.
-  const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
-  res.on("close", () => {
-    void transport.close();
-    void server.close();
   });
-  await server.connect(transport);
-  await serve(transport, req, res, req.body);
-});
 
-// The session's own stream (GET) and its end (DELETE).
-app.get("/mcp", requireVisa, async (req, res) => {
-  const sess = ownSession(req, res);
-  if (sess) await serve(sess.transport, req, res);
-});
-app.delete("/mcp", requireVisa, async (req, res) => {
-  const sess = ownSession(req, res);
-  if (sess) await serve(sess.transport, req, res);
-});
+  // The session's own stream (GET) and its end (DELETE).
+  app.get(path, guard, async (req, res) => {
+    const sess = ownSession(shop, req, res);
+    if (sess) await serve(sess.transport, req, res);
+  });
+  app.delete(path, guard, async (req, res) => {
+    const sess = ownSession(shop, req, res);
+    if (sess) await serve(sess.transport, req, res);
+  });
+}
 
 /* ---------------- human-facing shop ---------------- */
 
-app.get("/", (req, res) => {
-  res.send(storefront(CATALOG, typeof req.query.c === "string" ? req.query.c : ""));
+app.get("/", (_req, res) => {
+  res.send(shopGrid());
 });
 
 /** The public shelf, as humans see it (the Courier errand room renders its shop front from this). */
 app.get("/catalog.json", (_req, res) => {
   res.set("Access-Control-Allow-Origin", "*").json({
-    store: config.store.name,
+    store: JUNIPER.name,
     items: CATALOG.map((i) => ({
       id: i.id,
       title: i.title,
@@ -270,6 +276,16 @@ app.get("/healthz", (_req, res) => {
   res.json({ ok: true, paypal: paypal.mode });
 });
 
+// Last, so a shop's address can't shadow the routes above.
+app.get("/:slug", (req, res, next) => {
+  const shop = findShop(req.params.slug);
+  if (!shop) {
+    next();
+    return;
+  }
+  res.send(storefront(shop, shelfOf(shop.slug), typeof req.query.c === "string" ? req.query.c : ""));
+});
+
 app.listen(config.store.port, config.bindHost, () => {
-  console.log(`${config.store.name} → ${config.store.url}  (MCP: ${config.store.url}/mcp)`);
+  console.log(`${SHOPS.length} shops → ${config.store.url}`);
 });

@@ -4,6 +4,8 @@ export const db = new DocStore("store");
 
 export interface Order {
   id: string; // PayPal order id
+  /** Which shop sold it. Older orders were all Juniper Records'. */
+  shop?: string;
   visaId: string;
   sub: string;
   agent: string;

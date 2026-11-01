@@ -4,5 +4,7 @@ export * from "./html.ts";
 export * from "./intent.ts";
 export * from "./internal.ts";
 export * from "./paypal.ts";
+export * from "./receipt-card.ts";
+export * from "./shops.ts";
 export * from "./store.ts";
 export * from "./visa.ts";

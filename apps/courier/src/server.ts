@@ -1,6 +1,7 @@
 import path from "node:path";
 import {
   ALL_SCOPES,
+  COURIER_RESOURCE,
   config,
   DURATIONS,
   type DurationKey,
@@ -30,6 +31,7 @@ import {
   type SavedPayPalRecord,
   saveCourier,
 } from "./db.ts";
+import { gatewayRouter } from "./gateway.ts";
 import {
   accountDeletedPage,
   approvalPage,
@@ -59,6 +61,7 @@ import {
   internalRouter,
   issuedStamps,
   migrateSavedPayPal,
+  parseCap,
   removeSavedPayPal,
   revokeVisa,
   savedPayPal,
@@ -114,6 +117,10 @@ app.use(
     clientRegistrationOptions: { clientSecretExpirySeconds: 0 },
   }),
 );
+
+/* ---------------- the one connector Claude adds ---------------- */
+
+app.use(gatewayRouter);
 
 /* ---------------- Simulated PayPal (only without credentials) ---------------- */
 
@@ -337,7 +344,14 @@ app.post("/consent/:id", async (req, res) => {
   }
 
   if (isConnectRequest(request)) {
-    const choice = courierChoice(human, request.clientId);
+    const gateway = request.resource === COURIER_RESOURCE;
+    if (gateway && !listCouriers(human.id).length) {
+      res.redirect(302, `/start/courier?req=${request.id}`);
+      return;
+    }
+    // Through the Courier connector, Claude can send any courier, up to the cap the person sets here.
+    if (gateway) db.put("humans", human.id, { ...human, cap: parseCap(req.body.cap_errand, req.body.cap_day) });
+    const choice = gateway ? null : courierChoice(human, request.clientId);
     if (choice) {
       const picked = choice.couriers.find((c) => c.id === req.body.courier) ?? findCourier(human.id, choice.preselect);
       if (!picked) {
@@ -355,7 +369,11 @@ app.post("/consent/:id", async (req, res) => {
     const connection =
       db.list<Connection>(
         "connections",
-        (c) => c.humanId === human.id && c.clientId === request.clientId && c.status === "active",
+        (c) =>
+          c.humanId === human.id &&
+          c.clientId === request.clientId &&
+          c.resource === request.resource &&
+          c.status === "active",
         1,
       )[0] ??
       newConnection({
@@ -378,7 +396,9 @@ app.post("/consent/:id", async (req, res) => {
   const spend = Math.round(Number(req.body.spend_limit) * 100);
   // A ticket is one budget. The agent's limits can still be narrower when a client asks for it.
   const perPurchase = req.body.per_purchase_limit ? Math.round(Number(req.body.per_purchase_limit) * 100) : spend;
-  const duration = (req.body.duration in DURATIONS ? req.body.duration : "7d") as DurationKey;
+  const duration = (
+    merchant.resource === COURIER_RESOURCE ? "24h" : req.body.duration in DURATIONS ? req.body.duration : "7d"
+  ) as DurationKey;
   const intent = String(req.body.intent ?? "")
     .trim()
     .slice(0, 160);
@@ -398,9 +418,9 @@ app.post("/consent/:id", async (req, res) => {
     return;
   }
 
-  // One courier per Claude: an outside client (the person's own Claude) is bound to the courier they pick, and acts
-  // as that courier from then on, in every chat.
-  const choice = courierChoice(human, request.clientId);
+  // On an older per-shop connector, an outside client is bound to the courier they pick, and acts as that courier from
+  // then on, in every chat.
+  const choice = merchant.resource === COURIER_RESOURCE ? null : courierChoice(human, request.clientId);
   const picked = choice?.couriers.find((c) => c.id === req.body.courier);
   if (picked)
     saveCourier({
@@ -410,7 +430,9 @@ app.post("/consent/:id", async (req, res) => {
       clientName: request.clientName,
       boundAt: new Date().toISOString(),
     });
-  const actingAs = courierForClient(human.id, request.clientId);
+  const actingAs = request.ticket?.courierName
+    ? listCouriers(human.id).find((c) => c.name === request.ticket!.courierName)
+    : courierForClient(human.id, request.clientId);
 
   const visa: Visa = {
     id: newId("visa"),

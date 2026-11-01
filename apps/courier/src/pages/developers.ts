@@ -1,4 +1,4 @@
-import { ARROW, config, html, STORE_RESOURCE } from "@courier/shared";
+import { ARROW, COURIER_RESOURCE, config, html } from "@courier/shared";
 import type { Human } from "../db.ts";
 import { cpage } from "./shared.ts";
 
@@ -32,9 +32,9 @@ export function developersPage(human: Human | null): string {
         <section class="panel devs-c">
           <h2 class="sec-t">Use it in Claude</h2>
           <ol class="steps">
-            <li><b>Add a custom connector with this URL.</b><code class="copy inp code">${STORE_RESOURCE}</code></li>
+            <li><b>Add a custom connector with this URL.</b><code class="copy inp code">${COURIER_RESOURCE}</code></li>
             <li><b>Connect, and pick your courier.</b><span>Courier opens: sign in with PayPal and say yes. Nothing is bought.</span></li>
-            <li><b>Ask in any chat.</b><span><q>Find me a jazz record under $40 at ${config.store.name}.</q></span></li>
+            <li><b>Ask in any chat.</b><span><q>Get me a burger on Floor Dash. I have about $15.</q></span></li>
           </ol>
           <a class="btn sm" href="/start">Get a courier${ARROW}</a>
         </section>
@@ -48,7 +48,7 @@ export function developersPage(human: Human | null): string {
           <ul class="eps">
             ${ep("Authorization server", `${issuer}/.well-known/oauth-authorization-server`)}
             ${ep("Keys (JWKS)", `${issuer}/jwks.json`)}
-            ${ep("Example resource metadata", `${config.store.url}/.well-known/oauth-protected-resource/mcp`)}
+            ${ep("Example resource metadata", `${config.courier.url}/.well-known/oauth-protected-resource/mcp`)}
           </ul>
         </section>
         <section class="panel devs-c devs-claims">

@@ -15,8 +15,8 @@ export const RECEIPT_CARD = `<!doctype html>
 .card{padding:12px 14px}
 .card[hidden]{display:none}.st{font-weight:700;color:var(--ok);margin:0 0 10px}
 ul{list-style:none;margin:0;padding:0}li{display:flex;align-items:center;gap:12px;padding:6px 0}
-.disc{flex:none;width:44px;height:44px;border-radius:50%;background:#141414;display:grid;place-items:center}
-.disc i{width:16px;height:16px;border-radius:50%;background:hsl(var(--h) 90% 70%)}
+.disc{flex:none;width:44px;height:44px;border-radius:10px;background:hsl(var(--h) 45% 32%);display:grid;place-items:center}
+.disc i{width:16px;height:16px;border-radius:50%;background:hsl(var(--h) 90% 76%)}
 .t{flex:1;min-width:0}.t b{display:block}.t small,.foot{color:var(--mute)}
 .tot{display:flex;justify-content:space-between;border-top:1px solid var(--line);margin-top:8px;padding-top:10px;font-weight:700}
 .bud{display:flex;align-items:center;gap:8px;margin:0 0 10px}.bud span{font-weight:700}.bud input{width:96px;height:36px;padding:0 10px;border:1px solid var(--line);border-radius:8px;background:transparent;color:inherit;font:inherit;font-weight:700}
@@ -27,7 +27,7 @@ ul{list-style:none;margin:0;padding:0}li{display:flex;align-items:center;gap:12p
 <div class="card" id="card" hidden><p class="st" id="st"></p><ul id="items"></ul>
 <div class="tot"><span>Total</span><span id="total"></span></div><p class="foot" id="foot"></p><div class="bud" id="bud" hidden><span>$</span><input id="amt" type="number" min="1" max="500" step="1" aria-label="Budget in dollars"><button type="button" id="set">Set budget</button></div><a class="btn" id="go" target="_blank" rel="noopener"></a></div>
 <script>
-var card=document.getElementById("card"),next=1,wait={},polling=0,agent="Your courier";
+var card=document.getElementById("card"),next=1,wait={},polling=0,agent="Your courier",request;
 function send(m){parent.postMessage(Object.assign({jsonrpc:"2.0"},m),"*")}
 function resize(){send({method:"ui/notifications/size-changed",params:{height:document.documentElement.scrollHeight}})}
 function el(tag,cls,text){var e=document.createElement(tag);if(cls)e.className=cls;if(text)e.textContent=text;return e}
@@ -40,7 +40,7 @@ function budgetSet(){
 }
 function watchTicket(){
   if(polling)return;polling=setInterval(function(){
-    rpc("tools/call",{name:"whoami",arguments:{}},function(res){
+    rpc("tools/call",{name:"whoami",arguments:request?{request_id:request}:{}},function(res){
       var who=res&&res.structuredContent;
       if(who&&who.visa)budgetSet();
     });
@@ -71,19 +71,19 @@ function budgetForm(r,pass,go){
   };
 }
 function show(r,meta){
-  if(!r||!r.items||!r.total)return resize();
+  if(!r||!(r.items&&r.total||r.decision==="needs_ticket"))return resize();
   var paid=r.status==="paid",needs=r.decision==="needs_ticket",url=needs?r.ticket_url:paid?r.receipt_url:r.approve_url;
-  agent=r.agent||"Your courier";
-  byId("st").textContent=needs?"Set a budget to buy this":paid?"\\u2713 Paid":"Waiting for you to pay";
+  agent=r.agent||"Your courier";request=r.request_id;
+  byId("st").textContent=needs?(r.what?"Set a budget: "+r.what:"Set a budget to buy this"):paid?"\\u2713 Paid":"Waiting for you to pay";
   var list=byId("items");list.textContent="";
-  r.items.forEach(function(i){
+  (r.items||[]).forEach(function(i){
     var li=el("li"),disc=el("div","disc"),dot=el("i"),t=el("div","t");
     dot.style.setProperty("--h",Number(i.hue)||0);disc.appendChild(dot);
     t.appendChild(el("b","",i.title));if(i.artist)t.appendChild(el("small","",i.artist));
     li.appendChild(disc);li.appendChild(t);li.appendChild(el("span","","$"+i.price));list.appendChild(li);
   });
-  byId("total").textContent="$"+r.total;
-  byId("foot").textContent=needs?"The most "+agent+" can spend on this errand:":(r.agent?"Bought by "+r.agent:"")+(r.remaining_budget?" \\u00b7 $"+r.remaining_budget+" left on this errand":"");
+  byId("total").textContent=r.total?"$"+r.total:"";byId("total").parentNode.hidden=!r.total;
+  byId("foot").textContent=needs?"The most "+agent+" can spend on this errand:":(r.agent?"Bought by "+r.agent:"")+(r.shop?" at "+r.shop:"")+(r.remaining_budget?" \\u00b7 $"+r.remaining_budget+" left on this errand":"");
   var go=byId("go"),pass=meta&&meta["courier/budget_pass"];
   byId("bud").hidden=true;
   if(url&&/^https?:/.test(url)){go.href=url;go.hidden=false;

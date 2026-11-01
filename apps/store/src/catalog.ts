@@ -1,10 +1,11 @@
-/** Juniper Records: a fictional independent record shop. All artists and titles are invented. */
+/** The shops' shelves. All shops, makers, artists and titles are invented. */
 
 export interface Item {
   id: string;
   title: string;
+  /** The artist or maker. */
   artist: string;
-  category: "vinyl" | "cassette" | "cd" | "accessory" | "merch" | "turntable";
+  category: string;
   genre: string;
   priceCents: number;
   stock: number;
@@ -389,19 +390,248 @@ export const CATALOG: Item[] = [
   },
 ];
 
+const item = (
+  id: string,
+  title: string,
+  artist: string,
+  category: string,
+  genre: string,
+  priceCents: number,
+  blurb: string,
+  hue: number,
+): Item => ({ id, title, artist, category, genre, priceCents, stock: 50, blurb, hue });
+
+const SHELVES: Record<string, Item[]> = {
+  juniper: CATALOG,
+  amazoo: [
+    item(
+      "az-001",
+      "The Lighthouse Ledger",
+      "Marta Quill",
+      "book",
+      "novel fiction",
+      1199,
+      "A slow-burn mystery on a remote island.",
+      205,
+    ),
+    item(
+      "az-002",
+      "Salt & Static",
+      "Theo Brandt",
+      "book",
+      "novel science fiction",
+      999,
+      "A radio operator hears a signal from home.",
+      265,
+    ),
+    item(
+      "az-003",
+      "One-Pan Weeknights",
+      "Priya Nair",
+      "book",
+      "cooking",
+      1450,
+      "Sixty dinners and very little washing up.",
+      25,
+    ),
+    item(
+      "az-004",
+      "Braided Charging Cable, 2 m",
+      "Zooline",
+      "gadget",
+      "cable charger",
+      899,
+      "Fast charging, survives being sat on.",
+      190,
+    ),
+    item(
+      "az-005",
+      "Pocket Power Bank 10k",
+      "Zooline",
+      "gadget",
+      "charger battery",
+      2499,
+      "Two full phone charges in a coat pocket.",
+      215,
+    ),
+    item("az-006", "Dot-Grid Notebook", "Paperhorn", "home", "stationery", 750, "192 pages that lie flat.", 45),
+    item(
+      "az-007",
+      "Quiet Boil Kettle",
+      "Hearthly",
+      "home",
+      "kitchen",
+      3999,
+      "Boils a litre in three minutes, without the roar.",
+      12,
+    ),
+    item("az-008", "Desk Plant in a Tin", "Hearthly", "home", "plant", 1299, "Very hard to kill.", 120),
+  ],
+  "floor-dash": [
+    item(
+      "fd-001",
+      "Double Smash Burger",
+      "Smashville",
+      "food",
+      "burger dinner",
+      1150,
+      "Two patties, pickles, house sauce. Fries extra.",
+      28,
+    ),
+    item(
+      "fd-002",
+      "Crispy Chicken Burger",
+      "Smashville",
+      "food",
+      "burger lunch",
+      1050,
+      "Buttermilk chicken and slaw.",
+      38,
+    ),
+    item("fd-003", "Skin-on Fries", "Smashville", "food", "fries side", 450, "Salted, crunchy and still hot.", 48),
+    item("fd-004", "Margherita, 12 inch", "Forno Nove", "food", "pizza dinner", 1400, "Wood-fired, with basil.", 8),
+    item(
+      "fd-005",
+      "Pad Thai with Tofu",
+      "Lemongrass Lane",
+      "food",
+      "noodles dinner vegan",
+      1250,
+      "Tamarind, peanuts and lime.",
+      70,
+    ),
+    item(
+      "fd-006",
+      "Market Bouquet",
+      "Petal & Stem",
+      "flowers",
+      "flowers bouquet",
+      1800,
+      "Whatever looked best this morning, wrapped.",
+      335,
+    ),
+    item("fd-007", "Sunflower Bunch", "Petal & Stem", "flowers", "flowers bouquet", 1500, "Ten big stems.", 52),
+    item(
+      "fd-008",
+      "Grand Rose Arrangement",
+      "Petal & Stem",
+      "flowers",
+      "flowers roses bouquet",
+      4500,
+      "Two dozen roses in a vase.",
+      350,
+    ),
+  ],
+  "lord-knight": [
+    item(
+      "lk-001",
+      "500 Knight Bucks",
+      "Lord Knight",
+      "currency",
+      "game currency bucks",
+      499,
+      "Spend them in the castle shop.",
+      275,
+    ),
+    item(
+      "lk-002",
+      "1,000 Knight Bucks",
+      "Lord Knight",
+      "currency",
+      "game currency bucks",
+      799,
+      "Enough for most skins.",
+      275,
+    ),
+    item(
+      "lk-003",
+      "2,800 Knight Bucks",
+      "Lord Knight",
+      "currency",
+      "game currency bucks",
+      1999,
+      "The most popular pack.",
+      275,
+    ),
+    item(
+      "lk-004",
+      "Ember Paladin Skin",
+      "Lord Knight",
+      "skin",
+      "game skin cosmetic",
+      1200,
+      "Armour that glows at night.",
+      15,
+    ),
+    item(
+      "lk-005",
+      "Frost Squire Skin",
+      "Lord Knight",
+      "skin",
+      "game skin cosmetic",
+      800,
+      "A cold start to any quest.",
+      200,
+    ),
+    item(
+      "lk-006",
+      "Season Banner Pass",
+      "Lord Knight",
+      "pass",
+      "game battle pass",
+      950,
+      "A hundred tiers of rewards this season.",
+      45,
+    ),
+  ],
+  mike: [
+    item(
+      "mk-001",
+      "Swiftline Runner",
+      "Mike",
+      "shoes",
+      "running shoes trainers sneakers",
+      8900,
+      "Light road shoe for daily miles.",
+      12,
+    ),
+    item("mk-002", "Courtside Low", "Mike", "shoes", "sneakers shoes", 7500, "Classic low-top in white leather.", 40),
+    item("mk-003", "Trailhead Mid", "Mike", "shoes", "hiking trail shoes", 11000, "Grippy, and fine in the rain.", 110),
+    item("mk-004", "Everyday Crew Socks, 3 pairs", "Mike", "apparel", "socks", 1400, "Cushioned where it counts.", 220),
+    item(
+      "mk-005",
+      "Dry-Fit Training Tee",
+      "Mike",
+      "apparel",
+      "shirt sportswear",
+      2800,
+      "Quick to dry and easy to wash.",
+      200,
+    ),
+    item("mk-006", "Warmup Hoodie", "Mike", "apparel", "hoodie sportswear", 5500, "Midweight fleece.", 260),
+  ],
+};
+
+export const shelfOf = (slug: string): Item[] => SHELVES[slug] ?? [];
+
 export function findItem(id: string): Item | undefined {
-  return CATALOG.find((i) => i.id === id);
+  for (const shelf of Object.values(SHELVES)) {
+    const found = shelf.find((i) => i.id === id);
+    if (found) return found;
+  }
+  return undefined;
 }
 
-export function searchCatalog(query: string, maxPriceCents?: number, category?: string): Item[] {
+export function searchCatalog(query: string, maxPriceCents?: number, category?: string, shelf = CATALOG): Item[] {
   const words = query.toLowerCase().split(/\s+/).filter(Boolean);
-  return CATALOG.filter((item) => {
-    if (maxPriceCents !== undefined && item.priceCents > maxPriceCents) return false;
-    if (category && item.category !== category) return false;
-    if (words.length === 0) return true;
-    const hay = `${item.title} ${item.artist} ${item.category} ${item.genre} ${item.blurb}`.toLowerCase();
-    return words.some((w) => hay.includes(w));
-  })
+  return shelf
+    .filter((item) => {
+      if (maxPriceCents !== undefined && item.priceCents > maxPriceCents) return false;
+      if (category && item.category !== category) return false;
+      if (words.length === 0) return true;
+      const hay = `${item.title} ${item.artist} ${item.category} ${item.genre} ${item.blurb}`.toLowerCase();
+      return words.some((w) => hay.includes(w));
+    })
     .map((item) => {
       const hay = `${item.title} ${item.artist} ${item.genre}`.toLowerCase();
       const score = words.reduce((s, w) => s + (hay.includes(w) ? 2 : 0), 0) + (item.stock > 0 ? 1 : 0);

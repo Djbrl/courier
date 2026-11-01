@@ -4,6 +4,7 @@ import {
   COURIER_NAME_HINT,
   COURIER_NAME_MAX,
   COURIER_NAME_PATTERN,
+  COURIER_RESOURCE,
   type CourierColor,
   config,
   courierVars,
@@ -15,10 +16,9 @@ import {
   portrait,
   type RawHtml,
   raw,
-  STORE_RESOURCE,
 } from "@courier/shared";
 import { type Courier, type Human, listCouriers } from "../db.ts";
-import { courierLook, cpage, dots, firstName, OK, progress } from "./shared.ts";
+import { courierLook, cpage, dots, firstName, hasClaude, OK, progress } from "./shared.ts";
 
 /* ---------------- onboarding ---------------- */
 
@@ -107,8 +107,9 @@ export function courierSetupPage(
 
 /** The connector walkthrough: add it, then connect. Only the last step waits for Claude. */
 export function claudeSetupPage(human: Human, courier: Courier, opts: { onboarding: boolean; step: number }): string {
-  const local = /localhost|127\.0\.0\.1/.test(config.store.url);
-  const cmd = `claude mcp add --transport http courier ${STORE_RESOURCE}`;
+  const local = /localhost|127\.0\.0\.1/.test(config.courier.url);
+  const cmd = `claude mcp add --transport http courier ${COURIER_RESOURCE}`;
+  const connected = hasClaude(human);
   const done = `/app?c=${courier.id}${opts.onboarding ? "&welcome=1" : ""}`;
   const step = Math.min(2, Math.max(1, opts.step));
   const stepUrl = (n: number) => `/start/claude?c=${courier.id}&step=${n}${opts.onboarding ? "&first=1" : ""}`;
@@ -121,23 +122,24 @@ export function claudeSetupPage(human: Human, courier: Courier, opts: { onboardi
           <li>Choose <b>Add custom connector</b>.</li>
           <li>Name it <b>Courier</b> and paste this:</li>
         </ol>
-        <code class="copy inp code sm">${STORE_RESOURCE}</code>
+        <code class="copy inp code sm">${COURIER_RESOURCE}</code>
+        <p class="fine">One connector reaches every shop and every courier.</p>
         ${local ? html`<p class="warn"><b>Running on localhost.</b> Claude on the web can’t reach it. Start the tunnel first.</p>` : ""}
         <details class="wiz-alt"><summary>Using Claude Code?</summary>
           <p class="fine">Run this in your terminal instead.</p>
           <code class="copy inp code sm">${cmd}</code>
         </details>`
       : html`<h1 class="big">Connect it.</h1>
-        <p class="lead">In Claude, click <b>Connect</b> and approve ${courier.name}. Nothing is bought or charged.</p>
+        <p class="lead">In Claude, click <b>Connect</b> and approve it. Nothing is bought or charged.</p>
         <p class="fine">In Claude Code, run <code>/mcp</code> in an interactive session, choose <b>courier</b> and sign in.</p>
-        <div class="live ${courier.clientId ? "on" : ""}" id="live" data-courier="${courier.id}" aria-live="polite">
+        <div class="live ${connected ? "on" : ""}" id="live" data-courier="${courier.id}" aria-live="polite">
           <span class="dot" aria-hidden="true"></span>
-          <span class="txt">${courier.clientId ? html`<b>Connected.</b> ${courier.clientName ?? "Claude"} is ${courier.name} now.` : html`<b>Waiting for Claude…</b>`}</span>
+          <span class="txt">${connected ? html`<b>Connected.</b> Claude can send ${courier.name} now.` : html`<b>Waiting for Claude…</b>`}</span>
         </div>`;
   const foot =
     step < 2
       ? html`<a class="btn" href="${stepUrl(step + 1)}">Next</a>`
-      : html`<a class="${courier.clientId ? "btn" : "btn ghost"}" id="next" href="${courier.clientId ? done : leave}">${courier.clientId ? "Continue" : opts.onboarding ? "Skip for now" : "Done"}</a>`;
+      : html`<a class="${connected ? "btn" : "btn ghost"}" id="next" href="${connected ? done : leave}">${connected ? "Continue" : opts.onboarding ? "Skip for now" : "Done"}</a>`;
   return cpage(
     `Add ${courier.name} to Claude`,
     human,
@@ -152,7 +154,7 @@ export function claudeSetupPage(human: Human, courier: Courier, opts: { onboardi
     ${
       step === 2
         ? raw(
-            `<script>(()=>{const el=document.getElementById("live");if(el.classList.contains("on"))return;const t=setInterval(async()=>{if(document.hidden)return;try{const s=await (await fetch("/app/api/status")).json();const c=(s.couriers||[]).find(c=>c.id===el.dataset.courier);if(c&&c.claude){clearInterval(t);el.classList.add("on");el.querySelector(".txt").innerHTML="<b>Connected.</b> "+(c.clientName||"Claude").replace(/[<&>]/g,"")+" is "+c.name.replace(/[<&>]/g,"")+" now.";const n=document.getElementById("next");n.className="btn";n.textContent="Continue";n.href=${JSON.stringify(done)};setTimeout(()=>{location.href=n.href},2500);}}catch{}},2500)})()</script>`,
+            `<script>(()=>{const el=document.getElementById("live");if(el.classList.contains("on"))return;const t=setInterval(async()=>{if(document.hidden)return;try{const s=await (await fetch("/app/api/status")).json();const c=(s.couriers||[]).find(c=>c.id===el.dataset.courier);if(c&&c.claude){clearInterval(t);el.classList.add("on");el.querySelector(".txt").innerHTML="<b>Connected.</b> Claude can send "+c.name.replace(/[<&>]/g,"")+" now.";const n=document.getElementById("next");n.className="btn";n.textContent="Continue";n.href=${JSON.stringify(done)};setTimeout(()=>{location.href=n.href},2500);}}catch{}},2500)})()</script>`,
           )
         : ""
     }`,

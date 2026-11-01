@@ -50,6 +50,8 @@ export interface Visa {
     authorizationId?: string | null;
     status: "pending" | "authorized" | "voided" | "captured" | "failed";
   } | null;
+  /** Started by Claude under the person's cap, with no click. Counts toward their daily cap. */
+  autoStarted?: boolean;
   /**
    * Saved PayPal: purchases on this errand are charged straight to the PayPal the person saved on their account (within
    * the limits). The payment token itself lives in Courier's "saved_paypal" collection, never on the visa.

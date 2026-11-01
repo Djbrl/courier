@@ -20,7 +20,7 @@ Two sandbox accounts are involved:
    errands still work; Courier just falls back to a PayPal page per purchase.
 4. **Claude:**
    - claude.ai / desktop: Settings → Connectors → remove the old Courier connector → Add custom connector →
-     name `Courier`, URL from the preflight (`…/mcp`).
+     name `Courier`, URL `COURIER_URL/mcp`. It reaches every shop.
    - Claude Code: `claude mcp remove courier`, then the `claude mcp add …` line the preflight printed.
      Start a **new** session so it sees the current tools.
    - Claude Code, once: let it call Courier without its own permission prompt (Courier already asks you when
