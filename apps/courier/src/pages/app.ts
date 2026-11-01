@@ -193,7 +193,7 @@ export function homePage(d: Desk, opts: { welcome: boolean; courierId?: string }
         </ul>
       </section>
     </div>
-    <section class="panel hm3-shops"><div class="hm3-act-h"><h2 class="sec-t">Shops</h2><a class="link fine" href="/app/shops">All shops</a></div>${shopGrid()}</section>
+    <section class="panel hm2-s hm3-shops"><div class="hm3-act-h"><h2 class="sec-t">Shops</h2><a class="link fine" href="/app/shops">All shops</a></div>${shopGrid()}</section>
     <section class="panel hm2-s hm3-act">
       <div class="hm3-act-h"><h2 class="sec-t">Activity</h2>${visas.length ? html`<a class="link fine" href="/app/errands">All errands</a>` : ""}</div>
       ${
