@@ -2,8 +2,9 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { config, courierLayout, raw } from "@courier/shared";
+import { avatar, config, courierLayout, html, raw } from "@courier/shared";
 import type { Human } from "../db.ts";
+import { firstName } from "./shared.ts";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 
@@ -13,9 +14,11 @@ let landingTemplate = "";
 
 export function landingPage(human: Human | null): string {
   landingTemplate ||= fs.readFileSync(path.join(here, "landing.html"), "utf8");
+  const account = human
+    ? html`<a class="who" href="/app">${avatar()}${firstName(human) ?? "My Courier"}</a>`
+    : html`<a class="who signin" href="/app">Sign in</a>`;
   const body = landingTemplate
-    .replaceAll("{{navHref}}", human ? "/app" : "/start")
-    .replaceAll("{{navLabel}}", human ? "Open Courier" : "Add to Claude")
+    .replaceAll("{{navAccount}}", () => String(account))
     .replaceAll("{{storeUrl}}", config.store.url);
   return courierLayout({
     title: "Courier · Give your agent an ID",
