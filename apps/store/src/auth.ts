@@ -1,4 +1,12 @@
-import { ALL_SCOPES, config, internalFetch, newId, STORE_RESOURCE, type VisaTokenClaims } from "@courier/shared";
+import {
+  ALL_SCOPES,
+  type ConnectionTokenClaims,
+  config,
+  internalFetch,
+  newId,
+  STORE_RESOURCE,
+  type VisaTokenClaims,
+} from "@courier/shared";
 import type { AuthInfo } from "@modelcontextprotocol/sdk/server/auth/types.js";
 import type { NextFunction, Request, Response } from "express";
 import { createRemoteJWKSet, jwtVerify } from "jose";
@@ -8,7 +16,8 @@ import { db } from "./db.ts";
  * The merchant side of Courier: an OAuth 2.1 resource server.
  * - Advertises Courier as its authorization server (RFC 9728).
  * - Verifies JWT access tokens (signature via JWKS, issuer, audience = this MCP server, expiry).
- * - Checks the visa is still active (revocation takes effect within seconds).
+ * - Checks the visa or connection is still active (revocation takes effect within seconds).
+ * - For a connected Claude, gets the current errand's visa from Courier as a short-lived signed token.
  * - Logs every accepted and blocked request for the merchant dashboard.
  */
 
@@ -73,6 +82,56 @@ export function forgetVisa(visaId: string): void {
   statusCache.delete(visaId);
 }
 
+/* ---------------- connections ---------------- */
+
+/** Who a request acts for. A connected Claude has no visa between errands: it can browse, but not hold or buy. */
+export type AgentClaims = Omit<VisaTokenClaims, "visa"> & {
+  visa: VisaTokenClaims["visa"] | null;
+  connection: ConnectionTokenClaims["connection"] | null;
+};
+export type TicketClaims = AgentClaims & VisaTokenClaims;
+export const hasTicket = (claims: AgentClaims): claims is TicketClaims => claims.visa !== null;
+export const agentName = (claims: AgentClaims) => claims.visa?.agent ?? claims.connection?.agent ?? "Courier";
+/** What an MCP session is tied to, and what rate limits count against. */
+export const ownerId = (claims: AgentClaims) => claims.connection?.id ?? claims.visa?.id ?? "";
+
+interface ConnectionStatus {
+  status: string;
+  agent: string;
+  ticketToken: string | null;
+}
+
+const connectionCache = new Map<string, { value: ConnectionStatus; at: number }>();
+
+async function connectionStatus(id: string): Promise<ConnectionStatus | null> {
+  const cached = connectionCache.get(id);
+  if (cached && Date.now() - cached.at < 3000) return cached.value;
+  try {
+    const value = await internalFetch<ConnectionStatus>(
+      `${config.courier.url}/internal/connections/${encodeURIComponent(id)}`,
+    );
+    connectionCache.set(id, { value, at: Date.now() });
+    return value;
+  } catch {
+    return null;
+  }
+}
+
+const verifyToken = (token: string) =>
+  jwtVerify(token, jwks, { issuer: config.courier.url, audience: STORE_RESOURCE, typ: "at+jwt" });
+
+/** The current ticket, verified like any Courier token and checked to belong to this Claude. */
+async function ticketFor(base: ConnectionTokenClaims, ticketToken: string | null): Promise<VisaTokenClaims | null> {
+  if (!ticketToken) return null;
+  try {
+    const ticket = (await verifyToken(ticketToken)).payload as unknown as VisaTokenClaims;
+    return ticket.sub === base.sub && ticket.client_id === base.client_id ? ticket : null;
+  } catch (error) {
+    console.warn("[store] ticket didn't verify", (error as Error).message);
+    return null;
+  }
+}
+
 /* ---------------- bearer middleware ---------------- */
 
 function challenge(res: Response, status: number, error?: string, description?: string): void {
@@ -99,14 +158,9 @@ export async function requireVisa(req: Request, res: Response, next: NextFunctio
     return;
   }
 
-  let claims: VisaTokenClaims;
+  let token: VisaTokenClaims | ConnectionTokenClaims;
   try {
-    const { payload } = await jwtVerify(match[1], jwks, {
-      issuer: config.courier.url,
-      audience: STORE_RESOURCE,
-      typ: "at+jwt",
-    });
-    claims = payload as unknown as VisaTokenClaims;
+    token = (await verifyToken(match[1])).payload as unknown as VisaTokenClaims | ConnectionTokenClaims;
   } catch (error) {
     const message = (error as Error).message;
     const reason = /audience|aud/i.test(message)
@@ -121,20 +175,39 @@ export async function requireVisa(req: Request, res: Response, next: NextFunctio
     return;
   }
 
-  const status = await visaStatus(claims.visa.id);
-  if (status?.status !== "active") {
-    const reason = `Visa ${status?.status ?? "unknown"}`;
-    logRequest({
-      outcome: "blocked",
-      reason,
-      status: 401,
-      sub: claims.sub,
-      visaId: claims.visa.id,
-      agent: claims.visa.agent,
-      source,
-    });
-    challenge(res, 401, "invalid_token", reason);
-    return;
+  let claims: AgentClaims;
+  if ("connection" in token) {
+    const standing = await connectionStatus(token.connection.id);
+    if (standing?.status !== "active") {
+      const reason = `Connection ${standing?.status ?? "unknown"}`;
+      logRequest({ outcome: "blocked", reason, status: 401, sub: token.sub, agent: token.connection.agent, source });
+      challenge(res, 401, "invalid_token", reason);
+      return;
+    }
+    const ticket = await ticketFor(token, standing.ticketToken);
+    claims = {
+      ...token,
+      ...ticket,
+      visa: ticket?.visa ?? null,
+      connection: { id: token.connection.id, agent: standing.agent },
+    };
+  } else {
+    const status = await visaStatus(token.visa.id);
+    if (status?.status !== "active") {
+      const reason = `Visa ${status?.status ?? "unknown"}`;
+      logRequest({
+        outcome: "blocked",
+        reason,
+        status: 401,
+        sub: token.sub,
+        visaId: token.visa.id,
+        agent: token.visa.agent,
+        source,
+      });
+      challenge(res, 401, "invalid_token", reason);
+      return;
+    }
+    claims = { ...token, connection: null };
   }
 
   const auth: AuthInfo = {
@@ -153,16 +226,16 @@ export async function requireVisa(req: Request, res: Response, next: NextFunctio
     reason: tool ? `tools/call ${tool}` : (method ?? "request"),
     status: 200,
     sub: claims.sub,
-    visaId: claims.visa.id,
-    agent: claims.visa.agent,
+    visaId: claims.visa?.id ?? null,
+    agent: agentName(claims),
     method,
     source,
   });
   next();
 }
 
-export function claimsOf(authInfo: AuthInfo | undefined): VisaTokenClaims {
-  const claims = (authInfo?.extra as { claims?: VisaTokenClaims } | undefined)?.claims;
-  if (!claims) throw new Error("missing visa claims");
+export function claimsOf(authInfo: AuthInfo | undefined): AgentClaims {
+  const claims = (authInfo?.extra as { claims?: AgentClaims } | undefined)?.claims;
+  if (!claims) throw new Error("missing claims");
   return claims;
 }

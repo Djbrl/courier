@@ -82,7 +82,7 @@ const COLORS = Object.keys(COURIER_COLORS) as CourierColor[];
 export function courierSetupPage(
   human: Human,
   courier: Courier | undefined,
-  opts: { error?: string; adding?: boolean; name?: string } = {},
+  opts: { error?: string; adding?: boolean; name?: string; reqId?: string } = {},
 ): string {
   const firstRun = !courier && !opts.adding;
   const used = new Set(listCouriers(human.id).map((c) => c.color));
@@ -102,10 +102,11 @@ export function courierSetupPage(
     human,
     html`<main class="ob">
       <form class="ob-txt" method="post" action="/start/courier" id="setup">
-        ${firstRun ? progress(3) : html`<a class="back fine" href="${courier ? `/app/couriers?c=${courier.id}` : "/app/couriers"}">← Couriers</a>`}
+        ${opts.reqId ? "" : firstRun ? progress(3) : html`<a class="back fine" href="${courier ? `/app/couriers?c=${courier.id}` : "/app/couriers"}">← Couriers</a>`}
         <h1 class="big">${courier ? html`Edit <span class="hfit" data-fit>${courier.name}.</span>` : opts.adding ? "Add a courier." : "Meet your courier."}</h1>
         <p class="lead">${opts.adding ? "One courier per Claude." : "Shops see its name, never yours."}</p>
         ${opts.error ? html`<p class="err">${opts.error}</p>` : ""}
+        ${opts.reqId ? html`<input type="hidden" name="req" value="${opts.reqId}">` : ""}
         ${courier ? html`<input type="hidden" name="c" value="${courier.id}">` : opts.adding ? html`<input type="hidden" name="new" value="1">` : ""}
         <div class="form">
           <label class="fld"><span>Courier name</span><input class="inp big" name="name" value="${look.name}" placeholder="e.g. Otto" minlength="2" maxlength="${COURIER_NAME_MAX}" pattern="${COURIER_NAME_PATTERN}" title="${COURIER_NAME_HINT}" required autocomplete="off" autocapitalize="words" spellcheck="false" data-live="name"><small class="hint" id="name-hint">${COURIER_NAME_HINT}</small></label>
@@ -122,37 +123,12 @@ export function courierSetupPage(
   );
 }
 
-/** Step 4: from Claude (recommended) or from the website. Both work; the courier is the same either way. */
-export function summonPage(human: Human, courier: Courier): string {
-  const look = courierLook(human, courier);
-  return cpage(
-    `Summon ${courier.name}`,
-    human,
-    html`<main class="ob">
-      <div class="ob-txt">
-        ${progress(4)}
-        <h1 class="big">Where will you summon it?</h1>
-        <div class="paths">
-          <a class="path rec" href="/start/claude?c=${courier.id}&first=1">
-            <span><b>From Claude</b><span>Just ask, in any chat.</span></span><span class="tag">Recommended</span>${ARROW}
-          </a>
-          <a class="path" href="/start/here?c=${courier.id}">
-            <span><b>From this website</b><span>Chat in the errand room.</span></span>${ARROW}
-          </a>
-        </div>
-        <p class="fine">You can use both. It’s the same ${courier.name}.</p>
-      </div>
-      <div class="stage c">${dots()}<div class="card-wrap">${idCard(look, firstName(human))}</div></div>
-    </main>`,
-    { bodyClass: "onb" },
-  );
-}
-
-/** The connector walkthrough, with a live check that flips once Claude has connected as this courier. */
+/** Step 4: the connector walkthrough, with a live check that moves on once Claude has connected as this courier. */
 export function claudeSetupPage(human: Human, courier: Courier, opts: { onboarding: boolean }): string {
   const local = /localhost|127\.0\.0\.1/.test(config.store.url);
   const look = courierLook(human, courier);
   const cmd = `claude mcp add --transport http courier ${STORE_RESOURCE}`;
+  const next = `/app?c=${courier.id}${opts.onboarding ? "&welcome=1" : ""}`;
   return cpage(
     `Add ${courier.name} to Claude`,
     human,
@@ -161,9 +137,9 @@ export function claudeSetupPage(human: Human, courier: Courier, opts: { onboardi
         ${opts.onboarding ? progress(4) : html`<a class="back fine" href="/app/connections">← Connections</a>`}
         <h1 class="big">Add <span class="hfit" data-fit>${courier.name}</span> to&nbsp;Claude.</h1>
         <ol class="steps">
-          <li><b>Copy this URL.</b><code class="copy inp code">${STORE_RESOURCE}</code></li>
-          <li><b>In Claude, add it as a custom connector.</b><span>Settings → Connectors</span></li>
-          <li><b>Connect, then pick ${courier.name}.</b></li>
+          <li><b>Copy this address.</b><code class="copy inp code">${STORE_RESOURCE}</code></li>
+          <li><b>Add it to Claude as a custom connector.</b><span><a class="link" href="https://claude.ai/settings/connectors" target="_blank" rel="noopener">Open Claude’s connector settings ↗</a> Name it Courier and paste the address.</span></li>
+          <li><b>Click Connect, then confirm ${courier.name}.</b><span>That’s it. Nothing is bought or charged.</span></li>
         </ol>
         <details class="cc-cli"><summary>Using Claude Code?</summary><code class="copy inp code sm">${cmd}</code></details>
         ${local ? html`<p class="warn"><b>Running on localhost.</b> Claude on the web can’t reach it. Start the tunnel first.</p>` : ""}
@@ -172,8 +148,8 @@ export function claudeSetupPage(human: Human, courier: Courier, opts: { onboardi
           <span class="txt">${courier.clientId ? html`<b>Connected.</b> ${courier.clientName ?? "Claude"} is ${courier.name} now.` : html`<b>Waiting for Claude…</b>`}</span>
         </div>
         <div class="acts-row">
-          <a class="btn" href="/app?c=${courier.id}${opts.onboarding ? "&welcome=1" : ""}">${opts.onboarding ? "Go to Courier" : "Done"}${ARROW}</a>
-          <a class="btn ghost" href="/errand/new?c=${courier.id}">Try it here first</a>
+          <a class="${courier.clientId ? "btn" : "btn ghost"}" id="next" href="${next}">${courier.clientId ? html`Continue${ARROW}` : opts.onboarding ? "Skip for now" : "Done"}</a>
+          <a class="link fine" href="/errand/new?c=${courier.id}">Try it on this website instead</a>
         </div>
       </div>
       <div class="stage pa cdlg-stage">${dots()}
@@ -187,7 +163,7 @@ export function claudeSetupPage(human: Human, courier: Courier, opts: { onboardi
         <div class="cdlg-then"><span class="cdlg-n">3</span>${portrait(look)}<span>Claude is <b>${look.name}</b></span></div>
       </div>
     </main>
-    ${raw(`<script>(()=>{const el=document.getElementById("live");if(el.classList.contains("on"))return;const t=setInterval(async()=>{if(document.hidden)return;try{const s=await (await fetch("/app/api/status")).json();const c=(s.couriers||[]).find(c=>c.id===el.dataset.courier);if(c&&c.claude){clearInterval(t);el.classList.add("on");el.querySelector(".txt").innerHTML="<b>Connected.</b> "+(c.clientName||"Claude").replace(/[<&>]/g,"")+" is "+c.name.replace(/[<&>]/g,"")+" now.";}}catch{}},2500)})()</script>`)}`,
+    ${raw(`<script>(()=>{const el=document.getElementById("live");if(el.classList.contains("on"))return;const t=setInterval(async()=>{if(document.hidden)return;try{const s=await (await fetch("/app/api/status")).json();const c=(s.couriers||[]).find(c=>c.id===el.dataset.courier);if(c&&c.claude){clearInterval(t);el.classList.add("on");el.querySelector(".txt").innerHTML="<b>Connected.</b> "+(c.clientName||"Claude").replace(/[<&>]/g,"")+" is "+c.name.replace(/[<&>]/g,"")+" now.";const n=document.getElementById("next");n.className="btn";n.textContent="Continue";setTimeout(()=>{location.href=n.href},2500);}}catch{}},2500)})()</script>`)}`,
     { bodyClass: "onb" },
   );
 }

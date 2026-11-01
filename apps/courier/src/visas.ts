@@ -1,17 +1,26 @@
 import { createHash } from "node:crypto";
-import { checkIntent, config, newId, paypal, requireInternal, type Visa } from "@courier/shared";
+import { ALL_SCOPES, checkIntent, config, newId, paypal, requireInternal, type Visa } from "@courier/shared";
 import { Router } from "express";
+import { mintAccessToken } from "./auth/oauth.ts";
 import {
   type Approval,
+  type AuthRequest,
+  activeTicket,
+  type Connection,
+  type Courier,
+  connectionAgent,
   db,
   effectiveStatus,
   type Hold,
+  type Human,
+  listCouriers,
   pairwiseSubject,
   type Report,
   remainingBudget,
   type SavedPayPalRecord,
   type Stamp,
   type StampKind,
+  saveCourier,
 } from "./db.ts";
 
 /* ---------------- stamps ---------------- */
@@ -99,6 +108,27 @@ export async function revokeVisa(visaId: string, reason: string): Promise<Visa |
   return visa;
 }
 
+/** Removes a Claude from Courier: its tokens stop working, its errands end and its courier is free again. */
+export async function disconnect(connection: Connection): Promise<void> {
+  db.put<Connection>("connections", connection.id, {
+    ...connection,
+    status: "revoked",
+    revokedAt: new Date().toISOString(),
+  });
+  for (const rt of db.list<{ id: string; connectionId?: string; revoked: boolean }>(
+    "refresh_tokens",
+    (r) => r.connectionId === connection.id,
+  )) {
+    db.put("refresh_tokens", rt.id, { ...rt, revoked: true });
+  }
+  for (let ticket = activeTicket(connection); ticket; ticket = activeTicket(connection))
+    await revokeVisa(ticket.id, "Claude was disconnected");
+  for (const courier of listCouriers(connection.humanId).filter((c) => c.clientId === connection.clientId)) {
+    const { clientId: _clientId, clientName: _clientName, boundAt: _boundAt, ...free } = courier;
+    saveCourier(free as Courier);
+  }
+}
+
 /** Includes errands abandoned on a PayPal page, so they don't linger. */
 const SWEPT: Visa["status"][] = ["active", "pending_bond", "pending_paypal"];
 
@@ -171,6 +201,68 @@ internalRouter.get("/visas/:id", (req, res) => {
     expiresAt: visa.expiresAt,
     bond: visa.bond ?? null,
   });
+});
+
+/**
+ * A connected Claude's current standing. The ticket comes as a signed, short-lived token, so the shop verifies it and
+ * keeps it as proof exactly as it would a visa in an access token.
+ */
+internalRouter.get("/connections/:id", async (req, res) => {
+  const connection = db.get<Connection>("connections", req.params.id);
+  const human = connection ? db.get<Human>("humans", connection.humanId) : undefined;
+  if (!connection || !human) {
+    res.status(404).json({ error: "connection not found" });
+    return;
+  }
+  const ticket = connection.status === "active" ? activeTicket(connection) : undefined;
+  res.json({
+    status: connection.status,
+    agent: connectionAgent(connection),
+    ticketToken: ticket
+      ? (await mintAccessToken(ticket, human, connection.clientId, { expiresInSeconds: 60 })).token
+      : null,
+  });
+});
+
+const wholeDollars = (value: unknown, fallback: number) => {
+  const dollars = typeof value === "number" && Number.isFinite(value) ? Math.ceil(value) : fallback;
+  return Math.min(500, Math.max(1, dollars));
+};
+
+/** A link for the person to write a ticket, prefilled from the agent's suggestion. Nothing applies until they send it. */
+internalRouter.post("/connections/:id/ticket", (req, res) => {
+  const connection = db.get<Connection>("connections", req.params.id);
+  if (connection?.status !== "active") {
+    res.status(404).json({ error: "connection not found" });
+    return;
+  }
+  const { purpose, maxPerItem, maxTotal, price } = req.body as {
+    purpose?: unknown;
+    maxPerItem?: unknown;
+    maxTotal?: unknown;
+    price?: unknown;
+  };
+  const perPurchaseLimit = wholeDollars(maxPerItem, Math.max(40, wholeDollars(price, 40)));
+  const request: AuthRequest = {
+    id: newId("ar"),
+    clientId: connection.clientId,
+    clientName: connection.clientName,
+    redirectUri: "",
+    codeChallenge: "",
+    scopes: [...ALL_SCOPES],
+    resource: connection.resource,
+    createdAt: new Date().toISOString(),
+    expiresAt: new Date(Date.now() + 20 * 60 * 1000).toISOString(),
+    ticket: {
+      connectionId: connection.id,
+      humanId: connection.humanId,
+      intent: typeof purpose === "string" ? purpose.trim().slice(0, 160) : "",
+      perPurchaseLimit,
+      spendLimit: Math.max(perPurchaseLimit, wholeDollars(maxTotal, 60)),
+    },
+  };
+  db.put("auth_requests", request.id, request);
+  res.json({ url: `${config.courier.url}/consent/${request.id}` });
 });
 
 /**

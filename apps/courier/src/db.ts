@@ -49,6 +49,19 @@ export interface Courier {
   createdAt: string;
 }
 
+/** A person's own Claude, connected to Courier. Outlives errands: it ends only when the person disconnects it. */
+export interface Connection {
+  id: string;
+  humanId: string;
+  clientId: string;
+  clientName: string;
+  resource: string;
+  scopes: Scope[];
+  status: "active" | "revoked";
+  createdAt: string;
+  revokedAt?: string;
+}
+
 export interface Merchant {
   resource: string;
   name: string;
@@ -69,6 +82,15 @@ export interface AuthRequest {
   expiresAt: string;
   visaId?: string;
   completed?: boolean;
+  /** Set when this asks for an errand ticket on an existing connection, rather than an OAuth grant. */
+  ticket?: {
+    connectionId: string;
+    humanId: string;
+    /** Prefilled from what the agent suggested. The person edits and sends it; it's never applied on its own. */
+    intent: string;
+    spendLimit: number;
+    perPurchaseLimit: number;
+  };
 }
 
 export interface AuthCode {
@@ -77,7 +99,8 @@ export interface AuthCode {
   clientId: string;
   redirectUri: string;
   codeChallenge: string;
-  visaId: string;
+  visaId?: string;
+  connectionId?: string;
   humanId: string;
   resource: string;
   expiresAt: string;
@@ -87,7 +110,8 @@ export interface AuthCode {
 export interface RefreshTokenRecord {
   id: string; // sha256 of the token
   clientId: string;
-  visaId: string;
+  visaId?: string;
+  connectionId?: string;
   humanId: string;
   expiresAt: string;
   revoked: boolean;
@@ -233,6 +257,13 @@ export function saveCourier(courier: Courier): void {
   db.put("couriers", courier.id, courier);
 }
 
+/** The name a connection acts under: its courier's, or the client's until it has one. */
+export function connectionAgent(connection: Connection): string {
+  return (
+    listCouriers(connection.humanId).find((c) => c.clientId === connection.clientId)?.name ?? connection.clientName
+  );
+}
+
 /** True when PayPal's age range says the person is under 18. */
 export function isMinor(ageRange: string | null): boolean {
   if (!ageRange) return false;
@@ -247,6 +278,20 @@ export function isMinor(ageRange: string | null): boolean {
 export function effectiveStatus(visa: Visa): Visa["status"] {
   if (visa.status === "active" && new Date(visa.expiresAt).getTime() <= Date.now()) return "expired";
   return visa.status;
+}
+
+/** The errand a connection is on right now, if any: its newest active visa. */
+export function activeTicket(connection: Connection): Visa | undefined {
+  return db
+    .list<Visa>(
+      "visas",
+      (v) =>
+        v.humanId === connection.humanId &&
+        v.clientId === connection.clientId &&
+        v.resource === connection.resource &&
+        effectiveStatus(v) === "active",
+    )
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
 }
 
 export function activeHolds(visaId: string): Hold[] {

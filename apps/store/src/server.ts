@@ -9,6 +9,7 @@ import {
   claimsOf,
   forgetVisa,
   logRequest,
+  ownerId,
   PRM_PATH,
   protectedResourceMetadata,
   type RequestLogEntry,
@@ -17,7 +18,7 @@ import {
 import { CATALOG } from "./catalog.ts";
 import { db, type Order } from "./db.ts";
 import { createMcpServer, settleOrder } from "./mcp.ts";
-import { merchantDashboard, paymentResult, storefront } from "./views.ts";
+import { merchantDashboard, paymentResult, receiptPage, storefront } from "./views.ts";
 
 const app = express();
 app.set("trust proxy", "loopback");
@@ -57,11 +58,11 @@ app.use("/mcp", (req, res, next) => {
 /**
  * Sessions let the shop talk back mid-call: when Courier needs the person's OK, the tool asks them in their chat app
  * (an MCP elicitation), which needs a session and a streamed response. A client that initializes gets a session bound
- * to its visa; anything else (raw one-off calls) is served statelessly.
+ * to its connection or visa; anything else (raw one-off calls) is served statelessly.
  */
 interface McpSession {
   transport: StreamableHTTPServerTransport;
-  visaId: string;
+  owner: string;
   lastSeen: number;
 }
 const sessions = new Map<string, McpSession>();
@@ -72,12 +73,12 @@ setInterval(() => {
     if (Date.now() - sess.lastSeen > SESSION_IDLE_MS) void sess.transport.close().finally(() => sessions.delete(id));
 }, 60_000).unref();
 
-const visaOf = (req: express.Request) => claimsOf((req as express.Request & { auth?: AuthInfo }).auth).visa.id;
+const ownerOf = (req: express.Request) => ownerId(claimsOf((req as express.Request & { auth?: AuthInfo }).auth));
 
-/** The session this request belongs to, if it names one this visa owns. Replies with an error otherwise. */
+/** The session this request belongs to, if it names one this caller owns. Replies with an error otherwise. */
 function ownSession(req: express.Request, res: express.Response): McpSession | null {
   const sess = sessions.get(String(req.headers["mcp-session-id"]));
-  if (!sess || sess.visaId !== visaOf(req)) {
+  if (!sess || sess.owner !== ownerOf(req)) {
     res.status(404).json({ jsonrpc: "2.0", error: { code: -32001, message: "Session not found" }, id: null });
     return null;
   }
@@ -108,10 +109,10 @@ app.post("/mcp", express.json({ limit: "1mb" }), requireVisa, async (req, res) =
   }
   const server = createMcpServer();
   if (isInitializeRequest(req.body)) {
-    const visaId = visaOf(req);
+    const owner = ownerOf(req);
     const transport: StreamableHTTPServerTransport = new StreamableHTTPServerTransport({
       sessionIdGenerator: () => randomUUID(),
-      onsessioninitialized: (id) => void sessions.set(id, { transport, visaId, lastSeen: Date.now() }),
+      onsessioninitialized: (id) => void sessions.set(id, { transport, owner, lastSeen: Date.now() }),
     });
     transport.onclose = () => {
       if (transport.sessionId) sessions.delete(transport.sessionId);
@@ -191,6 +192,18 @@ app.post("/merchant/report/:visaId", express.urlencoded({ extended: false }), as
     console.warn("[store] report failed", (error as Error).message);
   }
   res.redirect(303, "/merchant");
+});
+
+/** A receipt the person can open from their chat. The key is the only credential, and it shows no personal data. */
+app.get("/receipts/:key", async (req, res) => {
+  const found = db.list<Order>("orders", (o) => o.receiptKey === req.params.key, 1)[0];
+  res.set("X-Robots-Tag", "noindex").set("Referrer-Policy", "no-referrer");
+  if (!found) {
+    res.status(404).send(receiptPage(undefined));
+    return;
+  }
+  const order = found.status === "awaiting_approval" ? await settleOrder(found.id).catch(() => found) : found;
+  res.send(receiptPage(order));
 });
 
 /* ---------------- PayPal return / cancel / webhooks ---------------- */

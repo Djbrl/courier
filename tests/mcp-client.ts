@@ -96,7 +96,7 @@ assert.equal(provider.authUrl!.searchParams.get("resource"), MCP.href, "resource
 console.log(`  ✓ discovery + dynamic registration (client ${provider.info!.client_id.slice(0, 8)}…)`);
 console.log(`  ✓ authorization URL: ${provider.authUrl!.origin}${provider.authUrl!.pathname} with PKCE + resource`);
 
-// 2. The human: PayPal sign-in (simulator) and visa consent.
+// 2. The human: PayPal sign-in (simulator), naming a courier, and one yes. No ticket and no payment.
 const toConnect = await go(provider.authUrl!.href);
 const connectPath = toConnect.headers.get("location")!;
 const courier = provider.authUrl!.origin;
@@ -109,18 +109,12 @@ const login = await go(`${courier}/sim-paypal/login`, {
   state: sim.searchParams.get("state")!,
 });
 await go(login.headers.get("location")!);
-const consent = await go(`${courier}/consent/${reqId}`, {
-  decision: "approve",
-  scopes: ["store:browse", "store:buy"],
-  spend_limit: "50",
-  per_purchase_limit: "30",
-  duration: "1h",
-  intent: "Ambient records to focus",
-});
+await go(`${courier}/start/courier`, { name: "Otto", human: "Malik", color: "tang", req: reqId });
+const consent = await go(`${courier}/consent/${reqId}`, { decision: "approve" });
 const back = new URL(consent.headers.get("location")!);
 assert.equal(back.origin + back.pathname, REDIRECT);
 assert.equal(back.searchParams.get("iss"), courier);
-console.log("  ✓ human signed in with PayPal and issued a visa; redirected back with code + iss");
+console.log("  ✓ human signed in with PayPal and connected; redirected back with code + iss");
 
 // 3. The SDK finishes the exchange (PKCE verifier + resource) and reconnects with the token.
 const transport = new StreamableHTTPClientTransport(MCP, { authProvider: provider });
@@ -129,7 +123,7 @@ client = new Client({ name: "sdk-check", version: "1" });
 await client.connect(transport);
 const who: any = await client.callTool({ name: "whoami", arguments: {} });
 assert.equal(who.structuredContent.sent_by.verified_human, true);
-assert.equal(who.structuredContent.visa.intent, "Ambient records to focus");
+assert.equal(who.structuredContent.visa, null);
 console.log(`  ✓ token exchanged by the SDK; whoami → ${who.content[0].text.split("\n")[0]}`);
 
 const search: any = await client.callTool({ name: "search_catalog", arguments: { query: "ambient" } });

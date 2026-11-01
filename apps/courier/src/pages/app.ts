@@ -20,7 +20,7 @@ import {
   VERIFIED,
   type Visa,
 } from "@courier/shared";
-import type { Approval, Courier, Human, Stamp } from "../db.ts";
+import type { Approval, Connection, Courier, Human, Stamp } from "../db.ts";
 import { backBy, courierForClient, courierLook, demoClientId, dots, firstName, lookForAgent, short } from "./shared.ts";
 
 /* ---------------- the app: shell ---------------- */
@@ -37,6 +37,8 @@ export interface Desk {
   stamps: Stamp[];
   /** Pending only. */
   approvals: Approval[];
+  /** Active only. */
+  connections: Connection[];
 }
 
 type View = "home" | "errands" | "couriers" | "connections";
@@ -396,6 +398,10 @@ export function connectionsPage(d: Desk): string {
         <div class="cbox-h"><span class="cic" aria-hidden="true">C</span><div><b>Claude connector</b><small>Summon a courier from any Claude chat.</small></div><span class="st ${inClaude.length ? "active" : "expired"}"><i></i>${inClaude.length ? `${inClaude.length} linked` : "Not linked"}</span></div>
         <code class="copy inp code sm">${STORE_RESOURCE}</code>
         <p class="fine">${inClaude.length ? `Linked: ${inClaude.map((c) => `${c.name} (${c.clientName ?? "Claude"})`).join(", ")}.` : "No Claude has connected yet."} <a href="/start/claude?c=${first.id}">Walkthrough</a></p>
+        ${d.connections.map(
+          (c) =>
+            html`<form method="post" action="/app/connections/${c.id}/revoke"><button class="btn ghost sm" type="submit" title="Ends its errands and removes its access">Disconnect ${c.clientName}</button></form>`,
+        )}
       </section>
       <section class="panel cbox">
         <div class="cbox-h"><span class="cic room-ic" aria-hidden="true">R</span><div><b>Errand room</b><small>The courier you chat with on this website.</small></div><span class="st ${config.anthropicConfigured ? "active" : "expired"}"><i></i>${config.anthropicConfigured ? "Claude" : "Demo"}</span></div>

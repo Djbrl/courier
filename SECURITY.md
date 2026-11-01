@@ -15,7 +15,7 @@ reproduce it and what an attacker could do.
 | ------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
 | Spending limits can't be talked around by a model | Plain code in `/internal/spend/check`, before any intent check                                     |
 | A token works at one shop only                    | RFC 8707 audience, checked on every request                                                        |
-| A call-back takes effect within seconds           | The shop checks live visa status as well as the token                                              |
+| A call-back takes effect within seconds           | The shop checks live status as well as the token                                                   |
 | Tokens and MCP calls never identify the person    | Tokens carry a per-shop pseudonym and a verified flag                                              |
 | Saved PayPal never reaches the shop or agent      | Payment tokens stay in Courier, and are deleted when an errand is called back, reported or expires |
 | Agent text can't issue commands                   | Notes reach the intent check as untrusted data, and the model never sets amounts                   |

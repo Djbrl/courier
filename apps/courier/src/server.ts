@@ -20,15 +20,20 @@ import { currentHuman, endSession, startSession } from "./auth/session.ts";
 import {
   type Approval,
   type AuthRequest,
+  type Connection,
   db,
+  effectiveStatus,
+  findCourier,
   findMerchant,
   type Human,
   isMinor,
+  listCouriers,
   type SavedPayPalRecord,
   saveCourier,
 } from "./db.ts";
 import {
   approvalPage,
+  connectConsentPage,
   connectPage,
   consentPage,
   courierChoice,
@@ -39,11 +44,13 @@ import {
   landingPage,
   refusalPage,
   signInPage,
+  ticketDeclinedPage,
+  ticketReadyPage,
 } from "./pages/index.ts";
 import { simPaypalRouter } from "./paypal-simulator.ts";
 import { appRouter } from "./routes/app.ts";
 import { botsRouter } from "./routes/bots.ts";
-import { addStamp, decideApproval, internalRouter, revokeVisa, sweepExpiredVisas } from "./visas.ts";
+import { addStamp, decideApproval, disconnect, internalRouter, revokeVisa, sweepExpiredVisas } from "./visas.ts";
 
 const app = express();
 app.set("trust proxy", "loopback");
@@ -129,12 +136,12 @@ app.get("/connect/:id", (req, res) => {
   }
   const merchant = findMerchant(request.resource)!;
   const human = currentHuman(req);
-  // The person's own courier, started from their signed-in Courier home: straight to the errand note.
-  if (human && courierForClient(human.id, request.clientId)?.id && request.clientId.startsWith(DEMO_CLIENT_PREFIX)) {
+  // Already signed in: PayPal has nothing to add, so go straight to the question.
+  if (human) {
     res.redirect(302, `/consent/${request.id}`);
     return;
   }
-  res.send(connectPage(request, merchant, human));
+  res.send(connectPage(request, merchant));
 });
 
 /* ---------- Log in with PayPal ---------- */
@@ -237,7 +244,19 @@ app.get("/logout", (_req, res) => {
   res.redirect(302, "/");
 });
 
-/* ---------- consent: issue a visa ---------- */
+/* ---------- consent: connect a Claude, or issue a visa ---------- */
+
+/** An outside client asking to connect, as opposed to the errand room or a ticket on an existing connection. */
+const isConnectRequest = (request: AuthRequest) => !request.ticket && !request.clientId.startsWith(DEMO_CLIENT_PREFIX);
+
+function newConnection(fields: Omit<Connection, "id">): Connection {
+  const id = newId("conn");
+  return db.put<Connection>("connections", id, { id, ...fields });
+}
+
+/** A ticket can only be written by the person whose Claude asked for it. */
+const wrongPerson = (request: AuthRequest, human: Human) =>
+  Boolean(request.ticket && request.ticket.humanId !== human.id);
 
 app.get("/consent/:id", (req, res) => {
   const human = currentHuman(req);
@@ -248,6 +267,23 @@ app.get("/consent/:id", (req, res) => {
   }
   if (!human) {
     res.redirect(302, `/connect/${request.id}`);
+    return;
+  }
+  if (wrongPerson(request, human)) {
+    res
+      .status(403)
+      .send(
+        errorPage(
+          human,
+          "This ticket is for someone else",
+          "Sign in with the PayPal account that connected this Claude.",
+        ),
+      );
+    return;
+  }
+  if (isConnectRequest(request)) {
+    if (listCouriers(human.id).length) res.send(connectConsentPage(request, human));
+    else res.redirect(302, `/start/courier?req=${request.id}`);
     return;
   }
   res.send(consentPage(request, findMerchant(request.resource)!, human));
@@ -264,12 +300,62 @@ app.post("/consent/:id", async (req, res) => {
     res.redirect(302, `/connect/${request.id}`);
     return;
   }
+  if (wrongPerson(request, human)) {
+    res
+      .status(403)
+      .send(
+        errorPage(
+          human,
+          "This ticket is for someone else",
+          "Sign in with the PayPal account that connected this Claude.",
+        ),
+      );
+    return;
+  }
   if (req.body.decision !== "approve") {
     db.update<AuthRequest>("auth_requests", request.id, (r) => ({ ...r, completed: true }));
-    res.redirect(
-      302,
-      clientRedirect(request, { error: "access_denied", error_description: "The person denied the visa." }),
-    );
+    if (request.ticket) res.send(ticketDeclinedPage(human));
+    else
+      res.redirect(
+        302,
+        clientRedirect(request, { error: "access_denied", error_description: "The person said not now." }),
+      );
+    return;
+  }
+
+  if (isConnectRequest(request)) {
+    const choice = courierChoice(human, request.clientId);
+    if (choice) {
+      const picked = choice.couriers.find((c) => c.id === req.body.courier) ?? findCourier(human.id, choice.preselect);
+      if (!picked) {
+        res.redirect(302, `/start/courier?req=${request.id}`);
+        return;
+      }
+      saveCourier({
+        ...picked,
+        mode: "claude",
+        clientId: request.clientId,
+        clientName: request.clientName,
+        boundAt: new Date().toISOString(),
+      });
+    }
+    const connection =
+      db.list<Connection>(
+        "connections",
+        (c) => c.humanId === human.id && c.clientId === request.clientId && c.status === "active",
+        1,
+      )[0] ??
+      newConnection({
+        humanId: human.id,
+        clientId: request.clientId,
+        clientName: request.clientName,
+        resource: request.resource,
+        scopes: request.scopes,
+        status: "active",
+        createdAt: new Date().toISOString(),
+      });
+    const code = issueAuthorizationCode(request, { connectionId: connection.id }, human);
+    res.redirect(302, clientRedirect(request, { code }));
     return;
   }
 
@@ -407,8 +493,25 @@ async function continueIssuing(
   visa.status = "active";
   db.put("visas", visa.id, visa);
   issuedStamps(visa);
-  const code = issueAuthorizationCode(request, visa, human);
-  res.redirect(302, clientRedirect(request, { code }));
+  await finishIssuing(visa, request, human, res);
+}
+
+/** The errand is live. The errand room gets its code; a connected Claude picks the ticket up on its next call. */
+async function finishIssuing(visa: Visa, request: AuthRequest, human: Human, res: express.Response) {
+  if (!request.ticket) {
+    const code = issueAuthorizationCode(request, { visaId: visa.id }, human);
+    res.redirect(302, clientRedirect(request, { code }));
+    return;
+  }
+  db.update<AuthRequest>("auth_requests", request.id, (r) => ({ ...r, completed: true, visaId: visa.id }));
+  // One errand at a time per Claude: its previous errand ends when a new one starts.
+  for (const old of db.list<Visa>(
+    "visas",
+    (v) =>
+      v.id !== visa.id && v.humanId === human.id && v.clientId === visa.clientId && effectiveStatus(v) === "active",
+  ))
+    await revokeVisa(old.id, "Replaced by a new errand");
+  res.send(ticketReadyPage(human, visa));
 }
 
 function issuedStamps(visa: Visa) {
@@ -498,8 +601,7 @@ app.get("/bond/return", async (req, res) => {
   }
   addStamp(visa, "bond", "Bond held", `$5.00 refundable hold on PayPal`);
   issuedStamps(visa);
-  const code = issueAuthorizationCode(request, visa, human);
-  res.redirect(302, clientRedirect(request, { code }));
+  await finishIssuing(visa, request, human, res);
 });
 
 app.get("/bond/cancel", async (req, res) => {
@@ -514,6 +616,10 @@ app.get("/bond/cancel", async (req, res) => {
     return;
   }
   db.update<AuthRequest>("auth_requests", request.id, (r) => ({ ...r, completed: true }));
+  if (request.ticket) {
+    res.redirect(302, "/app");
+    return;
+  }
   res.redirect(
     302,
     clientRedirect(request, { error: "access_denied", error_description: "The bond was not approved." }),
@@ -534,6 +640,17 @@ app.post("/app/visas/:id/revoke", async (req, res) => {
   await revokeVisa(visa.id, "Called back by the person");
   const next = typeof req.body.next === "string" && req.body.next.startsWith("/app") ? req.body.next : "/app";
   res.redirect(303, next);
+});
+
+app.post("/app/connections/:id/revoke", async (req, res) => {
+  const human = currentHuman(req);
+  const connection = db.get<Connection>("connections", req.params.id);
+  if (!human || connection?.humanId !== human.id) {
+    res.status(404).send(errorPage(human, "Not found", "That connection doesn't exist."));
+    return;
+  }
+  await disconnect(connection);
+  res.redirect(303, "/app/connections");
 });
 
 /* ---------- approvals (ask_human) ---------- */
