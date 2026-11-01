@@ -1,9 +1,10 @@
 import { createHash } from "node:crypto";
-import { ALL_SCOPES, checkIntent, config, newId, paypal, requireInternal, type Visa } from "@courier/shared";
+import { ALL_SCOPES, checkIntent, config, DURATIONS, newId, paypal, requireInternal, type Visa } from "@courier/shared";
 import { Router } from "express";
 import { mintAccessToken } from "./auth/oauth.ts";
 import {
   type Approval,
+  type AuthCode,
   type AuthRequest,
   activeTicket,
   type Connection,
@@ -11,6 +12,7 @@ import {
   connectionAgent,
   db,
   effectiveStatus,
+  findMerchant,
   type Hold,
   type Human,
   listCouriers,
@@ -22,6 +24,7 @@ import {
   type StampKind,
   saveCourier,
 } from "./db.ts";
+import { demoClientId } from "./pages/shared.ts";
 
 /* ---------------- stamps ---------------- */
 
@@ -62,37 +65,60 @@ export function decideApproval(
   return decided;
 }
 
-/** Deletes the errand's saved PayPal at PayPal, so nothing more can be charged to it. Returns a note for the stamp. */
-export async function forgetSavedPayPal(visa: Visa): Promise<string> {
-  if (visa.autopay?.status !== "on") return "";
-  const saved = db.get<SavedPayPalRecord>("saved_paypal", visa.id);
+export const savedPayPal = (humanId: string) => db.get<SavedPayPalRecord>("saved_paypal", humanId);
+
+/** Deletes the person's saved PayPal at PayPal, so nothing more can be charged to it. False if PayPal refused. */
+export async function removeSavedPayPal(humanId: string): Promise<boolean> {
+  const saved = savedPayPal(humanId);
+  if (!saved) return true;
   try {
-    if (saved?.vaultId) await paypal.deleteVaultToken(saved.vaultId);
-    db.delete("saved_paypal", visa.id);
-    visa.autopay = { ...visa.autopay, status: "removed" };
-    return " Saved PayPal removed.";
+    await paypal.deleteVaultToken(saved.vaultId);
   } catch (error) {
-    console.warn(`[autopay] could not delete the saved PayPal for ${visa.id}:`, (error as Error).message);
-    return ` Removing the saved PayPal failed: ${(error as Error).message}`;
+    console.warn(`[autopay] could not delete the saved PayPal for ${humanId}:`, (error as Error).message);
+    return false;
+  }
+  db.delete("saved_paypal", humanId);
+  for (const visa of db.list<Visa>("visas", (v) => v.humanId === humanId && v.autopay?.status === "on", Infinity))
+    db.put("visas", visa.id, { ...visa, autopay: { ...visa.autopay, status: "removed" } });
+  return true;
+}
+
+/** Saved PayPal used to be kept per errand: moves any such record onto its person, and drops the leftovers. */
+export function migrateSavedPayPal(): void {
+  for (const old of db.list<{ visaId?: string; vaultId?: string | null; email?: string }>(
+    "saved_paypal",
+    (r) => Boolean(r.visaId),
+    Infinity,
+  )) {
+    const visa = db.get<Visa>("visas", old.visaId!);
+    if (visa && old.vaultId && !savedPayPal(visa.humanId))
+      db.put<SavedPayPalRecord>("saved_paypal", visa.humanId, {
+        humanId: visa.humanId,
+        vaultId: old.vaultId,
+        email: visa.autopay?.email,
+      });
+    db.delete("saved_paypal", old.visaId!);
   }
 }
 
-/** Revokes a visa, releases its bond (void) if one is held, and removes its saved PayPal. */
+/** Releases a held bond at PayPal, if there is one. Returns a note for the stamp. */
+async function releaseBond(visa: Visa): Promise<string> {
+  if (visa.bond?.status !== "authorized" || !visa.bond.authorizationId) return "";
+  try {
+    await paypal.voidAuthorization(visa.bond.authorizationId);
+    visa.bond.status = "voided";
+    return " Bond released.";
+  } catch (error) {
+    return ` Bond release failed: ${(error as Error).message}`;
+  }
+}
+
+/** Revokes a visa and releases its bond (void) if one is held. The person's saved PayPal stays for their next errand. */
 export async function revokeVisa(visaId: string, reason: string): Promise<Visa | undefined> {
   const visa = db.get<Visa>("visas", visaId);
   if (!visa) return undefined;
   if (visa.status === "revoked") return visa;
-  let bondNote = "";
-  if (visa.bond?.status === "authorized" && visa.bond.authorizationId) {
-    try {
-      await paypal.voidAuthorization(visa.bond.authorizationId);
-      visa.bond.status = "voided";
-      bondNote = " Bond released.";
-    } catch (error) {
-      bondNote = ` Bond release failed: ${(error as Error).message}`;
-    }
-  }
-  bondNote += await forgetSavedPayPal(visa);
+  const bondNote = await releaseBond(visa);
   visa.status = "revoked";
   visa.revokedAt = new Date().toISOString();
   visa.revokeReason = reason;
@@ -104,7 +130,7 @@ export async function revokeVisa(visaId: string, reason: string): Promise<Visa |
   )) {
     db.put("refresh_tokens", rt.id, { ...rt, revoked: true });
   }
-  addStamp(visa, "revoked", "Visa revoked", `${reason}.${bondNote}`);
+  addStamp(visa, "revoked", "Called back", `${reason}.${bondNote}`);
   return visa;
 }
 
@@ -129,10 +155,73 @@ export async function disconnect(connection: Connection): Promise<void> {
   }
 }
 
+/**
+ * Erases a person from Courier. Returns false, having erased nothing, if PayPal wouldn't release a bond or saved PayPal:
+ * once the records are gone, nothing could release them. Safe to run again. The shop keeps its own order records, which
+ * carry only the pseudonym, so receipts keep working.
+ */
+export async function deleteAccount(human: Human): Promise<boolean> {
+  const theirs = (doc: { humanId: string }) => doc.humanId === human.id;
+  const visas = db.list<Visa>("visas", theirs, Infinity);
+  let released = true;
+  for (const { id } of visas) {
+    const visa = (await revokeVisa(id, "Account deleted"))!;
+    // Also retries a bond PayPal refused to release when this errand ended earlier.
+    await releaseBond(visa);
+    db.put("visas", visa.id, visa);
+    if (visa.bond?.status === "authorized") released = false;
+  }
+  if (!(await removeSavedPayPal(human.id)) || !released) return false;
+
+  const visaIds = new Set(visas.map((v) => v.id));
+  const ofTheirVisa = (doc: { visaId: string }) => visaIds.has(doc.visaId);
+  const requestIds = new Set(db.list<AuthCode>("codes", theirs, Infinity).map((c) => c.authRequestId));
+  db.deleteWhere<AuthRequest>(
+    "auth_requests",
+    (r) => requestIds.has(r.id) || r.ticket?.humanId === human.id || visaIds.has(r.visaId ?? ""),
+  );
+  for (const collection of ["codes", "refresh_tokens", "connections", "stamps", "approvals", "errand_sessions"])
+    db.deleteWhere(collection, theirs);
+  for (const collection of ["holds", "reports", "visa_requests"]) db.deleteWhere(collection, ofTheirVisa);
+  for (const courier of listCouriers(human.id)) db.delete("clients", demoClientId(courier.id));
+  db.deleteWhere("couriers", theirs);
+  db.deleteWhere("visas", theirs);
+  // Last, so a crash part-way leaves an account the person can still sign in to and delete.
+  db.delete("humans", human.id);
+  return true;
+}
+
+export function issuedStamps(visa: Visa): void {
+  if (visa.autopay?.status === "on")
+    addStamp(
+      visa,
+      "visa_issued",
+      "Pays with your saved PayPal",
+      "Purchases within your limits are paid straight away.",
+    );
+  addStamp(
+    visa,
+    "visa_issued",
+    `Errand given to ${visa.agentName}`,
+    `${visa.merchantName} · up to $${(visa.spendLimitCents / 100).toFixed(0)}${visa.bond ? " · bonded" : ""}`,
+  );
+}
+
+/** One errand at a time per Claude: its previous errand ends when a new one starts. */
+export async function endEarlierErrands(visa: Visa): Promise<void> {
+  for (const old of db.list<Visa>(
+    "visas",
+    (v) =>
+      v.id !== visa.id && v.humanId === visa.humanId && v.clientId === visa.clientId && effectiveStatus(v) === "active",
+    Infinity,
+  ))
+    await revokeVisa(old.id, "Replaced by a new errand");
+}
+
 /** Includes errands abandoned on a PayPal page, so they don't linger. */
 const SWEPT: Visa["status"][] = ["active", "pending_bond", "pending_paypal"];
 
-/** Sweeps expired visas: releases bonds and saved PayPal that are no longer needed. Runs on a timer. */
+/** Sweeps expired visas: releases bonds that are no longer needed. Runs on a timer. */
 export async function sweepExpiredVisas(): Promise<void> {
   const now = Date.now();
   for (const visa of db.list<Visa>(
@@ -147,15 +236,9 @@ export async function sweepExpiredVisas(): Promise<void> {
         console.warn(`[sweep] could not void bond for ${visa.id}:`, (error as Error).message);
       }
     }
-    const savedNote = await forgetSavedPayPal(visa);
     visa.status = "expired";
     db.put("visas", visa.id, visa);
-    addStamp(
-      visa,
-      "bond",
-      "Visa expired cleanly",
-      `${visa.bond ? "Bond released, nothing charged." : ""}${savedNote}`.trim(),
-    );
+    addStamp(visa, "bond", "Errand ended on time", visa.bond ? "Bond released, nothing charged." : "");
   }
 }
 
@@ -230,18 +313,53 @@ const wholeDollars = (value: unknown, fallback: number) => {
 };
 
 /** A link for the person to write a ticket, prefilled from the agent's suggestion. Nothing applies until they send it. */
-internalRouter.post("/connections/:id/ticket", (req, res) => {
+internalRouter.post("/connections/:id/ticket", async (req, res) => {
   const connection = db.get<Connection>("connections", req.params.id);
   if (connection?.status !== "active") {
     res.status(404).json({ error: "connection not found" });
     return;
   }
-  const { purpose, maxPerItem, maxTotal, price } = req.body as {
+  const { purpose, maxPerItem, maxTotal, price, budgetFromPerson } = req.body as {
     purpose?: unknown;
     maxPerItem?: unknown;
     maxTotal?: unknown;
     price?: unknown;
+    budgetFromPerson?: unknown;
   };
+  const intent = typeof purpose === "string" ? purpose.trim().slice(0, 160) : "";
+  // The person set this in a dialog in their chat app, which the model can't answer. With PayPal already saved, there's
+  // nothing left to do in a browser.
+  const budget = Number(budgetFromPerson);
+  const human = db.get<Human>("humans", connection.humanId);
+  const saved = savedPayPal(connection.humanId);
+  const merchant = findMerchant(connection.resource);
+  if (Number.isInteger(budget) && budget >= 1 && budget <= 500 && human && saved && merchant) {
+    const now = Date.now();
+    const visa: Visa = {
+      id: newId("visa"),
+      humanId: human.id,
+      clientId: connection.clientId,
+      agentName: connectionAgent(connection),
+      resource: merchant.resource,
+      merchantName: merchant.name,
+      scopes: connection.scopes,
+      spendLimitCents: budget * 100,
+      perPurchaseLimitCents: budget * 100,
+      spentCents: 0,
+      currency: "USD",
+      intent,
+      status: "active",
+      createdAt: new Date(now).toISOString(),
+      expiresAt: new Date(now + DURATIONS["7d"].ms).toISOString(),
+      bond: null,
+      autopay: { status: "on", email: saved.email },
+    };
+    db.put("visas", visa.id, visa);
+    issuedStamps(visa);
+    await endEarlierErrands(visa);
+    res.json({ issued: true });
+    return;
+  }
   const perPurchaseLimit = wholeDollars(maxPerItem, Math.max(40, wholeDollars(price, 40)));
   const request: AuthRequest = {
     id: newId("ar"),
@@ -256,13 +374,15 @@ internalRouter.post("/connections/:id/ticket", (req, res) => {
     ticket: {
       connectionId: connection.id,
       humanId: connection.humanId,
-      intent: typeof purpose === "string" ? purpose.trim().slice(0, 160) : "",
+      intent,
       perPurchaseLimit,
-      spendLimit: Math.max(perPurchaseLimit, wholeDollars(maxTotal, 60)),
+      spendLimit: budgetFromPerson
+        ? wholeDollars(budgetFromPerson, 60)
+        : Math.max(perPurchaseLimit, wholeDollars(maxTotal, 60)),
     },
   };
   db.put("auth_requests", request.id, request);
-  res.json({ url: `${config.courier.url}/consent/${request.id}` });
+  res.json({ url: `${config.courier.url}/consent/${request.id}${budgetFromPerson ? "?pay=1" : ""}` });
 });
 
 /**
@@ -475,12 +595,12 @@ internalRouter.post("/spend/charge", async (req, res) => {
   };
   const visa = db.get<Visa>("visas", visaId);
   const hold = db.get<Hold>("holds", holdId);
-  const saved = db.get<SavedPayPalRecord>("saved_paypal", visaId);
+  const saved = visa && savedPayPal(visa.humanId);
   if (!visa || !hold || hold.visaId !== visaId) {
     res.status(404).json({ error: "unknown visa or hold" });
     return;
   }
-  if (effectiveStatus(visa) !== "active" || visa.autopay?.status !== "on" || !saved?.vaultId) {
+  if (effectiveStatus(visa) !== "active" || visa.autopay?.status !== "on" || !saved) {
     res.status(409).json({ error: "This errand has no saved PayPal to charge." });
     return;
   }
@@ -573,7 +693,6 @@ internalRouter.post("/report", async (req, res) => {
       bondOutcome = `bond capture failed: ${(error as Error).message}`;
     }
   }
-  bondOutcome += (await forgetSavedPayPal(visa)).replace(/^ /, " · ");
   visa.status = "suspended";
   visa.revokedAt = new Date().toISOString();
   visa.revokeReason = `Reported by ${visa.merchantName}: ${reason}`;

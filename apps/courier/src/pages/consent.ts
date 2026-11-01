@@ -1,21 +1,5 @@
-import {
-  ARROW,
-  CK,
-  config,
-  courierVars,
-  DURATIONS,
-  html,
-  LOGO,
-  money,
-  PP,
-  paypalButton,
-  portrait,
-  raw,
-  SCOPES,
-  type Scope,
-  type Visa,
-} from "@courier/shared";
-import { type Approval, type AuthRequest, type Courier, type Human, listCouriers, type Merchant } from "../db.ts";
+import { config, courierVars, html, LOGO, money, PP, paypalButton, portrait, raw, type Visa } from "@courier/shared";
+import { type Approval, type AuthRequest, type Courier, db, type Human, listCouriers, type Merchant } from "../db.ts";
 import { courierForClient, cpage, DEMO_CLIENT_PREFIX, lookForAgent } from "./shared.ts";
 
 /* ---------------- connect + consent (the errand ticket) ---------------- */
@@ -30,7 +14,7 @@ export function connectPage(request: AuthRequest, merchant: Merchant): string {
     null,
     html`<main class="solo"><div class="solo-card">
       <div class="pair-ids">${portrait(look)}<span class="dash"></span>${SHOP_TILE}</div>
-      <h1 class="big">${request.ticket ? html`Sign in to write <span class="hfit" data-fit>${look.name}’s</span> ticket.` : html`Connect <span class="hfit" data-fit>${look.name}</span> to Courier.`}</h1>
+      <h1 class="big">${request.ticket ? html`Sign in to set <span class="hfit" data-fit>${look.name}’s</span> budget.` : html`Connect <span class="hfit" data-fit>${look.name}</span> to Courier.`}</h1>
       <p class="lead">PayPal checks there’s a real person behind it. ${request.ticket ? "" : "Nothing gets bought. "}${merchant.name} only learns that, never who you are.</p>
       <div class="acts-row">${paypalButton(`/auth/paypal/start?req=${request.id}`)}</div>
     </div></main>`,
@@ -58,11 +42,11 @@ export function connectConsentPage(request: AuthRequest, human: Human): string {
               )}</div></fieldset>`
             : html`<div class="pair-ids cc" style="${courierVars(shown.color)}">${portrait(shown)}</div>
               ${only ? html`<input type="hidden" name="courier" value="${only.id}">` : ""}
-              <h1 class="big">Connect ${request.clientName} as <span class="hfit" data-fit>${shown.name}.</span></h1>`
+              <h1 class="big">Connect ${request.clientName} as ${shown.name}.</h1>`
         }
-        <p class="lead">${request.clientName} can look around ${config.store.name} as your courier. It can’t hold or buy anything until you write it a ticket. Nothing is charged now.</p>
+        <p class="lead">${request.clientName} can look around ${config.store.name} as your courier. It can’t hold or buy anything until you give it a budget. Nothing is charged now.</p>
         <div class="acts-row">
-          <button class="btn" type="submit" name="decision" value="approve">Connect${ARROW}</button>
+          <button class="btn" type="submit" name="decision" value="approve">Connect</button>
           <button class="btn ghost" type="submit" name="decision" value="deny">Not now</button>
         </div>
         <p class="fine" style="margin-top:18px"><a class="link" href="/auth/paypal/start?req=${request.id}">Use a different PayPal account</a></p>
@@ -76,12 +60,12 @@ export function ticketReadyPage(human: Human, visa: Visa): string {
   const look = lookForAgent(human, visa.clientId, visa.agentName);
   const paysItself = visa.autopay?.status === "on";
   return cpage(
-    "Ticket sent",
+    "Budget set",
     human,
     html`<main class="solo"><div class="solo-card cc" style="${courierVars(look.color)}">
       <div class="pair-ids">${portrait(look)}</div>
-      <h1 class="big"><span class="hfit" data-fit>${look.name}</span> has its ticket.</h1>
-      <p class="lead">Go back to your chat and say “done”. ${paysItself ? "Purchases inside your limits will pay with your saved PayPal." : "You’ll get a PayPal link for each purchase."}</p>
+      <h1 class="big">${look.name} has its budget.</h1>
+      <p class="lead">You can go back to your chat. ${paysItself ? "Purchases inside your budget pay with your saved PayPal." : "You’ll get a PayPal link for each purchase."} If ${look.name} hasn’t carried on, say “done”.</p>
       <div class="acts-row"><a class="btn ghost" href="/app/errands?e=${visa.id}">See the errand</a></div>
     </div></main>`,
   );
@@ -89,10 +73,10 @@ export function ticketReadyPage(human: Human, visa: Visa): string {
 
 export function ticketDeclinedPage(human: Human): string {
   return cpage(
-    "No ticket",
+    "No budget",
     human,
     html`<main class="solo"><div class="solo-card">
-      <h1 class="big">No ticket, no shopping.</h1>
+      <h1 class="big">No budget, no shopping.</h1>
       <p class="lead">Nothing can be held or bought. Your Claude is still connected and can write you another link whenever you ask.</p>
       <div class="acts-row"><a class="btn ghost" href="/app">Back to Courier</a></div>
     </div></main>`,
@@ -110,67 +94,70 @@ export function courierChoice(human: Human, clientId: string): { couriers: Couri
   return { couriers, preselect };
 }
 
-export function consentPage(request: AuthRequest, merchant: Merchant, human: Human, error?: string): string {
+/** The ticket: a budget, and on the first one, how to pay. Everything else is the courier's to work out. */
+export function consentPage(
+  request: AuthRequest,
+  merchant: Merchant,
+  human: Human,
+  error?: string,
+  startAtPay = false,
+): string {
   const look = lookForAgent(human, request.clientId, request.clientName);
   const isDemo = request.clientId.startsWith(DEMO_CLIENT_PREFIX);
   const intent = request.ticket?.intent ?? (isDemo ? "Jazz records for my dad" : "");
-  const spendLimit = request.ticket?.spendLimit ?? 60;
-  const perPurchaseLimit = request.ticket?.perPurchaseLimit ?? 40;
+  const budget = request.ticket?.spendLimit ?? 60;
   const choice = courierChoice(human, request.clientId);
-  const durLabel: Record<string, string> = { "1h": "1 hour", "24h": "Tomorrow", "3d": "3 days" };
-  const scopeRows = (Object.keys(SCOPES) as Scope[])
-    .filter((s) => merchant.scopes.includes(s))
-    .map(
-      (
-        s,
-      ) => html`<label class="tg"><input type="checkbox" name="scopes" value="${s}" ${request.scopes.includes(s) ? raw("checked") : ""}>
-        <span><b>${SCOPES[s].label}</b><small>${SCOPES[s].detail}</small></span><i aria-hidden="true"></i></label>`,
-    );
+  const saved = Boolean(db.get("saved_paypal", human.id));
+  const twoSteps = !saved && merchant.scopes.includes("store:buy");
+  const who = choice ? "your courier" : look.name;
+  const send = html`<button class="btn" type="submit" name="decision" value="approve">Send ${choice ? "it" : look.name}</button>`;
   return cpage(
     `Errand for ${look.name}`,
     human,
-    html`<main class="desk">
-      <div class="tkt-lift"><form method="post" action="/consent/${request.id}" class="enote tkt-form zz cc" style="${courierVars(look.color)}">
-        <div class="th"><span>Errand ticket</span><span>New</span></div>
-        ${
-          choice
-            ? html`<fieldset class="pickc"><legend>${request.clientName} is new here. Which courier is it?</legend>
-              <div class="pickc-o">${choice.couriers.map(
-                (c) =>
-                  html`<label class="cc" style="${courierVars(c.color)}"><input type="radio" name="courier" value="${c.id}" ${c.id === choice.preselect ? raw("checked") : ""}>${portrait(c)}<span>${c.name}${c.clientId ? html`<small>in another Claude</small>` : ""}</span></label>`,
-              )}</div>
-              <small>One courier per Claude: this ${request.clientName} will be that courier in every chat.</small></fieldset>`
-            : html`<div class="nhd">${portrait(look)}Errand for ${look.name}</div>`
-        }
-        <div class="shop">${merchant.name}</div>
-        <label><span class="sr">What’s it for?</span>
-          <input class="for" type="text" name="intent" maxlength="160" placeholder="What’s it for? e.g. Jazz records for my dad" value="${intent}" aria-label="What’s it for?"></label>
-        ${error ? html`<p class="err">${error}</p>` : ""}
-        <div class="lims">
-          <label class="lim"><small>Max in total</small><span class="m"><i>$</i><input type="number" name="spend_limit" min="1" max="500" step="1" value="${spendLimit}" required aria-label="Max in total, dollars"></span></label>
-          <label class="lim"><small>Up to, per item</small><span class="m"><i>$</i><input type="number" name="per_purchase_limit" min="1" max="500" step="1" value="${perPurchaseLimit}" required aria-label="Up to per item, dollars"></span></label>
+    html`<main class="wiz-page"><form method="post" action="/consent/${request.id}" class="wiz cc" style="${courierVars(look.color)}" id="ticket" data-start="${startAtPay && twoSteps ? 2 : 1}">
+      ${merchant.scopes.map((s) => html`<input type="hidden" name="scopes" value="${s}">`)}
+      <input type="hidden" name="intent" value="${intent}">
+      <section class="wiz-step" data-step="1">
+        <div class="wiz-body">
+          ${choice ? "" : html`<div class="wiz-who">${portrait(look)}<span>${look.name}</span></div>`}
+          <h1 class="big">Set a budget.</h1>
+          <p class="lead">For ${merchant.name}${intent ? html`: ${intent}` : ""}.</p>
+          ${error ? html`<p class="err">${error}</p>` : ""}
+          ${
+            choice
+              ? html`<fieldset class="pickc"><legend>Which courier is ${request.clientName}?</legend>
+                <div class="pickc-o">${choice.couriers.map(
+                  (c) =>
+                    html`<label class="cc" style="${courierVars(c.color)}"><input type="radio" name="courier" value="${c.id}" ${c.id === choice.preselect ? raw("checked") : ""}>${portrait(c)}<span>${c.name}</span></label>`,
+                )}</div></fieldset>`
+              : ""
+          }
+          <label class="budget"><span class="sr">Budget, in dollars</span><i>$</i><input type="number" name="spend_limit" min="1" max="500" step="1" value="${budget}" required autofocus aria-label="Budget, in dollars"></label>
+          <p class="fine">${who === "your courier" ? "Your courier" : who} can’t spend more than this, and asks you about anything off the errand. ${merchant.name} sees a verified person, not your name.</p>
+          ${saved ? html`<input type="hidden" name="autopay" value="1"><p class="fine">Pays with your saved ${PP}.</p>` : ""}
         </div>
-        <div class="backby"><small>Back by</small><div class="seg">
-          ${(Object.keys(DURATIONS) as (keyof typeof DURATIONS)[]).map(
-            (d, i) =>
-              html`<label><input type="radio" name="duration" value="${d}" ${i === 1 ? raw("checked") : ""}><span>${durLabel[d] ?? DURATIONS[d].label}</span></label>`,
-          )}</div></div>
-        <details class="more"><summary>What ${choice ? "it" : look.name} may do</summary><div class="in">
-          ${scopeRows}
-          <label class="tg"><input type="checkbox" name="bond" value="1"><span><b>Add a $5 refundable bond</b><small>A hold on your PayPal, released when the errand ends. ${merchant.name} can only claim it if your courier is reported for abuse.</small></span><i aria-hidden="true"></i></label>
-        </div></details>
-        ${
-          merchant.scopes.includes("store:buy")
-            ? html`<label class="tg payq"><input type="checkbox" name="autopay" value="1" checked><span><b>Pay without asking</b><small>Save ${PP} for this errand, once. Purchases inside these limits are paid straight away; anything else, ${choice ? "your courier" : look.name} asks you first.</small></span><i aria-hidden="true"></i></label>`
-            : ""
-        }
-        <div class="sees">${CK}<span>${merchant.name} sees <b>a verified person</b> and these limits. Not your name, email or PayPal account.</span></div>
-        <div class="foot">
-          <button class="btn ghost sm" type="submit" name="decision" value="deny" formnovalidate>Not now</button>
-          <button class="btn" type="submit" name="decision" value="approve">Send ${choice ? "it" : look.name}${ARROW}</button>
+        <div class="wiz-foot">
+          <button class="btn ghost" type="submit" name="decision" value="deny" formnovalidate>Not now</button>
+          ${twoSteps ? html`<button class="btn" type="button" data-go="2">Next</button>` : send}
         </div>
-      </form></div>
-    </main>`,
+      </section>
+      ${
+        twoSteps
+          ? html`<section class="wiz-step" data-step="2">
+            <div class="wiz-body">
+              <h1 class="big">How should it pay?</h1>
+              <label class="payo"><input type="radio" name="autopay" value="1" checked><span><b>Save ${PP}</b><small>One approval now. After that, purchases inside your budget just go through, on every errand. Remove it any time in Settings.</small></span></label>
+              <label class="payo"><input type="radio" name="autopay" value="0"><span><b>Approve each payment</b><small>You get a PayPal link for every purchase.</small></span></label>
+            </div>
+            <div class="wiz-foot">
+              <button class="btn ghost" type="button" data-go="1">Back</button>
+              ${send}
+            </div>
+          </section>`
+          : ""
+      }
+    </form></main>
+    ${raw(`<script>(()=>{const f=document.getElementById("ticket"),steps=[...f.querySelectorAll("[data-step]")];const go=n=>steps.forEach(s=>{s.hidden=s.dataset.step!==String(n)});go(f.dataset.start);f.addEventListener("click",e=>{const b=e.target.closest("[data-go]");if(!b)return;if(b.dataset.go==="2"&&!f.elements.spend_limit.reportValidity())return;go(b.dataset.go)})})()</script>`)}`,
     { head: raw("<style>.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}</style>") },
   );
 }
@@ -185,6 +172,16 @@ export function refusalPage(human: Human | null, title: string, message: string,
       <p class="lead">${message}</p>
       <div class="acts-row">${request ? html`<a class="btn ghost" href="/auth/paypal/start?req=${request.id}&switch=1">Try another PayPal account</a>` : html`<a class="btn ghost" href="/start">Start again</a>`}</div>
     </div></main>`,
+  );
+}
+
+export function accountDeletedPage(human: Human | null): string {
+  return cpage(
+    "Your account is deleted",
+    human,
+    html`<main class="solo"><div class="solo-card"><h1 class="big">Your account is deleted</h1><p class="lead">Your couriers, errands and history are gone. Signing in with PayPal starts a new account from scratch.</p>
+      <p class="fine">If Claude was connected, reconnect Courier in Claude's settings to use it again.</p>
+      <div class="acts-row"><a class="btn acc" href="/start">Start again</a><a class="btn ghost" href="/">Back home</a></div></div></main>`,
   );
 }
 

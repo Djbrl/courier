@@ -59,8 +59,8 @@ To use your own Claude, see [the live test](docs/live-test.md). The connector ne
 - **Limits live in code.** Budget, per-item limit, shop and expiry are enforced before any model runs.
 - **Off the ticket, it asks you.** An AI check compares each purchase with your purpose, and asks you in the chat if it
   doesn't fit.
-- **Call it back any time.** Revoking takes effect in seconds and deletes the saved PayPal. Claude stays connected, ready
-  for the next ticket.
+- **Call it back any time.** Revoking takes effect in seconds. Claude stays connected, ready for the next ticket, and you
+  can remove your saved PayPal in Settings.
 
 <p align="center">
   <img src="docs/images/bots.png" alt="Eight attacks on the shop, all blocked or flagged" width="100%">

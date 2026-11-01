@@ -22,7 +22,6 @@ import {
   type AuthRequest,
   type Connection,
   db,
-  effectiveStatus,
   findCourier,
   findMerchant,
   type Human,
@@ -32,6 +31,7 @@ import {
   saveCourier,
 } from "./db.ts";
 import {
+  accountDeletedPage,
   approvalPage,
   connectConsentPage,
   connectPage,
@@ -50,7 +50,20 @@ import {
 import { simPaypalRouter } from "./paypal-simulator.ts";
 import { appRouter } from "./routes/app.ts";
 import { botsRouter } from "./routes/bots.ts";
-import { addStamp, decideApproval, disconnect, internalRouter, revokeVisa, sweepExpiredVisas } from "./visas.ts";
+import {
+  addStamp,
+  decideApproval,
+  deleteAccount,
+  disconnect,
+  endEarlierErrands,
+  internalRouter,
+  issuedStamps,
+  migrateSavedPayPal,
+  removeSavedPayPal,
+  revokeVisa,
+  savedPayPal,
+  sweepExpiredVisas,
+} from "./visas.ts";
 
 const app = express();
 app.set("trust proxy", "loopback");
@@ -286,7 +299,7 @@ app.get("/consent/:id", (req, res) => {
     else res.redirect(302, `/start/courier?req=${request.id}`);
     return;
   }
-  res.send(consentPage(request, findMerchant(request.resource)!, human));
+  res.send(consentPage(request, findMerchant(request.resource)!, human, undefined, req.query.pay === "1"));
 });
 
 app.post("/consent/:id", async (req, res) => {
@@ -363,8 +376,9 @@ app.post("/consent/:id", async (req, res) => {
   const rawScopes = ([] as string[]).concat(req.body.scopes ?? []);
   const scopes = rawScopes.filter(isScope).filter((s) => merchant.scopes.includes(s)) as Scope[];
   const spend = Math.round(Number(req.body.spend_limit) * 100);
-  const perPurchase = Math.round(Number(req.body.per_purchase_limit) * 100);
-  const duration = (req.body.duration in DURATIONS ? req.body.duration : "24h") as DurationKey;
+  // A ticket is one budget. The agent's limits can still be narrower when a client asks for it.
+  const perPurchase = req.body.per_purchase_limit ? Math.round(Number(req.body.per_purchase_limit) * 100) : spend;
+  const duration = (req.body.duration in DURATIONS ? req.body.duration : "7d") as DurationKey;
   const intent = String(req.body.intent ?? "")
     .trim()
     .slice(0, 160);
@@ -419,13 +433,15 @@ app.post("/consent/:id", async (req, res) => {
 
   db.put("visa_requests", visa.id, { visaId: visa.id, authRequestId: request.id, wantsBond });
 
-  if (wantsAutopay) {
-    // Save PayPal for this errand: one PayPal page now, none per purchase later.
+  const saved = wantsAutopay ? savedPayPal(human.id) : undefined;
+  if (saved) visa.autopay = { status: "on", email: saved.email };
+  else if (wantsAutopay) {
+    // Save PayPal on the account: one PayPal page now, none for later purchases or errands.
     try {
       const setup = await paypal.createVaultSetup(
         {
-          description: `${visa.agentName} may buy at ${merchant.name} for you, up to $${(spend / 100).toFixed(0)} in total, until you call it back.`,
-          brandName: merchant.name,
+          description: `Your couriers may buy for you within the budgets you set, until you remove this in Courier.`,
+          brandName: "Courier",
           returnUrl: `${config.courier.url}/autopay/return?visa=${visa.id}`,
           cancelUrl: `${config.courier.url}/autopay/cancel?visa=${visa.id}`,
         },
@@ -435,7 +451,12 @@ app.post("/consent/:id", async (req, res) => {
       visa.status = "pending_paypal";
       visa.autopay = { status: "pending" };
       db.put("visas", visa.id, visa);
-      db.put<SavedPayPalRecord>("saved_paypal", visa.id, { visaId: visa.id, setupTokenId: setup.id, vaultId: null });
+      db.put("visa_requests", visa.id, {
+        visaId: visa.id,
+        authRequestId: request.id,
+        wantsBond,
+        setupTokenId: setup.id,
+      });
       res.redirect(302, setup.approveUrl);
       return;
     } catch (error) {
@@ -504,57 +525,39 @@ async function finishIssuing(visa: Visa, request: AuthRequest, human: Human, res
     return;
   }
   db.update<AuthRequest>("auth_requests", request.id, (r) => ({ ...r, completed: true, visaId: visa.id }));
-  // One errand at a time per Claude: its previous errand ends when a new one starts.
-  for (const old of db.list<Visa>(
-    "visas",
-    (v) =>
-      v.id !== visa.id && v.humanId === human.id && v.clientId === visa.clientId && effectiveStatus(v) === "active",
-  ))
-    await revokeVisa(old.id, "Replaced by a new errand");
+  await endEarlierErrands(visa);
   res.send(ticketReadyPage(human, visa));
-}
-
-function issuedStamps(visa: Visa) {
-  if (visa.autopay?.status === "on")
-    addStamp(
-      visa,
-      "visa_issued",
-      "PayPal saved for this errand",
-      "Purchases within your limits are paid straight away.",
-    );
-  addStamp(
-    visa,
-    "visa_issued",
-    `Visa issued to ${visa.agentName}`,
-    `${visa.merchantName} · up to $${(visa.spendLimitCents / 100).toFixed(0)}${visa.bond ? " · bonded" : ""}`,
-  );
 }
 
 /** The person's errand that's waiting on a PayPal step, if this browser is theirs and the request is still open. */
 function pendingErrand(req: express.Request) {
   const human = currentHuman(req);
   const visa = db.get<Visa>("visas", String(req.query.visa ?? ""));
-  const link = visa ? db.get<{ authRequestId: string; wantsBond?: boolean }>("visa_requests", visa.id) : undefined;
+  const link = visa
+    ? db.get<{ authRequestId: string; wantsBond?: boolean; setupTokenId?: string }>("visa_requests", visa.id)
+    : undefined;
   const request = link ? findAuthRequest(link.authRequestId) : null;
   if (!human || !visa || visa.humanId !== human.id || !request || request.completed)
-    return { human, visa: null, request: null, wantsBond: false };
-  return { human, visa, request, wantsBond: Boolean(link?.wantsBond) };
+    return { human, visa: null, request: null, wantsBond: false, setupTokenId: undefined };
+  return { human, visa, request, wantsBond: Boolean(link?.wantsBond), setupTokenId: link?.setupTokenId };
 }
 
 app.get("/autopay/return", async (req, res) => {
-  const { human, visa, request, wantsBond } = pendingErrand(req);
-  const saved = visa ? db.get<SavedPayPalRecord>("saved_paypal", visa.id) : undefined;
-  if (!visa || !request || !saved || visa.autopay?.status !== "pending") {
+  const { human, visa, request, wantsBond, setupTokenId } = pendingErrand(req);
+  if (!visa || !request || !setupTokenId || visa.autopay?.status !== "pending") {
     res.status(400).send(errorPage(human, "This link has expired", "Ask your agent to connect again."));
     return;
   }
   try {
-    const token = await paypal.createVaultToken(saved.setupTokenId, `vault-${visa.id}`);
-    db.put<SavedPayPalRecord>("saved_paypal", visa.id, { ...saved, vaultId: token.id });
+    const token = await paypal.createVaultToken(setupTokenId, `vault-${visa.id}`);
+    db.put<SavedPayPalRecord>("saved_paypal", visa.humanId, {
+      humanId: visa.humanId,
+      vaultId: token.id,
+      email: token.email,
+    });
     visa.autopay = { status: "on", email: token.email };
   } catch (error) {
     console.warn("[autopay] could not save PayPal:", (error as Error).message);
-    db.delete("saved_paypal", visa.id);
     visa.autopay = { status: "failed" };
   }
   await continueIssuing(visa, request, human!, wantsBond, res);
@@ -567,7 +570,6 @@ app.get("/autopay/cancel", async (req, res) => {
     return;
   }
   // Not saving PayPal is fine: the errand goes ahead, and each purchase gets its own PayPal page.
-  db.delete("saved_paypal", visa.id);
   visa.autopay = { status: "declined" };
   await continueIssuing(visa, request, human!, wantsBond, res);
 });
@@ -650,7 +652,48 @@ app.post("/app/connections/:id/revoke", async (req, res) => {
     return;
   }
   await disconnect(connection);
-  res.redirect(303, "/app/connections");
+  res.redirect(303, "/app/settings");
+});
+
+app.post("/app/paypal/remove", async (req, res) => {
+  const human = currentHuman(req);
+  if (!human) {
+    res.redirect(303, "/");
+    return;
+  }
+  if (!(await removeSavedPayPal(human.id))) {
+    res
+      .status(502)
+      .send(errorPage(human, "Your PayPal is still saved", "PayPal didn't confirm the removal. Please try again."));
+    return;
+  }
+  res.redirect(303, "/app/settings");
+});
+
+app.post("/app/account/delete", async (req, res) => {
+  const human = currentHuman(req);
+  if (!human) {
+    res.redirect(303, "/");
+    return;
+  }
+  if (!(await deleteAccount(human))) {
+    res
+      .status(502)
+      .send(
+        errorPage(
+          human,
+          "Your account wasn't deleted",
+          "PayPal didn't confirm it had released your saved PayPal or bond, so we kept your account. Your errands have been called back. Please try again.",
+        ),
+      );
+    return;
+  }
+  endSession(res);
+  res.redirect(303, "/account-deleted");
+});
+
+app.get("/account-deleted", (req, res) => {
+  res.send(accountDeletedPage(currentHuman(req)));
 });
 
 /* ---------- approvals (ask_human) ---------- */
@@ -690,6 +733,7 @@ app.use("/bots", botsRouter);
 
 /* ---------------- start ---------------- */
 
+migrateSavedPayPal();
 setInterval(() => void sweepExpiredVisas(), 60_000).unref();
 
 app.listen(config.courier.port, () => {

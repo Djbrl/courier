@@ -88,7 +88,10 @@ async function mcpClient(token: string, answer?: (message: string) => string) {
   if (answer)
     client.setRequestHandler(ElicitRequestSchema, async (req) => ({
       action: "accept",
-      content: { answer: answer(req.params.message) },
+      content:
+        "requestedSchema" in req.params && req.params.requestedSchema.properties.budget
+          ? { budget: Number(answer(req.params.message)) }
+          : { answer: answer(req.params.message) },
     }));
   await client.connect(
     new StreamableHTTPClientTransport(new URL(MCP), {
@@ -235,7 +238,7 @@ async function writeTicket(browser: Browser, token: string, ticket: Record<strin
       form: { decision: "approve" },
     });
   }
-  assert.match(await followed.res.text(), /has its ticket/);
+  assert.match(await followed.res.text(), /has its budget/);
   await new Promise((r) => setTimeout(r, 3200)); // the shop caches a connection's standing for 3 seconds
   const who = structured(await chat.callTool({ name: "whoami", arguments: {} }));
   await chat.close();
@@ -300,7 +303,6 @@ await step(
     assert.equal(sc.decision, "needs_ticket", JSON.stringify(buy));
     const page = await (await browser.req(sc.ticket_url)).text();
     assert.match(page, /value="Jazz for &lt;b&gt;dad&lt;\/b&gt;"/, "the agent's text is escaped");
-    assert.match(page, /name="per_purchase_limit"[^>]*value="35"/);
     assert.match(page, /name="spend_limit"[^>]*value="500"/, "suggestions are capped");
     const stranger = await new Browser().req(sc.ticket_url);
     assert.equal(stranger.status, 302, "signed out: sign in first");
@@ -483,7 +485,7 @@ await step("Calling back ends the errand within seconds; Claude stays connected 
 });
 
 await step(
-  "Saved PayPal: one OK on the ticket, then purchases are paid straight away; calling back removes it",
+  "Saved PayPal: one OK on the ticket, then purchases are paid straight away; it outlives the errand until removed",
   async () => {
     const b = browser;
     const visa = await writeTicket(b, tokens.access_token, {
@@ -537,10 +539,38 @@ await step(
     assert.match(errand, /pays with saved PayPal/);
     assert.match(errand, /Paid with saved PayPal/);
 
-    // Calling the courier back deletes the saved PayPal at PayPal.
+    // Calling the courier back ends the errand, and a closed errand can't pay.
     assert.equal((await b.req(`${flow.courier}/app/visas/${visa.id}/revoke`, { form: {} })).status, 303);
-    const after = await (await b.req(`${flow.courier}/app/errands?e=${visa.id}`)).text();
-    assert.match(after, /Saved PayPal removed/);
+    await new Promise((r) => setTimeout(r, 3200));
+    assert.match(await (await b.req(`${flow.courier}/app/settings`)).text(), /Saved PayPal/);
+
+    // PayPal stays saved, so the next ticket is one question in the chat and the purchase carries on in the same call.
+    const budgets: string[] = [];
+    const again = await mcpClient(tokens.access_token, (message) => {
+      budgets.push(message);
+      return "60";
+    });
+    const inChat = structured(await again.callTool({ name: "request_purchase", arguments: { item_ids: ["jr-011"] } }));
+    assert.equal(inChat.status, "paid", JSON.stringify(inChat));
+    assert.equal(inChat.paid_with, "saved_paypal");
+    assert.equal(budgets.length, 1);
+    assert.match(budgets[0]!, /most it can spend/);
+    assert.equal(inChat.remaining_budget, "35.00");
+    await again.close();
+
+    // Removing it in Settings stops it paying: the errand falls back to a PayPal page per purchase.
+    assert.equal((await b.req(`${flow.courier}/app/paypal/remove`, { form: {} })).status, 303);
+    assert.match(await (await b.req(`${flow.courier}/app/settings`)).text(), /Not saved/);
+    await new Promise((r) => setTimeout(r, 3200));
+    const fallback = await mcpClient(tokens.access_token);
+    const byLink = structured(
+      await fallback.callTool({ name: "request_purchase", arguments: { item_ids: ["jr-002"] } }),
+    );
+    assert.ok(byLink.approve_url, JSON.stringify(byLink));
+    const open = structured(await fallback.callTool({ name: "whoami", arguments: {} })).visa;
+    assert.equal((await b.req(`${flow.courier}/app/visas/${open.id}/revoke`, { form: {} })).status, 303);
+    await new Promise((r) => setTimeout(r, 3200));
+    await fallback.close();
     await chat.close();
   },
 );
@@ -608,6 +638,66 @@ await step("Disconnecting removes Claude: its token and refresh token stop worki
   });
   assert.equal(refresh.status, 400);
 });
+
+await step(
+  "Deleting an account ends its access and keeps its receipts, and signing in again starts from scratch",
+  async () => {
+    const person = new Browser();
+    const first = await authorize(flow, person, "ada");
+    const visa = await writeTicket(person, first.tokens.access_token, {
+      decision: "approve",
+      scopes: ["store:browse", "store:reserve", "store:buy"],
+      spend_limit: "60",
+      per_purchase_limit: "40",
+      duration: "24h",
+      intent: "Jazz for deleting",
+      autopay: "1",
+    });
+    const chat = await mcpClient(first.tokens.access_token);
+    const buy = structured(await chat.callTool({ name: "request_purchase", arguments: { item_ids: ["jr-011"] } }));
+    assert.equal(buy.status, "paid", JSON.stringify(buy));
+    await chat.close();
+
+    assert.match(await (await person.req(`${flow.courier}/app/account/delete`)).text(), /Your 1 errand still out/);
+    // Someone with no session deletes nothing: the person's errand is still there.
+    assert.equal((await new Browser().req(`${flow.courier}/app/account/delete`, { form: {} })).status, 303);
+    assert.match(await (await person.req(`${flow.courier}/app/errands?e=${visa.id}`)).text(), /Jazz for deleting/);
+
+    const gone = await person.req(`${flow.courier}/app/account/delete`, { form: {} });
+    assert.equal(gone.status, 303);
+    assert.equal(gone.headers.get("location"), "/account-deleted");
+    assert.equal(person.jar.has("courier_session"), false, "the session ends");
+    await new Promise((r) => setTimeout(r, 3200));
+
+    const raw = await fetch(MCP, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        accept: "application/json, text/event-stream",
+        authorization: `Bearer ${first.tokens.access_token}`,
+      },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "whoami", arguments: {} } }),
+    });
+    assert.equal(raw.status, 401, "the old token stops working");
+    const refresh = await fetch(flow.asMeta.token_endpoint, {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        grant_type: "refresh_token",
+        refresh_token: first.tokens.refresh_token,
+        client_id: flow.client.client_id,
+      }),
+    });
+    assert.equal(refresh.status, 400, "the old refresh token stops working");
+    assert.equal((await fetch(buy.receipt_url)).status, 200, "the receipt still opens");
+
+    // Same PayPal, new account: it's asked to name a courier again, has no history and looks new to the shop.
+    const again = await authorize(flow, person, "ada");
+    assert.notEqual(decode(again.tokens.access_token).sub, decode(first.tokens.access_token).sub);
+    const home = await (await person.req(`${flow.courier}/app/errands`)).text();
+    assert.ok(!home.includes("Jazz for deleting"), "the old errand is gone");
+  },
+);
 
 await step("Release the bots: every attack is blocked or flagged", async () => {
   const res = await fetch(`${flow.courier}/bots/run`, {

@@ -206,7 +206,7 @@ async function runAttacks(): Promise<AttackResult[]> {
     push({
       id: "limit",
       name: "$149 turntable on a $40 limit",
-      story: "A real courier tries to go over its ticket.",
+      story: "A real courier tries to go over its budget.",
       outcome: sc?.decision === "deny" ? "blocked" : "allowed",
       status: r.status,
       detail: sc?.reason ?? JSON.stringify(r.body).slice(0, 140),

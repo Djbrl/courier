@@ -35,19 +35,19 @@ import {
 import {
   claudeSetupPage,
   connectingPage,
-  connectionsPage,
   courierSetupPage,
   couriersPage,
   type Desk,
+  deleteAccountPage,
   demoClientId,
   errandRoom,
   errandsPage,
   homePage,
-  howPage,
+  settingsPage,
   signInPage,
   startPage,
 } from "../pages/index.ts";
-import { decideApproval, revokeVisa } from "../visas.ts";
+import { decideApproval, revokeVisa, savedPayPal } from "../visas.ts";
 
 /**
  * The first-run experience behind "Try the demo": sign in with PayPal, meet your courier, connect Claude, then run a
@@ -130,12 +130,11 @@ appRouter.get("/start", (req, res) => {
     res.send(startPage());
     return;
   }
-  res.redirect(302, findCourier(human.id) ? "/app" : "/start/how");
+  res.redirect(302, findCourier(human.id) ? "/app" : "/start/courier");
 });
 
-appRouter.get("/start/how", (req, res) => {
-  const human = requireHuman(req, res);
-  if (human) res.send(howPage(human));
+appRouter.get("/start/how", (_req, res) => {
+  res.redirect(302, "/start/courier");
 });
 
 appRouter.get("/start/courier", (req, res) => {
@@ -201,7 +200,9 @@ appRouter.get("/start/claude", (req, res) => {
   const ctx = requireCourier(req, res);
   if (!ctx) return;
   if (ctx.courier.mode !== "claude") saveCourier({ ...ctx.courier, mode: "claude" });
-  res.send(claudeSetupPage(ctx.human, ctx.courier, { onboarding: req.query.first === "1" }));
+  res.send(
+    claudeSetupPage(ctx.human, ctx.courier, { onboarding: req.query.first === "1", step: Number(req.query.step) || 1 }),
+  );
 });
 
 appRouter.get("/start/here", (req, res) => {
@@ -234,7 +235,7 @@ function requireDesk(req: express.Request, res: express.Response): Desk | null {
   }
   const d = desk(human);
   if (!d.couriers.length) {
-    res.redirect(302, "/start/how");
+    res.redirect(302, "/start/courier");
     return null;
   }
   return d;
@@ -247,6 +248,11 @@ appRouter.get("/app", (req, res) => {
   if (d) res.send(homePage(d, { welcome: req.query.welcome === "1", courierId: q(req.query.c) }));
 });
 
+appRouter.get("/app/account/delete", (req, res) => {
+  const d = requireDesk(req, res);
+  if (d) res.send(deleteAccountPage(d));
+});
+
 appRouter.get("/app/errands", (req, res) => {
   const d = requireDesk(req, res);
   if (d) res.send(errandsPage(d, { tab: q(req.query.tab), errandId: q(req.query.e) }));
@@ -257,9 +263,13 @@ appRouter.get("/app/couriers", (req, res) => {
   if (d) res.send(couriersPage(d, { courierId: q(req.query.c) }));
 });
 
-appRouter.get("/app/connections", (req, res) => {
+appRouter.get("/app/settings", (req, res) => {
   const d = requireDesk(req, res);
-  if (d) res.send(connectionsPage(d));
+  if (d) res.send(settingsPage(d, savedPayPal(d.human.id)?.email));
+});
+
+appRouter.get("/app/connections", (_req, res) => {
+  res.redirect(302, "/app/settings");
 });
 
 /** Live status for the connector walkthrough (and anything else that wants to poll). */
