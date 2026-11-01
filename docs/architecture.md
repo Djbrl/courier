@@ -1,13 +1,13 @@
 # Architecture
 
 Courier is an OAuth 2.1 authorization server for AI agents. A verified person gives their agent a scoped, spend-limited,
-expiring permission for one shop. Shops accept it through standard MCP auth, so there's no new protocol to adopt.
+expiring permission for one errand. Shops accept it through standard MCP auth, so there's no new protocol to adopt.
 
 ```mermaid
 flowchart LR
     Person([Person]) -- "writes the ticket, answers asks" --> Courier
-    Agent[AI agent] -- "OAuth 2.1 + PKCE" --> Courier
-    Agent -- "MCP + signed token" --> Shop[Shop MCP server]
+    Agent[AI agent] -- "OAuth 2.1 + PKCE, then MCP" --> Courier
+    Courier -- "MCP + a signed token for that shop" --> Shop[Shop MCP server]
     Shop -- "may it spend this?" --> Courier
     Courier -- "identity, saved PayPal, bond" --> PayPal
     Shop -- "orders" --> PayPal
@@ -29,18 +29,22 @@ flowchart LR
 
 ## The packages
 
-| Path              | Role                                                                                          |
-| ----------------- | --------------------------------------------------------------------------------------------- |
-| `apps/courier`    | Authorization server, spend authority, the person's app, PayPal simulator                     |
-| `apps/store`      | Juniper Records, the demo shop: MCP server (OAuth resource server), storefront, merchant view |
-| `packages/shared` | Config, PayPal gateway, intent check, visa model, document store, design system               |
+| Path              | Role                                                                                             |
+| ----------------- | ------------------------------------------------------------------------------------------------ |
+| `apps/courier`    | Authorization server, the Courier connector, spend authority, the person's app, PayPal simulator |
+| `apps/store`      | Five demo shops in one process: an MCP server (resource server) each, logo grid, merchant view   |
+| `packages/shared` | Config, PayPal gateway, intent check, visa model, document store, design system                  |
 
 The two apps are separate processes that share no database. They talk over HTTP: the shop verifies tokens against
-Courier's public keys and calls `/internal/*` with a shared secret. Today Courier knows one shop. Adding more means a merchant registry and per-shop API credentials.
+Courier's public keys and calls `/internal/*` with a shared secret. The shops are a fixed list in `packages/shared/src/shops.ts`. Real shops would need a merchant registry and per-shop API credentials.
+
+Claude adds one connector, `COURIER_URL/mcp` (`apps/courier/src/gateway.ts`). For each call Courier mints a 60-second token
+with that shop as its audience and that shop's pseudonym as its subject, and calls the shop's own MCP server. An errand's
+budget works at any shop. The older connector at `STORE_URL/mcp`, which reaches only Juniper Records, still works.
 
 ## Connecting
 
-Claude finds Courier by itself, starting from the shop's MCP URL.
+Claude finds Courier by itself, starting from the connector's URL. This diagram shows the older direct connector; the Courier connector is the same, with Courier in the shop's place.
 
 ```mermaid
 sequenceDiagram

@@ -1,5 +1,16 @@
 import { createHash } from "node:crypto";
-import { ALL_SCOPES, checkIntent, config, DURATIONS, newId, paypal, requireInternal, type Visa } from "@courier/shared";
+import {
+  ALL_SCOPES,
+  COURIER_RESOURCE,
+  checkIntent,
+  config,
+  DURATIONS,
+  newId,
+  paypal,
+  requireInternal,
+  shopForResource,
+  type Visa,
+} from "@courier/shared";
 import { Router } from "express";
 import { mintAccessToken } from "./auth/oauth.ts";
 import {
@@ -7,6 +18,7 @@ import {
   type AuthCode,
   type AuthRequest,
   activeTicket,
+  anyShop,
   type Connection,
   type Courier,
   connectionAgent,
@@ -28,7 +40,7 @@ import { demoClientId } from "./pages/shared.ts";
 
 /* ---------------- stamps ---------------- */
 
-export function addStamp(visa: Visa, kind: StampKind, title: string, detail = ""): Stamp {
+export function addStamp(visa: Visa, kind: StampKind, title: string, detail = "", merchantName?: string): Stamp {
   const stamp: Stamp = {
     id: newId("st"),
     visaId: visa.id,
@@ -36,7 +48,7 @@ export function addStamp(visa: Visa, kind: StampKind, title: string, detail = ""
     kind,
     title,
     detail,
-    merchantName: visa.merchantName,
+    merchantName: merchantName ?? visa.merchantName,
     at: new Date().toISOString(),
   };
   return db.put("stamps", stamp.id, stamp);
@@ -207,15 +219,86 @@ export function issuedStamps(visa: Visa): void {
   );
 }
 
-/** One errand at a time per Claude: its previous errand ends when a new one starts. */
+/** One errand at a time on an older per-shop connector. Through the Courier connector, errands run side by side. */
 export async function endEarlierErrands(visa: Visa): Promise<void> {
+  if (anyShop(visa)) return;
   for (const old of db.list<Visa>(
     "visas",
     (v) =>
-      v.id !== visa.id && v.humanId === visa.humanId && v.clientId === visa.clientId && effectiveStatus(v) === "active",
+      v.id !== visa.id &&
+      v.humanId === visa.humanId &&
+      v.clientId === visa.clientId &&
+      !anyShop(v) &&
+      effectiveStatus(v) === "active",
     Infinity,
   ))
     await revokeVisa(old.id, "Replaced by a new errand");
+}
+
+/* ---------------- errands through the Courier connector ---------------- */
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/** What Claude has started on its own in the last 24 hours. An errand that ended only counts what it spent. */
+function startedToday(humanId: string): number {
+  const since = Date.now() - DAY_MS;
+  return db
+    .list<Visa>(
+      "visas",
+      (v) => v.humanId === humanId && v.autoStarted === true && Date.parse(v.createdAt) > since,
+      Infinity,
+    )
+    .reduce((sum, v) => sum + (effectiveStatus(v) === "active" ? v.spendLimitCents : v.spentCents), 0);
+}
+
+/** Whether Claude may start an errand this big with no click. Enforced here, because the amount comes from a model. */
+export function withinCap(human: Human, cents: number): boolean {
+  const cap = human.cap;
+  return Boolean(cap && cents <= cap.perErrandCents && startedToday(human.id) + cents <= cap.perDayCents);
+}
+
+/** The cap a person typed, or null for "always ask me". */
+export function parseCap(perErrand: unknown, perDay: unknown): Human["cap"] {
+  const dollars = (value: unknown, max: number) => Math.min(max, Math.max(0, Math.floor(Number(value)) || 0));
+  const perErrandCents = dollars(perErrand, 500) * 100;
+  const perDayCents = dollars(perDay, 2000) * 100;
+  return perErrandCents && perDayCents ? { perErrandCents, perDayCents } : null;
+}
+
+/** One errand: one budget, any shop, side by side with the person's other errands, over in 24 hours at the latest. */
+export function issueErrand(opts: {
+  connection: Connection;
+  human: Human;
+  courierName: string;
+  what: string;
+  budget: number;
+  auto: boolean;
+}): Visa {
+  const saved = savedPayPal(opts.human.id);
+  const now = Date.now();
+  const visa: Visa = {
+    id: newId("visa"),
+    humanId: opts.human.id,
+    clientId: opts.connection.clientId,
+    agentName: opts.courierName,
+    resource: COURIER_RESOURCE,
+    merchantName: "any shop",
+    scopes: opts.connection.scopes,
+    spendLimitCents: opts.budget * 100,
+    perPurchaseLimitCents: opts.budget * 100,
+    spentCents: 0,
+    currency: "USD",
+    intent: opts.what.trim().slice(0, 160),
+    status: "active",
+    createdAt: new Date(now).toISOString(),
+    expiresAt: new Date(now + DAY_MS).toISOString(),
+    bond: null,
+    ...(saved ? { autopay: { status: "on" as const, email: saved.email } } : {}),
+    ...(opts.auto ? { autoStarted: true } : {}),
+  };
+  db.put("visas", visa.id, visa);
+  issuedStamps(visa);
+  return visa;
 }
 
 /** Includes errands abandoned on a PayPal page, so they don't linger. */
@@ -297,7 +380,9 @@ internalRouter.get("/connections/:id", async (req, res) => {
     res.status(404).json({ error: "connection not found" });
     return;
   }
-  const ticket = connection.status === "active" ? activeTicket(connection) : undefined;
+  // Errands through the Courier connector reach the shop with each call, not through the connection.
+  const ticket =
+    connection.status === "active" && connection.resource !== COURIER_RESOURCE ? activeTicket(connection) : undefined;
   res.json({
     status: connection.status,
     agent: connectionAgent(connection),
@@ -403,14 +488,16 @@ internalRouter.post("/spend/check", async (req, res) => {
 
   const visa = db.get<Visa>("visas", visaId);
   const deny = (code: string, reason: string, extra: Record<string, unknown> = {}) => {
-    if (visa) addStamp(visa, "blocked", `Blocked ${action}`, reason);
+    if (visa) addStamp(visa, "blocked", `Blocked ${action}`, reason, shopForResource(resource)?.name);
     res.json({ decision: "deny", code, reason, ...extra });
   };
 
   if (!visa) return deny("unknown_visa", "This visa does not exist.");
   if (effectiveStatus(visa) !== "active") return deny("visa_inactive", `This visa is ${effectiveStatus(visa)}.`);
-  if (visa.resource !== resource) return deny("wrong_merchant", "This visa was issued for a different merchant.");
-  if (pairwiseSubject(visa.humanId, visa.resource) !== sub)
+  const shop = shopForResource(resource);
+  if (visa.resource !== resource && !(anyShop(visa) && shop))
+    return deny("wrong_merchant", "This visa was issued for a different merchant.");
+  if (pairwiseSubject(visa.humanId, resource) !== sub)
     return deny("subject_mismatch", "Token subject does not match the visa holder.");
 
   const neededScope = action === "checkout" ? "store:buy" : "store:reserve";
@@ -472,7 +559,7 @@ internalRouter.post("/spend/check", async (req, res) => {
   if (!approvedByHuman && config.intent.enabled && visa.intent.trim()) {
     intent = await checkIntent({
       visaIntent: visa.intent,
-      merchant: visa.merchantName,
+      merchant: shop?.name ?? visa.merchantName,
       action,
       items: items.map((i) => ({ title: i.title, category: i.category, priceCents: i.priceCents })),
       totalCents,
@@ -536,7 +623,8 @@ internalRouter.post("/spend/check", async (req, res) => {
       visa,
       "reserve",
       `Reserved ${items.map((i) => i.title).join(", ")}`,
-      `Within your visa for ${visa.merchantName}.`,
+      `Within your visa for ${shop?.name ?? visa.merchantName}.`,
+      shop?.name,
     );
   }
 
@@ -555,13 +643,14 @@ internalRouter.post("/spend/check", async (req, res) => {
 
 /** Called by the merchant after PayPal captured a payment. */
 internalRouter.post("/spend/commit", (req, res) => {
-  const { visaId, holdId, orderId, amountCents, summary, paidWith } = req.body as {
+  const { visaId, holdId, orderId, amountCents, summary, paidWith, merchantName } = req.body as {
     visaId: string;
     holdId: string;
     orderId: string;
     amountCents: number;
     summary: string;
     paidWith?: "paypal_page" | "saved_paypal";
+    merchantName?: string;
   };
   const visa = db.get<Visa>("visas", visaId);
   const hold = db.get<Hold>("holds", holdId);
@@ -577,8 +666,15 @@ internalRouter.post("/spend/commit", (req, res) => {
       visa,
       "purchase",
       summary,
-      `${paidWith === "saved_paypal" ? "Paid with saved PayPal · " : ""}PayPal order ${orderId} · $${(amountCents / 100).toFixed(2)}`,
+      `${merchantName ? `${merchantName} · ` : ""}${paidWith === "saved_paypal" ? "Paid with saved PayPal · " : ""}PayPal order ${orderId} · $${(amountCents / 100).toFixed(2)}`,
+      merchantName,
     );
+    // Nothing left to spend: the errand is over, and shows as done rather than out.
+    if (anyShop(visa) && effectiveStatus(visa) === "active" && remainingBudget(visa) === 0) {
+      visa.status = "expired";
+      visa.revokeReason = "Budget used up";
+      db.put("visas", visa.id, visa);
+    }
   }
   res.json({ ok: true, spentCents: visa.spentCents, remainingCents: remainingBudget(visa) });
 });
@@ -674,7 +770,7 @@ internalRouter.post("/stamps", (req, res) => {
       return;
     }
   }
-  addStamp(visa, req.body.kind, req.body.title, req.body.detail ?? "");
+  addStamp(visa, req.body.kind, req.body.title, req.body.detail ?? "", req.body.merchantName);
   res.json({ ok: true });
 });
 

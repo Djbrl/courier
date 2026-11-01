@@ -29,8 +29,8 @@ apps/
     server.ts            Shop routes and the /mcp endpoint
     auth.ts              Verifies every token
     mcp.ts               The tools agents can call
-    catalog.ts           The records for sale
-    views.ts             Storefront and merchant view
+    catalog.ts           What each shop sells
+    views.ts             Logo grid, shop pages and merchant view
 packages/shared/
   src/                   Config, PayPal gateway, intent check, visa model, store
   assets/                CSS and browser JavaScript
@@ -84,6 +84,11 @@ Both use a pairwise pseudonym as their subject. Decode one from the e2e to see w
 PayPal ID.
 
 ## 6. The agent shops
+
+Claude reaches shops through one connector: `createGateway` in `apps/courier/src/gateway.ts` holds `start_errand`, `buy` and the
+rest, checks every shop and courier name it's given, and forwards each call to the shop's own tools with a token for that shop.
+`withinCap` in `visas.ts` decides whether an errand starts straight away or waits for the person. The sections on tickets above
+describe the older direct connector, which still works for Juniper Records.
 
 `createMcpServer` in `apps/store/src/mcp.ts` registers the tools: `whoami`, `search_catalog`, `get_item`, `hold_item`,
 `request_purchase` and `order_status`. Every call has passed `requireVisa` first, which checks the signature, issuer,

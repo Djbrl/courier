@@ -15,10 +15,10 @@ Courier.
 2. **You name your courier.** A courier is your AI with its own ID card. Say you call yours Juno.
 3. **You add Courier to Claude.** You paste one address into Claude's settings and click Connect. This only happens once,
    and nothing is bought or charged.
-4. **You ask.** "Find me a jazz record under $40 at Juniper Records and buy it."
-5. **You set a budget.** Type how much Juno can spend, say $60, right in the chat: in a dialog or in a card under
-   Claude's reply. Claude can fill the number in if you already said it, but only you can confirm it. There's also a link
-   if you prefer. Juno works out the rest, and the errand ends by itself after 7 days.
+4. **You ask.** "Find me a jazz record at Juniper Records. I have about $40." Or "Send Steve for flowers on Floor Dash, $20."
+5. **The budget belongs to the errand.** Under the cap you set when connecting (say $50 an errand, $100 a day), the errand
+   just starts. Above it you confirm the budget in a card under Claude's reply, or at a link. Several errands can run at
+   once, with any courier, at any shop. Each ends when you call it back, when its budget is used up, or after 24 hours.
 6. **You save PayPal once.** The first time, PayPal asks if Courier can pay without asking each time. You agree, and you
    won't see that page again.
 7. **Juno does the shopping.** Claude notices the budget by itself and carries on. Juno searches the shop, picks a record
@@ -45,7 +45,8 @@ end of this section.
 | PayPal sign-in      | Confirms you're real, and turns away unverified accounts and under-18s                                                                |
 | Couriers            | Your AI gets a name, a colour and an ID card, and you can have several                                                                |
 | Errand tickets      | Set one budget, in the chat or on a page. The courier works out the rest                                                              |
-| Works inside Claude | Connect once from the shop's address, with no ticket or payment, and browse straight away                                             |
+| Works inside Claude | Add one Courier connector, with no ticket or payment, and reach every shop and courier                                                |
+| Spending cap        | Set once: under it Claude starts errands without asking, above it you confirm. Enforced in code                                       |
 | Errand room         | Send a courier shopping from the Courier website, with no Claude setup                                                                |
 | Asking first        | Built, but off by default: a courier can buy anything inside its budget at its shop. Set `INTENT_CHECK=on` to bring the question back |
 | Pay without asking  | Save PayPal once on your account, and purchases inside a budget just go through                                                       |
@@ -59,7 +60,7 @@ end of this section.
 
 | Feature            | What it does                                                                                                    |
 | ------------------ | --------------------------------------------------------------------------------------------------------------- |
-| Demo shop          | Juniper Records, a pretend record shop that couriers can browse and buy from                                    |
+| Demo shops         | Amazoo, Floor Dash, Lord Knight, Mike and Juniper Records, pretend shops shown as a grid of logos               |
 | What the shop sees | Who's shopping, their orders, signed proof of what each was allowed to do, and a button to report a bad courier |
 | Release the bots   | Eight attacks on the shop, like fake IDs and overspending, that you can watch get stopped live                  |
 
@@ -90,7 +91,7 @@ We're on a tight timeline, so the near-term list is short.
 
 **Later**
 
-- **More shops.** Courier only knows the one demo shop today. Real shops would need a way to sign up, and PayPal would
+- **Real shops.** Courier knows five pretend shops today, listed in code. Real shops would need a way to sign up, and PayPal would
   need to approve us to charge on their behalf.
 - **Getting ready for real use.** This includes a login on the shop's dashboard and a database built for more than one
   server.

@@ -6067,3 +6067,106 @@ html:has(body.app-page) {
 .lives .live-row:first-of-type {
   border-top: 1px solid var(--line);
 }
+
+/* ---------------- shops: a grid of logos ---------------- */
+
+.slogo {
+  display: grid;
+  place-items: center;
+  width: 64px;
+  height: 64px;
+  flex: none;
+  border-radius: 16px;
+}
+.slogo svg {
+  width: 100%;
+  height: 100%;
+}
+.slogo.sm {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+}
+.shopg {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 12px;
+  margin: 18px 0;
+}
+.shopg-t {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  color: inherit;
+  text-decoration: none;
+}
+.shopg-t:hover {
+  border-color: currentColor;
+}
+.shopg-t small {
+  color: var(--mute);
+  font-size: 12.5px;
+  line-height: 1.35;
+}
+.shopg.mini {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.shopg.mini .slogo {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+}
+.hm3-shops .shopg {
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  margin-bottom: 0;
+}
+.hm3-shops .shopg-t {
+  padding: 12px;
+}
+.hm3-shops .shopg-t small {
+  display: none;
+}
+.shops-main .shopg {
+  margin: 24px 0;
+}
+.capf {
+  margin: 12px 0;
+}
+.capi {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.capi i {
+  font-style: normal;
+  font-weight: 600;
+}
+.capform {
+  gap: 4px;
+}
+.shopl {
+  list-style: none;
+  margin: 18px 0;
+  padding: 0;
+  border-top: 1px solid var(--line);
+}
+.shopl li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--line);
+}
+.shopl b,
+.shopl small {
+  display: block;
+}
+.shopl small {
+  color: var(--mute);
+}

@@ -1,11 +1,16 @@
 import {
   config,
+  findShop,
   internalFetch,
+  JUNIPER,
   money,
   newId,
   paypal,
+  RECEIPT_CARD,
+  RECEIPT_CARD_MIME,
+  RECEIPT_CARD_URI,
   randomToken,
-  STORE_RESOURCE,
+  type Shop,
   type VisaTokenClaims,
 } from "@courier/shared";
 import type { AuthInfo } from "@modelcontextprotocol/sdk/server/auth/types.js";
@@ -23,9 +28,8 @@ import {
   type TicketClaims,
   withFreshTicket,
 } from "./auth.ts";
-import { CATALOG, findItem, type Item, searchCatalog } from "./catalog.ts";
+import { findItem, type Item, searchCatalog, shelfOf } from "./catalog.ts";
 import { db, type Order, type Reservation } from "./db.ts";
-import { RECEIPT_CARD, RECEIPT_CARD_MIME, RECEIPT_CARD_URI } from "./receipt-card.ts";
 import { receiptUrl } from "./views.ts";
 
 /* ---------------- helpers ---------------- */
@@ -53,9 +57,10 @@ function itemView(item: Item) {
 }
 
 /** The receipt details a chat app can show, and the link for the person to open. */
-function receiptView(order: Order, remaining: string | null = null) {
+function receiptView(order: Order, shop: Shop, remaining: string | null = null) {
   return {
     order_id: order.id,
+    shop: shop.name,
     status: order.status,
     paid_with: order.paidWith ?? null,
     total: (order.totalCents / 100).toFixed(2),
@@ -116,6 +121,7 @@ function budgetPass(connectionId: string, hint: z.infer<typeof TICKET_HINT>, pri
  */
 async function getTicket(
   server: McpServer,
+  shop: Shop,
   claims: AgentClaims,
   items: Item[],
   hint: z.infer<typeof TICKET_HINT>,
@@ -157,7 +163,7 @@ async function getTicket(
       if (answer.action === "accept" && typeof answer.content?.budget === "number") {
         const ticket = await askCourier({ budgetFromPerson: answer.content.budget });
         if (ticket.issued) {
-          const ready = await withFreshTicket(claims);
+          const ready = await withFreshTicket(claims, shop);
           if (hasTicket(ready)) return { claims: ready };
         }
         url = ticket.url;
@@ -170,7 +176,7 @@ async function getTicket(
         { timeout: TICKET_TIMEOUT_MS },
       );
       for (const until = Date.now() + TICKET_TIMEOUT_MS; opened.action === "accept" && Date.now() < until; ) {
-        const ready = await withFreshTicket(claims);
+        const ready = await withFreshTicket(claims, shop);
         if (hasTicket(ready)) return { claims: ready };
         await new Promise((r) => setTimeout(r, 1500));
       }
@@ -200,19 +206,19 @@ async function getTicket(
   };
 }
 
-function requireScope(claims: AgentClaims, scope: string): CallToolResult | null {
+function requireScope(claims: AgentClaims, scope: string, shop: Shop): CallToolResult | null {
   if (claims.scope.split(" ").includes(scope)) return null;
   return text(
-    `This errand doesn't include "${scope}". Ask the user to start a new errand for ${config.store.name} that allows it.`,
+    `This errand doesn't include "${scope}". Ask the user to start a new errand for ${shop.name} that allows it.`,
     { error: "insufficient_scope", required_scope: scope },
     true,
   );
 }
 
-function stamp(visaId: string, kind: string, title: string, detail = ""): void {
-  void internalFetch(`${config.courier.url}/internal/stamps`, { body: { visaId, kind, title, detail } }).catch(
-    () => {},
-  );
+function stamp(visaId: string, shop: Shop, kind: string, title: string, detail = ""): void {
+  void internalFetch(`${config.courier.url}/internal/stamps`, {
+    body: { visaId, kind, title, detail, merchantName: shop.name },
+  }).catch(() => {});
 }
 
 /* ---------------- abuse detection: per-visa rate limit ---------------- */
@@ -276,6 +282,7 @@ interface SpendDecision {
 }
 
 function spendCheck(
+  shop: Shop,
   claims: VisaTokenClaims,
   action: "reserve" | "checkout",
   items: Item[],
@@ -286,7 +293,7 @@ function spendCheck(
     body: {
       visaId: claims.visa.id,
       sub: claims.sub,
-      resource: STORE_RESOURCE,
+      resource: shop.resource,
       action,
       items: items.map((i) => ({
         title: `${i.title} (${i.artist})`,
@@ -401,6 +408,7 @@ async function askInChat(
  */
 async function checkWithPerson(
   server: McpServer,
+  shop: Shop,
   claims: VisaTokenClaims,
   action: "reserve" | "checkout",
   items: Item[],
@@ -408,23 +416,24 @@ async function checkWithPerson(
   approvalId?: string,
   note?: string,
 ): Promise<SpendDecision> {
-  const first = await spendCheck(claims, action, items, approvalId, note);
+  const first = await spendCheck(shop, claims, action, items, approvalId, note);
   if (first.decision !== "ask_human") return first;
   const answer = await askInChat(server, claims, first, what, action === "checkout" && claims.visa.autopay === true);
   if (answer === "denied")
     return { decision: "deny", code: "human_denied", reason: "The user said no in the Courier dialog." };
-  if (answer === "approved") return spendCheck(claims, action, items, first.approvalId, note);
+  if (answer === "approved") return spendCheck(shop, claims, action, items, first.approvalId, note);
   return first;
 }
 
 /* ---------------- the MCP server ---------------- */
 
-export function createMcpServer(): McpServer {
+export function createMcpServer(shop: Shop): McpServer {
+  const shelf = shelfOf(shop.slug);
   const server = new McpServer(
-    { name: "juniper-records", title: `Courier · ${config.store.name}`, version: "0.1.0" },
+    { name: shop.slug, title: `Courier · ${shop.name}`, version: "0.1.0" },
     {
       instructions:
-        `${config.store.name} is an independent record shop, reached through the user's Courier: a PayPal-verified errand ` +
+        `${shop.name} (${shop.sells}) is a shop reached through the user's Courier: a PayPal-verified errand ` +
         `pass with a spending limit. Courier, not you, enforces the limit, so don't refuse or warn on your own: call ` +
         `hold_item or request_purchase. If Courier needs the user, it asks them itself (a dialog in this app, or a link to ` +
         `give them; then retry with the approval_id). request_purchase only spends inside the limits the user set in Courier: if they ` +
@@ -456,7 +465,7 @@ export function createMcpServer(): McpServer {
     async (_args, extra) => {
       const claims = auth(extra);
       for (const until = Date.now() + WAIT_MS; Date.now() < until; await new Promise((r) => setTimeout(r, 2000))) {
-        if (hasTicket(await withFreshTicket(claims))) {
+        if (hasTicket(await withFreshTicket(claims, shop))) {
           return text("The budget is set. Call the tool you were using again now, without asking the user.", {
             ready: true,
           });
@@ -522,7 +531,7 @@ export function createMcpServer(): McpServer {
     async (_args, extra) => {
       const claims = auth(extra);
       const view = {
-        merchant: config.store.name,
+        merchant: shop.name,
         agent: agentName(claims),
         sent_by: { pseudonym: claims.sub, verified_human: claims.human.verified, age_range: claims.human.age_range },
         visa: claims.visa,
@@ -531,11 +540,11 @@ export function createMcpServer(): McpServer {
       };
       if (!hasTicket(claims))
         return text(
-          `Connected to ${config.store.name} as ${agentName(claims)}, for a verified human (${claims.sub}). No budget yet: it can browse, but holding or buying needs one.`,
+          `Connected to ${shop.name} as ${agentName(claims)}, for a verified human (${claims.sub}). No budget yet: it can browse, but holding or buying needs one.`,
           view,
         );
       return text(
-        `Visa ${claims.visa.id} for ${config.store.name}, issued by a verified human (${claims.sub}).\n` +
+        `Visa ${claims.visa.id} for ${shop.name}, issued by a verified human (${claims.sub}).\n` +
           `Allowed: ${view.scopes.join(", ")}. Budget ${claims.visa.spend_limit.value} ${claims.visa.spend_limit.currency}, ` +
           `max ${claims.visa.per_purchase_limit.value} per purchase.${claims.visa.intent ? ` Intent: "${claims.visa.intent}".` : ""}`,
         view,
@@ -547,14 +556,11 @@ export function createMcpServer(): McpServer {
     "search_catalog",
     {
       title: "Search the catalog",
-      description:
-        "Search Juniper Records by keywords (artist, title, genre, format). Optionally filter by max price in USD and category.",
+      description: `Search ${shop.name} by keywords. Optionally filter by max price in USD and category.`,
       inputSchema: {
-        query: z
-          .string()
-          .describe("Keywords, e.g. 'jazz vinyl' or 'cleaning kit'. Use an empty string to list everything."),
+        query: z.string().describe("Keywords. Use an empty string to list everything."),
         max_price: z.number().positive().optional().describe("Maximum price in USD."),
-        category: z.enum(["vinyl", "cassette", "cd", "accessory", "merch", "turntable"]).optional(),
+        category: z.string().max(40).optional(),
       },
       annotations: { readOnlyHint: true },
     },
@@ -562,14 +568,18 @@ export function createMcpServer(): McpServer {
       const claims = auth(extra);
       const limited = await rateLimited(claims);
       if (limited) return limited;
-      const denied = requireScope(claims, "store:browse");
+      const denied = requireScope(claims, "store:browse", shop);
       if (denied) return denied;
-      const results = searchCatalog(query, max_price ? Math.round(max_price * 100) : undefined, category).slice(0, 8);
+      const results = searchCatalog(query, max_price ? Math.round(max_price * 100) : undefined, category, shelf).slice(
+        0,
+        8,
+      );
       if (claims.visa)
         stamp(
           claims.visa.id,
+          shop,
           "browse",
-          `Browsed ${config.store.name}`,
+          `Browsed ${shop.name}`,
           query ? `Searched "${query}"` : "Listed the catalog",
         );
       if (!results.length) return text(`No items match "${query}".`, { results: [] });
@@ -597,9 +607,9 @@ export function createMcpServer(): McpServer {
       const claims = auth(extra);
       const limited = await rateLimited(claims);
       if (limited) return limited;
-      const denied = requireScope(claims, "store:browse");
+      const denied = requireScope(claims, "store:browse", shop);
       if (denied) return denied;
-      const item = findItem(item_id);
+      const item = shelf.find((i) => i.id === item_id);
       if (!item) return text(`No item with id ${item_id}.`, undefined, true);
       return text(
         `${item.title} by ${item.artist}: ${item.blurb} ${money(item.priceCents)}, ${item.stock} in stock.`,
@@ -627,16 +637,17 @@ export function createMcpServer(): McpServer {
       const asked = auth(extra);
       const limited = await rateLimited(asked);
       if (limited) return limited;
-      const denied = requireScope(asked, "store:reserve");
+      const denied = requireScope(asked, "store:reserve", shop);
       if (denied) return denied;
-      const item = findItem(item_id);
+      const item = shelf.find((i) => i.id === item_id);
       if (!item) return text(`No item with id ${item_id}.`, undefined, true);
       if (item.stock <= 0) return text(`${item.title} is sold out.`, undefined, true);
-      const got = hasTicket(asked) ? { claims: asked } : await getTicket(server, asked, [item], ticket_hint);
+      const got = hasTicket(asked) ? { claims: asked } : await getTicket(server, shop, asked, [item], ticket_hint);
       if ("stop" in got) return got.stop;
       const claims = got.claims;
       const decision = await checkWithPerson(
         server,
+        shop,
         claims,
         "reserve",
         [item],
@@ -682,27 +693,27 @@ export function createMcpServer(): McpServer {
       const asked = auth(extra);
       const limited = await rateLimited(asked);
       if (limited) return limited;
-      const denied = requireScope(asked, "store:buy");
+      const denied = requireScope(asked, "store:buy", shop);
       if (denied) return denied;
 
       const items: Item[] = [];
       for (const id of item_ids) {
-        const item = findItem(id);
-        if (!item) return text(`No item with id ${id}.`, undefined, true);
+        const item = shelf.find((i) => i.id === id);
+        if (!item) return text(`No item with id ${id} at ${shop.name}.`, undefined, true);
         if (item.stock <= 0) return text(`${item.title} is sold out.`, undefined, true);
         items.push(item);
       }
       const totalCents = items.reduce((s, i) => s + i.priceCents, 0);
-      const got = hasTicket(asked) ? { claims: asked } : await getTicket(server, asked, items, ticket_hint);
+      const got = hasTicket(asked) ? { claims: asked } : await getTicket(server, shop, asked, items, ticket_hint);
       if ("stop" in got) return got.stop;
       const claims = got.claims;
 
       const what = `${items.map((i) => i.title).join(", ")} for ${money(totalCents)}`;
-      const decision = await checkWithPerson(server, claims, "checkout", items, what, approval_id, note);
+      const decision = await checkWithPerson(server, shop, claims, "checkout", items, what, approval_id, note);
       const blocked = decisionText(decision, `a ${money(totalCents)} purchase`);
       if (blocked) return blocked;
 
-      const description = `${config.store.name}: ${items.map((i) => i.title).join(", ")}`;
+      const description = `${shop.name}: ${items.map((i) => i.title).join(", ")}`;
       const lines = items.map((i) => ({
         name: `${i.title} (${i.artist})`,
         unitCents: i.priceCents,
@@ -727,7 +738,7 @@ export function createMcpServer(): McpServer {
               visaId: claims.visa.id,
               holdId: decision.holdId,
               description,
-              brandName: config.store.name,
+              brandName: shop.name,
               items: lines,
             },
           },
@@ -738,6 +749,7 @@ export function createMcpServer(): McpServer {
         if (charged?.status === "COMPLETED") {
           const paid: Order = {
             id: charged.orderId,
+            shop: shop.slug,
             visaId: claims.visa.id,
             sub: claims.sub,
             agent: claims.visa.agent,
@@ -759,7 +771,7 @@ export function createMcpServer(): McpServer {
             `Bought ${items.map((i) => i.title).join(", ")} for ${money(totalCents)}, paid with the user's saved PayPal ` +
               `(order ${paid.id}).${remaining ? ` $${remaining} left on this errand.` : ""}\n` +
               `Give the user their receipt: ${receiptUrl(paid)}`,
-            { ...receiptView(paid, remaining), intent_check: decision.intent ?? null },
+            { ...receiptView(paid, shop, remaining), intent_check: decision.intent ?? null },
           );
         }
         savedFailed = true;
@@ -774,7 +786,7 @@ export function createMcpServer(): McpServer {
           customId: claims.visa.id, // the visa travels with the payment as evidence
           returnUrl: `${config.store.url}/paypal/return`,
           cancelUrl: `${config.store.url}/paypal/cancel`,
-          brandName: config.store.name,
+          brandName: shop.name,
           items: lines,
         },
         `checkout-${decision.holdId}`,
@@ -782,6 +794,7 @@ export function createMcpServer(): McpServer {
 
       const record: Order = {
         id: order.id,
+        shop: shop.slug,
         visaId: claims.visa.id,
         sub: claims.sub,
         agent: claims.visa.agent,
@@ -804,7 +817,11 @@ export function createMcpServer(): McpServer {
           `PayPal checkout created for ${money(totalCents)} (${items.map((i) => i.title).join(", ")}).\n` +
           `Ask the user to approve the payment here: ${order.approveUrl}\n` +
           `Then call order_status with order_id="${order.id}".`,
-        { ...receiptView(record, remaining), approve_url: order.approveUrl, intent_check: decision.intent ?? null },
+        {
+          ...receiptView(record, shop, remaining),
+          approve_url: order.approveUrl,
+          intent_check: decision.intent ?? null,
+        },
       );
     },
   );
@@ -830,7 +847,7 @@ export function createMcpServer(): McpServer {
           : settled.status === "awaiting_approval"
             ? `Waiting for the user to approve the payment: ${settled.approveUrl}`
             : `Order ${settled.status}.`,
-        receiptView(settled),
+        receiptView(settled, shop),
       );
     },
   );
@@ -864,7 +881,7 @@ export async function settleOrder(orderId: string): Promise<Order> {
 /** A paid order: take the stock and commit the spend to the visa (idempotent on Courier side, one per hold). */
 async function fulfil(order: Order): Promise<void> {
   for (const line of order.items) {
-    const item = CATALOG.find((i) => i.id === line.id);
+    const item = findItem(line.id);
     if (item) item.stock = Math.max(0, item.stock - line.quantity);
   }
   // Idempotent on Courier side (one commit per hold).
@@ -876,6 +893,7 @@ async function fulfil(order: Order): Promise<void> {
       amountCents: order.totalCents,
       summary: `Bought ${order.items.map((i) => i.title).join(", ")}`,
       paidWith: order.paidWith,
+      merchantName: (findShop(order.shop) ?? JUNIPER).name,
     },
   }).catch((e) => console.warn("[store] commit failed", e.message));
 }

@@ -1,4 +1,18 @@
-import { config, courierVars, html, LOGO, money, PP, paypalButton, portrait, raw, type Visa } from "@courier/shared";
+import {
+  COURIER_RESOURCE,
+  config,
+  courierVars,
+  html,
+  LOGO,
+  money,
+  PP,
+  paypalButton,
+  portrait,
+  raw,
+  SHOPS,
+  shopLogo,
+  type Visa,
+} from "@courier/shared";
 import { type Approval, type AuthRequest, type Courier, db, type Human, listCouriers, type Merchant } from "../db.ts";
 import { courierForClient, cpage, DEMO_CLIENT_PREFIX, lookForAgent } from "./shared.ts";
 
@@ -15,7 +29,7 @@ export function connectPage(request: AuthRequest, merchant: Merchant): string {
     html`<main class="solo"><div class="solo-card">
       <div class="pair-ids">${portrait(look)}<span class="dash"></span>${SHOP_TILE}</div>
       <h1 class="big">${request.ticket ? html`Sign in to set <span class="hfit" data-fit>${look.name}’s</span> budget.` : html`Connect <span class="hfit" data-fit>${look.name}</span> to Courier.`}</h1>
-      <p class="lead">PayPal checks there’s a real person behind it. ${request.ticket ? "" : "Nothing gets bought. "}${merchant.name} only learns that, never who you are.</p>
+      <p class="lead">PayPal checks there’s a real person behind it. ${request.ticket ? "" : "Nothing gets bought. "}${merchant.resource === COURIER_RESOURCE ? "Shops only learn" : `${merchant.name} only learns`} that, never who you are.</p>
       <div class="acts-row">${paypalButton(`/auth/paypal/start?req=${request.id}`)}</div>
     </div></main>`,
   );
@@ -23,6 +37,7 @@ export function connectPage(request: AuthRequest, merchant: Merchant): string {
 
 /** Connecting is one question. No ticket and no payment: those wait until the person wants something bought. */
 export function connectConsentPage(request: AuthRequest, human: Human): string {
+  if (request.resource === COURIER_RESOURCE) return connectCourierPage(request, human);
   const choice = courierChoice(human, request.clientId);
   const look = lookForAgent(human, request.clientId, request.clientName);
   const only = choice?.couriers.length === 1 ? choice.couriers[0] : undefined;
@@ -45,6 +60,40 @@ export function connectConsentPage(request: AuthRequest, human: Human): string {
               <h1 class="big">Connect ${request.clientName} as ${shown.name}.</h1>`
         }
         <p class="lead">${request.clientName} can look around ${config.store.name} as your courier. It can’t hold or buy anything until you give it a budget. Nothing is charged now.</p>
+        <div class="acts-row">
+          <button class="btn" type="submit" name="decision" value="approve">Connect</button>
+          <button class="btn ghost" type="submit" name="decision" value="deny">Not now</button>
+        </div>
+        <p class="fine" style="margin-top:18px"><a class="link" href="/auth/paypal/start?req=${request.id}">Use a different PayPal account</a></p>
+      </form>
+    </div></main>`,
+  );
+}
+
+/** Fields for the most Claude may start on its own. Empty or zero means it always asks. */
+export function capFields(human: Human) {
+  const dollars = (cents: number | undefined, fallback: number) => (cents === undefined ? fallback : cents / 100);
+  return html`<div class="wiz-fields capf">
+    <label class="fld"><span>Each errand, up to</span><span class="capi"><i>$</i><input class="inp" type="number" name="cap_errand" min="0" max="500" step="1" value="${dollars(human.cap?.perErrandCents, 50)}" aria-label="Most per errand, in dollars"></span></label>
+    <label class="fld"><span>In a day, up to</span><span class="capi"><i>$</i><input class="inp" type="number" name="cap_day" min="0" max="2000" step="1" value="${dollars(human.cap?.perDayCents, 100)}" aria-label="Most per day, in dollars"></span></label>
+  </div>`;
+}
+
+/** Connecting the one connector: every courier and shop in one yes, and the one number that decides when Claude asks. */
+function connectCourierPage(request: AuthRequest, human: Human): string {
+  return cpage(
+    `Connect ${request.clientName}`,
+    human,
+    html`<main class="solo"><div class="solo-card">
+      <form method="post" action="/consent/${request.id}">
+        <h1 class="big">Connect ${request.clientName} to Courier.</h1>
+        <p class="lead">It can send ${listCouriers(human.id)
+          .map((c) => c.name)
+          .join(", ")} to any of these. Nothing is charged now.</p>
+        <div class="shopg mini" aria-hidden="true">${SHOPS.map((s) => shopLogo(s))}</div>
+        <h2 class="sec-t">When can Claude start an errand without asking?</h2>
+        ${capFields(human)}
+        <p class="fine">Under these it starts right away, using the budget you name in the chat. Above them you confirm first. Put 0 to always be asked. Change it any time in Settings.</p>
         <div class="acts-row">
           <button class="btn" type="submit" name="decision" value="approve">Connect</button>
           <button class="btn ghost" type="submit" name="decision" value="deny">Not now</button>
@@ -102,11 +151,12 @@ export function consentPage(
   error?: string,
   startAtPay = false,
 ): string {
-  const look = lookForAgent(human, request.clientId, request.clientName);
+  const look = lookForAgent(human, request.clientId, request.ticket?.courierName ?? request.clientName);
   const isDemo = request.clientId.startsWith(DEMO_CLIENT_PREFIX);
   const intent = request.ticket?.intent ?? (isDemo ? "Jazz records for my dad" : "");
   const budget = request.ticket?.spendLimit ?? 60;
-  const choice = courierChoice(human, request.clientId);
+  const gateway = merchant.resource === COURIER_RESOURCE;
+  const choice = gateway ? null : courierChoice(human, request.clientId);
   const saved = Boolean(db.get("saved_paypal", human.id));
   const twoSteps = !saved && merchant.scopes.includes("store:buy");
   const who = choice ? "your courier" : look.name;
@@ -121,7 +171,7 @@ export function consentPage(
         <div class="wiz-body">
           ${choice ? "" : html`<div class="wiz-who">${portrait(look)}<span>${look.name}</span></div>`}
           <h1 class="big">Set a budget.</h1>
-          <p class="lead">For ${merchant.name}${intent ? html`: ${intent}` : ""}.</p>
+          <p class="lead">${gateway ? (intent ? html`For ${intent}, at any shop.` : "At any shop.") : html`For ${merchant.name}${intent ? html`: ${intent}` : ""}.`}</p>
           ${error ? html`<p class="err">${error}</p>` : ""}
           ${
             choice
@@ -133,7 +183,7 @@ export function consentPage(
               : ""
           }
           <label class="budget"><span class="sr">Budget, in dollars</span><i>$</i><input type="number" name="spend_limit" min="1" max="500" step="1" value="${budget}" required autofocus aria-label="Budget, in dollars"></label>
-          <p class="fine">${who === "your courier" ? "Your courier" : who} can’t spend more than this, and asks you about anything off the errand. ${merchant.name} sees a verified person, not your name.</p>
+          <p class="fine">${who === "your courier" ? "Your courier" : who} can’t spend more than this, and asks you about anything off the errand. ${gateway ? "Shops see" : `${merchant.name} sees`} a verified person, not your name.</p>
           ${saved ? html`<input type="hidden" name="autopay" value="1"><p class="fine">Pays with your saved ${PP}.</p>` : ""}
         </div>
         <div class="wiz-foot">

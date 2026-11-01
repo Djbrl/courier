@@ -10,7 +10,7 @@ import {
   type RawHtml,
   raw,
 } from "@courier/shared";
-import { type Courier, courierIdNo, type Human, listCouriers } from "../db.ts";
+import { type Connection, type Courier, courierIdNo, db, type Human, listCouriers } from "../db.ts";
 
 /* ---------------- looks ---------------- */
 
@@ -34,9 +34,18 @@ export function courierLook(human: Human | null, courier?: Courier | null): Cour
   return { name: "Juno", color: "cobalt", model: "Claude", idNo: human ? courierIdNo(human.id, "Juno") : "CR-0000-JU" };
 }
 
+/** A Claude connected through any connector. Through the Courier connector it can send every courier. */
+export const hasClaude = (human: Human) =>
+  db.list<Connection>("connections", (c) => c.humanId === human.id && c.status === "active", 1).length > 0;
+
+/** The courier an errand went out as: by the name on the errand, since one Claude can send any of them. */
+export function courierForErrand(humanId: string, clientId: string, agentName: string): Courier | undefined {
+  return listCouriers(humanId).find((c) => c.name === agentName) ?? courierForClient(humanId, clientId);
+}
+
 /** How an agent holding a visa looks: the person's courier when it's one of theirs, otherwise a plain ink ID. */
 export function lookForAgent(human: Human, clientId: string, agentName: string): CourierLook {
-  const courier = courierForClient(human.id, clientId);
+  const courier = courierForErrand(human.id, clientId, agentName);
   if (courier) return courierLook(human, courier);
   return {
     name: agentName,

@@ -3,8 +3,9 @@ import {
   type ConnectionTokenClaims,
   config,
   internalFetch,
+  JUNIPER,
   newId,
-  STORE_RESOURCE,
+  type Shop,
   type VisaTokenClaims,
 } from "@courier/shared";
 import type { AuthInfo } from "@modelcontextprotocol/sdk/server/auth/types.js";
@@ -25,11 +26,11 @@ export const PRM_PATH = "/.well-known/oauth-protected-resource/mcp";
 export const PRM_URL = `${config.store.url}${PRM_PATH}`;
 
 export const protectedResourceMetadata = {
-  resource: STORE_RESOURCE,
+  resource: JUNIPER.resource,
   authorization_servers: [config.courier.url],
   scopes_supported: [...ALL_SCOPES],
   bearer_methods_supported: ["header"],
-  resource_name: `${config.store.name} (Courier demo merchant)`,
+  resource_name: `${JUNIPER.name} (Courier demo merchant)`,
   resource_documentation: `${config.courier.url}/developers`,
 };
 
@@ -117,14 +118,18 @@ async function connectionStatus(id: string): Promise<ConnectionStatus | null> {
   }
 }
 
-const verifyToken = (token: string) =>
-  jwtVerify(token, jwks, { issuer: config.courier.url, audience: STORE_RESOURCE, typ: "at+jwt" });
+const verifyToken = (token: string, shop: Shop) =>
+  jwtVerify(token, jwks, { issuer: config.courier.url, audience: shop.resource, typ: "at+jwt" });
 
 /** The current ticket, verified like any Courier token and checked to belong to this Claude. */
-async function ticketFor(base: ConnectionTokenClaims, ticketToken: string | null): Promise<VisaTokenClaims | null> {
+async function ticketFor(
+  base: ConnectionTokenClaims,
+  ticketToken: string | null,
+  shop: Shop,
+): Promise<VisaTokenClaims | null> {
   if (!ticketToken) return null;
   try {
-    const ticket = (await verifyToken(ticketToken)).payload as unknown as VisaTokenClaims;
+    const ticket = (await verifyToken(ticketToken, shop)).payload as unknown as VisaTokenClaims;
     return ticket.sub === base.sub && ticket.client_id === base.client_id ? ticket : null;
   } catch (error) {
     console.warn("[store] ticket didn't verify", (error as Error).message);
@@ -133,12 +138,12 @@ async function ticketFor(base: ConnectionTokenClaims, ticketToken: string | null
 }
 
 /** Looks again for a ticket on this connection, for when the person has just written one mid-call. */
-export async function withFreshTicket(claims: AgentClaims): Promise<AgentClaims> {
+export async function withFreshTicket(claims: AgentClaims, shop: Shop): Promise<AgentClaims> {
   const id = claims.connection!.id;
   connectionCache.delete(id);
   const standing = await connectionStatus(id);
   const ticket =
-    standing?.status === "active" ? await ticketFor(claims as ConnectionTokenClaims, standing.ticketToken) : null;
+    standing?.status === "active" ? await ticketFor(claims as ConnectionTokenClaims, standing.ticketToken, shop) : null;
   return ticket ? { ...claims, ...ticket, visa: ticket.visa, connection: claims.connection } : claims;
 }
 
@@ -158,91 +163,94 @@ function describeSource(req: Request): string {
   return String(req.header("x-demo-source") ?? req.header("user-agent") ?? "unknown").slice(0, 80);
 }
 
-export async function requireVisa(req: Request, res: Response, next: NextFunction): Promise<void> {
-  const header = req.header("authorization") ?? "";
-  const match = header.match(/^Bearer\s+(.+)$/i);
-  const source = describeSource(req);
-  if (!match) {
-    logRequest({ outcome: "blocked", reason: "No ID presented", status: 401, source });
-    challenge(res, 401);
-    return;
-  }
+/** The bearer check for one shop's MCP server. A token for another shop's address doesn't verify here. */
+export const requireVisa =
+  (shop: Shop) =>
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    const header = req.header("authorization") ?? "";
+    const match = header.match(/^Bearer\s+(.+)$/i);
+    const source = describeSource(req);
+    if (!match) {
+      logRequest({ outcome: "blocked", reason: "No ID presented", status: 401, source });
+      challenge(res, 401);
+      return;
+    }
 
-  let token: VisaTokenClaims | ConnectionTokenClaims;
-  try {
-    token = (await verifyToken(match[1])).payload as unknown as VisaTokenClaims | ConnectionTokenClaims;
-  } catch (error) {
-    const message = (error as Error).message;
-    const reason = /audience|aud/i.test(message)
-      ? "Visa issued for a different merchant"
-      : /exp/i.test(message)
-        ? "Expired visa token"
-        : /signature|JWKS|no applicable key|kid/i.test(message)
-          ? "Forged ID (bad signature)"
-          : `Invalid token: ${message}`;
-    logRequest({ outcome: "blocked", reason, status: 401, source });
-    challenge(res, 401, "invalid_token", reason);
-    return;
-  }
-
-  let claims: AgentClaims;
-  if ("connection" in token) {
-    const standing = await connectionStatus(token.connection.id);
-    if (standing?.status !== "active") {
-      const reason = `Connection ${standing?.status ?? "unknown"}`;
-      logRequest({ outcome: "blocked", reason, status: 401, sub: token.sub, agent: token.connection.agent, source });
+    let token: VisaTokenClaims | ConnectionTokenClaims;
+    try {
+      token = (await verifyToken(match[1], shop)).payload as unknown as VisaTokenClaims | ConnectionTokenClaims;
+    } catch (error) {
+      const message = (error as Error).message;
+      const reason = /audience|aud/i.test(message)
+        ? "Visa issued for a different merchant"
+        : /exp/i.test(message)
+          ? "Expired visa token"
+          : /signature|JWKS|no applicable key|kid/i.test(message)
+            ? "Forged ID (bad signature)"
+            : `Invalid token: ${message}`;
+      logRequest({ outcome: "blocked", reason, status: 401, source });
       challenge(res, 401, "invalid_token", reason);
       return;
     }
-    const ticket = await ticketFor(token, standing.ticketToken);
-    claims = {
-      ...token,
-      ...ticket,
-      visa: ticket?.visa ?? null,
-      connection: { id: token.connection.id, agent: standing.agent },
+
+    let claims: AgentClaims;
+    if ("connection" in token) {
+      const standing = await connectionStatus(token.connection.id);
+      if (standing?.status !== "active") {
+        const reason = `Connection ${standing?.status ?? "unknown"}`;
+        logRequest({ outcome: "blocked", reason, status: 401, sub: token.sub, agent: token.connection.agent, source });
+        challenge(res, 401, "invalid_token", reason);
+        return;
+      }
+      const ticket = await ticketFor(token, standing.ticketToken, shop);
+      claims = {
+        ...token,
+        ...ticket,
+        visa: ticket?.visa ?? null,
+        connection: { id: token.connection.id, agent: standing.agent },
+      };
+    } else {
+      const status = await visaStatus(token.visa.id);
+      if (status?.status !== "active") {
+        const reason = `Visa ${status?.status ?? "unknown"}`;
+        logRequest({
+          outcome: "blocked",
+          reason,
+          status: 401,
+          sub: token.sub,
+          visaId: token.visa.id,
+          agent: token.visa.agent,
+          source,
+        });
+        challenge(res, 401, "invalid_token", reason);
+        return;
+      }
+      claims = { ...token, connection: null };
+    }
+
+    const auth: AuthInfo = {
+      token: match[1],
+      clientId: claims.client_id,
+      scopes: claims.scope.split(" ").filter(Boolean),
+      expiresAt: claims.exp,
+      resource: new URL(shop.resource),
+      extra: { claims },
     };
-  } else {
-    const status = await visaStatus(token.visa.id);
-    if (status?.status !== "active") {
-      const reason = `Visa ${status?.status ?? "unknown"}`;
-      logRequest({
-        outcome: "blocked",
-        reason,
-        status: 401,
-        sub: token.sub,
-        visaId: token.visa.id,
-        agent: token.visa.agent,
-        source,
-      });
-      challenge(res, 401, "invalid_token", reason);
-      return;
-    }
-    claims = { ...token, connection: null };
-  }
-
-  const auth: AuthInfo = {
-    token: match[1],
-    clientId: claims.client_id,
-    scopes: claims.scope.split(" ").filter(Boolean),
-    expiresAt: claims.exp,
-    resource: new URL(STORE_RESOURCE),
-    extra: { claims },
+    (req as Request & { auth?: AuthInfo }).auth = auth;
+    const method = typeof req.body?.method === "string" ? req.body.method : null;
+    const tool = method === "tools/call" ? req.body?.params?.name : null;
+    logRequest({
+      outcome: "accepted",
+      reason: tool ? `tools/call ${tool}` : (method ?? "request"),
+      status: 200,
+      sub: claims.sub,
+      visaId: claims.visa?.id ?? null,
+      agent: agentName(claims),
+      method,
+      source,
+    });
+    next();
   };
-  (req as Request & { auth?: AuthInfo }).auth = auth;
-  const method = typeof req.body?.method === "string" ? req.body.method : null;
-  const tool = method === "tools/call" ? req.body?.params?.name : null;
-  logRequest({
-    outcome: "accepted",
-    reason: tool ? `tools/call ${tool}` : (method ?? "request"),
-    status: 200,
-    sub: claims.sub,
-    visaId: claims.visa?.id ?? null,
-    agent: agentName(claims),
-    method,
-    source,
-  });
-  next();
-}
 
 export function claimsOf(authInfo: AuthInfo | undefined): AgentClaims {
   const claims = (authInfo?.extra as { claims?: AgentClaims } | undefined)?.claims;

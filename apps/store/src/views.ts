@@ -5,7 +5,9 @@ import {
   config,
   courierLayout,
   courierVars,
+  findShop,
   html,
+  JUNIPER,
   LOGO,
   money,
   PP,
@@ -13,34 +15,39 @@ import {
   portrait,
   type RawHtml,
   raw,
-  STORE_RESOURCE,
+  SHOPS,
+  type Shop,
+  shopLogo,
   timeAgo,
 } from "@courier/shared";
 import type { RequestLogEntry } from "./auth.ts";
 import { findItem, type Item } from "./catalog.ts";
 import type { Order } from "./db.ts";
 
-/* Juniper Records' own pages, in the Courier design system: the shop front humans see, and what the shop sees of couriers. */
+/* The shops' pages, in the Courier design system: the logo grid, each shop's shelf, and what shops see of couriers. */
 
-const JR_MARK = raw(
-  '<span class="jr-mark" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="currentColor"/><circle cx="12" cy="12" r="6.5" fill="none" stroke="#fff" stroke-width="1" opacity=".5"/><circle cx="12" cy="12" r="2.6" fill="#fff"/></svg></span>',
-);
+const NOT_REAL = "Demo shops with made-up names and products, not affiliated with any real brand.";
 
-function storeNav(view: "shop" | "merchant"): RawHtml {
+function storeNav(view: "shop" | "merchant", shop?: Shop): RawHtml {
   return html`<header class="cnav jr-nav">
-    <a class="jr" href="/">${JR_MARK}<div><b>${config.store.name}</b><small>Independent record shop</small></div></a>
+    <a class="jr" href="${shop ? `/${shop.slug}` : "/"}">${shop ? shopLogo(shop, "sm") : LOGO}<div><b>${shop?.name ?? "Courier shops"}</b><small>${shop?.sells ?? "Shops that welcome couriers"}</small></div></a>
     <nav>
-      <a class="hide-sm" href="/" ${view === "shop" ? raw('aria-current="page"') : ""}>Shop</a>
-      <a class="hide-sm" href="/merchant" ${view === "merchant" ? raw('aria-current="page"') : ""}>What the shop sees</a>
-      <a class="welcome" href="${config.courier.url}">${LOGO}<span>couriers welcome</span></a>
+      <a class="hide-sm" href="/" ${view === "shop" && !shop ? raw('aria-current="page"') : ""}>All shops</a>
+      <a class="hide-sm" href="/merchant" ${view === "merchant" ? raw('aria-current="page"') : ""}>What shops see</a>
+      ${shop ? html`<a class="welcome" href="${config.courier.url}">${LOGO}<span>couriers welcome</span></a>` : ""}
     </nav>
   </header>`;
 }
 
-function storePage(title: string, view: "shop" | "merchant", body: RawHtml, opts: { scripts?: string[] } = {}): string {
+function storePage(
+  title: string,
+  view: "shop" | "merchant",
+  body: RawHtml,
+  opts: { scripts?: string[]; shop?: Shop } = {},
+): string {
   return courierLayout({
-    title: `${title} · ${config.store.name}`,
-    nav: storeNav(view),
+    title: `${title} · ${opts.shop?.name ?? "Courier shops"}`,
+    nav: storeNav(view, opts.shop),
     body,
     bodyClass: `jr-page jr-${view}`,
     scripts: opts.scripts,
@@ -65,40 +72,42 @@ function cover(i: Item): RawHtml {
   return raw(`<svg viewBox="0 0 100 100" aria-hidden="true">${k === "vinyl" ? disc + sleeve : disc}</svg>`);
 }
 
-const FILTERS: [string, string][] = [
-  ["", "Everything"],
-  ["vinyl", "Vinyl"],
-  ["cassette", "Cassettes"],
-  ["cd", "CDs"],
-  ["accessory", "Accessories"],
-  ["turntable", "Turntables"],
-  ["merch", "Merch"],
-];
-
-export function storefront(items: Item[], category = ""): string {
-  const shown = items.filter((i) => !category || i.category === category);
+/** Every shop as a logo: the front door people recognise. */
+export function shopGrid(): string {
   return storePage(
-    "Shop",
+    "All shops",
+    "shop",
+    html`<main class="jr-main shops-main">
+      <h1 class="big">Send your courier to any of these.</h1>
+      <p class="lead">Ask Claude for what you want. Your courier shops with a verified ID and the budget you give it.</p>
+      <nav class="shopg" aria-label="Shops">${SHOPS.map(
+        (s) => html`<a class="shopg-t" href="/${s.slug}">${shopLogo(s)}<b>${s.name}</b><small>${s.sells}</small></a>`,
+      )}</nav>
+      <p class="fine">${NOT_REAL}</p>
+    </main>`,
+  );
+}
+
+const labelFor = (category: string) => category[0]!.toUpperCase() + category.slice(1);
+
+export function storefront(shop: Shop, items: Item[], category = ""): string {
+  const shown = items.filter((i) => !category || i.category === category);
+  const categories = [...new Set(items.map((i) => i.category))];
+  return storePage(
+    shop.name,
     "shop",
     html`<main class="jr-main">
-      <section class="jr-hero">
-        <div>
-          <h1 class="big">Records worth keeping.</h1>
-          <p class="lead">Browse here, or send your courier. It shops with a verified ID and the limits you set.</p>
-        </div>
-        <div class="jr-lane"><span class="lbl">Courier connector</span><code class="copy inp code sm">${STORE_RESOURCE}</code></div>
-      </section>
-      <nav class="shopf-filters jr-filters" aria-label="Filter">${FILTERS.map(
-        ([c, label]) => html`<a href="${c ? `/?c=${c}` : "/"}" aria-pressed="${c === category}">${label}</a>`,
-      )}</nav>
-      <section class="jr-shelf" aria-label="Catalog">${shown.map(
-        (i) => html`<article class="itm" style="--h:${i.hue}">
-          <div class="cv">${cover(i)}</div>
-          <h4>${i.title}</h4><p>${i.artist}</p>
-          <div class="row2"><span class="pr">${money(i.priceCents)}</span><span class="genre">${i.genre}</span></div>
-        </article>`,
-      )}</section>
+      <nav class="shopf-filters jr-filters" aria-label="Filter">
+        <a href="/${shop.slug}" aria-pressed="${!category}">Everything</a>
+        ${categories.map((c) => html`<a href="/${shop.slug}?c=${encodeURIComponent(c)}" aria-pressed="${c === category}">${labelFor(c)}</a>`)}
+      </nav>
+      <ul class="shopl" aria-label="What’s here">${shown.map(
+        (i) =>
+          html`<li><div><b>${i.title}</b><small>${i.artist} · ${i.blurb}</small></div><span class="pr">${money(i.priceCents)}</span></li>`,
+      )}</ul>
+      <p class="fine">Ask Claude to send your courier here. ${NOT_REAL}</p>
     </main>`,
+    { shop },
   );
 }
 
@@ -109,7 +118,7 @@ export function paymentResult(order: Order | undefined, ok: boolean, message: st
         if(!popup){document.getElementById("back").hidden=false;document.getElementById("closing").hidden=true}})()</script>`
     : "";
   return courierLayout({
-    title: `${ok ? "Paid" : "Not paid"} · ${config.store.name}`,
+    title: `${ok ? "Paid" : "Not paid"} · ${(findShop(order?.shop) ?? JUNIPER).name}`,
     bodyClass: "store-pay",
     body: html`<main class="solo"><div class="solo-card">
       <div class="big-ic" aria-hidden="true" style="background:${ok ? "var(--hivis)" : "var(--paper)"}">${ok ? "✓" : "↩"}</div>
@@ -119,7 +128,7 @@ export function paymentResult(order: Order | undefined, ok: boolean, message: st
         order
           ? html`<div class="paycard" style="margin-top:26px;text-align:left">
             ${order.items.map((i) => html`<div class="li"><span>${i.title}</span><span>${money(i.priceCents)}</span></div>`)}
-            <div class="tot" style="margin-bottom:0"><span>${config.store.name}</span><b>${money(order.totalCents)}</b></div></div>
+            <div class="tot" style="margin-bottom:0"><span>${(findShop(order.shop) ?? JUNIPER).name}</span><b>${money(order.totalCents)}</b></div></div>
             ${ok && order.receiptKey ? html`<p class="fine" style="margin-top:14px"><a class="link" href="${receiptUrl(order)}">See your receipt</a></p>` : ""}`
           : ""
       }
@@ -141,6 +150,7 @@ export function receiptPage(order: Order | undefined): string {
       html`<main class="solo"><div class="solo-card"><h1 class="big">No receipt here.</h1><p class="lead">This link doesn’t match an order.</p></div></main>`,
     );
   const paid = order.status === "paid";
+  const shop = findShop(order.shop) ?? JUNIPER;
   return storePage(
     paid ? "Receipt" : STATUS[order.status],
     "shop",
@@ -156,6 +166,7 @@ export function receiptPage(order: Order | undefined): string {
       <dl class="rcpt-facts">
         <dt>Total</dt><dd><b>${money(order.totalCents)}</b></dd>
         <dt>Paid with</dt><dd>${order.paidWith === "saved_paypal" ? html`Saved ${PP}` : PP}</dd>
+        <dt>Shop</dt><dd>${shop.name}</dd>
         <dt>Bought by</dt><dd>${order.agent}, a verified courier</dd>
         <dt>Order</dt><dd><code>${order.id}</code></dd>
         ${order.paidAt ? html`<dt>When</dt><dd><time datetime="${order.paidAt}">${new Date(order.paidAt).toUTCString()}</time></dd>` : ""}
@@ -166,6 +177,7 @@ export function receiptPage(order: Order | undefined): string {
       </div>
       <p class="fine" style="margin-top:18px">${paypalNote()}</p>
     </article></main>`,
+    { shop },
   );
 }
 
@@ -193,7 +205,7 @@ export function merchantDashboard(orders: Order[], requests: RequestLogEntry[]):
   const revenue = orders.filter((o) => o.status === "paid").reduce((s, o) => s + o.totalCents, 0);
   const couriers = new Set(accepted.map((r) => r.sub).filter(Boolean));
   return storePage(
-    "What the shop sees",
+    "What shops see",
     "merchant",
     html`<main class="jr-main mdash" data-autorefresh="6000">
       <header class="md-h">
@@ -236,7 +248,7 @@ function orderRow(order: Order): RawHtml {
   return html`<article class="mo">
     <div class="mo-top">
       <span class="mo-who cc" style="${courierVars(colorFor(order.agent))}">${portrait({ name: order.agent, color: colorFor(order.agent) })}<span><b>${order.agent}</b><small>${CK}${PP}</small></span></span>
-      <div class="mo-what"><b>${order.items.map((i) => i.title).join(", ")}</b><small>${timeAgo(order.createdAt)} · ${visa.intent ? html`for “${visa.intent}”` : "no purpose given"}</small></div>
+      <div class="mo-what"><b>${order.items.map((i) => i.title).join(", ")}</b><small>${(findShop(order.shop) ?? JUNIPER).name} · ${timeAgo(order.createdAt)} · ${visa.intent ? html`for “${visa.intent}”` : "no purpose given"}</small></div>
       <span class="pr">${money(order.totalCents)}</span>
       <span class="st ${order.status === "paid" ? "active" : order.status === "awaiting_approval" ? "pending_bond" : "revoked"}"><i></i>${STATUS[order.status]}</span>
     </div>

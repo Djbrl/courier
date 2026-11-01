@@ -66,7 +66,7 @@ if (!pub(config.courier.url) || !pub(config.store.url)) {
       ? ok("Courier is reachable through its tunnel, in sandbox mode")
       : bad(`Courier answers but in ${body.paypal} mode`, "Restart with npm run dev");
 
-  const prm = await get(`${config.store.url}/.well-known/oauth-protected-resource/mcp`);
+  const prm = await get(`${config.courier.url}/.well-known/oauth-protected-resource/mcp`);
   const meta = prm?.ok ? ((await prm.json()) as { authorization_servers?: string[] }) : null;
   if (!meta)
     bad(
@@ -75,10 +75,10 @@ if (!pub(config.courier.url) || !pub(config.store.url)) {
     );
   else
     meta.authorization_servers?.includes(config.courier.url)
-      ? ok("The shop points connectors at this Courier")
+      ? ok("The connector points at this Courier")
       : bad("The shop's metadata names a different Courier URL", "Restart both apps after changing .env");
 
-  const mcp = await get(`${config.store.url}/mcp`, {
+  const mcp = await get(`${config.courier.url}/mcp`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: "{}",
@@ -111,9 +111,9 @@ Paste these
   PayPal sandbox app → Log in with PayPal → Return URL:
       ${config.courier.url}/auth/paypal/callback
   Claude → Settings → Connectors → Add custom connector (name it Courier):
-      ${config.store.url}/mcp
+      ${config.courier.url}/mcp
   Claude Code:
-      claude mcp add --transport http courier ${config.store.url}/mcp
+      claude mcp add --transport http courier ${config.courier.url}/mcp
   What the shop sees:
       ${config.store.url}/merchant
 `);

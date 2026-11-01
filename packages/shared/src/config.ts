@@ -74,6 +74,9 @@ export const config = {
 /** The canonical resource URI of the demo MCP server (RFC 8707 audience). */
 export const STORE_RESOURCE = `${config.store.url}/mcp`;
 
+/** The one connector a person adds to Claude. It reaches every shop. */
+export const COURIER_RESOURCE = `${config.courier.url}/mcp`;
+
 fs.mkdirSync(config.dataDir, { recursive: true });
 
 if (

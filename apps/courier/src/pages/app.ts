@@ -2,6 +2,7 @@ import {
   ARROW,
   avatar,
   CK,
+  COURIER_RESOURCE,
   config,
   courierLayout,
   courierVars,
@@ -14,13 +15,15 @@ import {
   portrait,
   type RawHtml,
   raw,
-  STORE_RESOURCE,
+  SHOPS,
+  shopLogo,
   timeAgo,
   VERIFIED,
   type Visa,
 } from "@courier/shared";
 import type { Approval, Connection, Courier, Human, Stamp } from "../db.ts";
-import { backBy, courierForClient, courierLook, demoClientId, dots, firstName, lookForAgent, short } from "./shared.ts";
+import { capFields } from "./consent.ts";
+import { backBy, courierForErrand, courierLook, demoClientId, dots, firstName, lookForAgent, short } from "./shared.ts";
 
 /* ---------------- the app: shell ---------------- */
 
@@ -40,12 +43,14 @@ export interface Desk {
   connections: Connection[];
 }
 
-type View = "home" | "errands" | "couriers" | "settings";
+type View = "home" | "errands" | "shops" | "couriers" | "settings";
 
 const ICON: Record<View, string> = {
   home: '<svg viewBox="0 0 20 20"><path d="M3 9.2 10 3l7 6.2V17h-5v-4.5H8V17H3z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>',
   errands:
     '<svg viewBox="0 0 20 20"><rect x="4" y="2.8" width="12" height="14.4" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M7 7h6M7 10h6M7 13h3.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>',
+  shops:
+    '<svg viewBox="0 0 20 20"><rect x="3" y="3" width="6" height="6" rx="1.6" fill="none" stroke="currentColor" stroke-width="1.8"/><rect x="11" y="3" width="6" height="6" rx="1.6" fill="none" stroke="currentColor" stroke-width="1.8"/><rect x="3" y="11" width="6" height="6" rx="1.6" fill="none" stroke="currentColor" stroke-width="1.8"/><rect x="11" y="11" width="6" height="6" rx="1.6" fill="none" stroke="currentColor" stroke-width="1.8"/></svg>',
   couriers:
     '<svg viewBox="0 0 20 20"><rect x="2.5" y="4" width="15" height="12" rx="2.4" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="7.3" cy="9.3" r="1.9" fill="currentColor"/><path d="M11 9h4M11 12h3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>',
   settings:
@@ -74,6 +79,7 @@ export function shell(
         <nav aria-label="Courier">
           ${item("home", "Home", "/app", d.approvals.length, true)}
           ${item("errands", "Errands", "/app/errands", out)}
+          ${item("shops", "Shops", "/app/shops")}
           ${item("couriers", "Couriers", "/app/couriers")}
           ${item("settings", "Settings", "/app/settings")}
         </nav>
@@ -95,13 +101,28 @@ function meter(v: VisaView, cls = ""): RawHtml {
   return html`<span class="meter ${cls}" role="img" aria-label="${money(v.spentCents)} spent of ${money(v.spendLimitCents)}"><i style="width:${spentPct.toFixed(1)}%"></i><i class="held" style="width:${heldPct.toFixed(1)}%"></i></span>`;
 }
 
+/** The shops an errand has been to, or where it may go if it hasn't been anywhere yet. */
+function whereTo(d: Desk, v: VisaView): string {
+  const been = [...new Set(d.stamps.filter((s) => s.visaId === v.id).map((s) => s.merchantName))];
+  const shops = been.filter((name) => name !== "any shop");
+  return shops.length ? shops.join(", ") : v.merchantName;
+}
+
+/** Every shop as a logo. */
+function shopGrid(): RawHtml {
+  return html`<nav class="shopg" aria-label="Shops">${SHOPS.map(
+    (s) =>
+      html`<a class="shopg-t" href="${config.store.url}/${s.slug}" target="_blank" rel="noopener">${shopLogo(s)}<b>${s.name}</b><small>${s.sells}</small></a>`,
+  )}</nav>`;
+}
+
 /** One errand as a row: who, what for, where, the last step, and the money. */
 function errandRow(d: Desk, v: VisaView, selected = false): RawHtml {
   const look = lookForAgent(d.human, v.clientId, v.agentName);
   const step = lastStep(d, v.id);
   return html`<a class="erow cc ${isOut(v) ? "" : "off"}" style="${courierVars(look.color)}" href="/app/errands?e=${v.id}" ${selected ? raw('aria-current="true"') : ""}>
     ${portrait(look)}
-    <span class="et"><b>${v.intent || "Anything within the limits"}</b><small>${look.name} · ${v.merchantName}${step ? html` · <span class="ls">${step.title}</span>` : ""}</small></span>
+    <span class="et"><b>${v.intent || "Anything within the limits"}</b><small>${look.name} · ${whereTo(d, v)}${step ? html` · <span class="ls">${step.title}</span>` : ""}</small></span>
     <span class="em">${meter(v, "sm")}<small><b>${short(v.spentCents)}</b> of ${short(v.spendLimitCents)}</small></span>
   </a>`;
 }
@@ -115,7 +136,7 @@ export function homePage(d: Desk, opts: { welcome: boolean; courierId?: string }
   const name = firstName(human);
   const out = visas.filter(isOut);
   const selErrand = out.find((v) => v.clientId === demoClientId(sel.id));
-  const inClaude = couriers.filter((c) => c.clientId);
+  const inClaude = d.connections.length > 0;
   const visaById = new Map(visas.map((v) => [v.id, v]));
 
   const lead = approvals.length
@@ -123,7 +144,7 @@ export function homePage(d: Desk, opts: { welcome: boolean; courierId?: string }
     : out.length
       ? `${out.length === 1 ? "One errand" : `${out.length} errands`} out right now.`
       : `${look.name} is ready when you are.`;
-  const ask = `Find me a jazz record under $40 at ${config.store.name}.`;
+  const ask = `Get me a burger on Floor Dash. I have about $15.`;
   const spent = visas.reduce((sum, v) => sum + v.spentCents, 0);
   const others = couriers.filter((c) => c.id !== sel.id).slice(0, 2);
   const steps = d.stamps.slice(0, 4);
@@ -160,7 +181,7 @@ export function homePage(d: Desk, opts: { welcome: boolean; courierId?: string }
           ${
             out.length
               ? html`<div class="rows">${out.slice(0, 2).map((v) => errandRow(d, v))}</div>`
-              : sel.clientId
+              : inClaude
                 ? html`<p><b>Send ${look.name} on an errand.</b> In any Claude chat, ask:</p><code class="copy inp code sm">${ask}</code>`
                 : html`<p><b>Connect Claude</b> and just ask it to buy something.</p><a class="btn" href="/start/claude?c=${sel.id}">Connect Claude</a>`
           }
@@ -168,10 +189,11 @@ export function homePage(d: Desk, opts: { welcome: boolean; courierId?: string }
         </div>
         <ul class="hm2-st">
           <li class="ok">${CK}<span>Verified PayPal account<small>${paypal.mode === "simulated" ? "Simulated" : "Sandbox"}</small></span></li>
-          <li class="${inClaude.length ? "ok" : "todo"}"><i aria-hidden="true"></i><span>${inClaude.length ? `In Claude: ${inClaude.map((c) => c.name).join(", ")}` : "Not in Claude yet"}</span></li>
+          <li class="${inClaude ? "ok" : "todo"}"><i aria-hidden="true"></i><span>${inClaude ? `In Claude: ${couriers.map((c) => c.name).join(", ")}` : "Not in Claude yet"}</span></li>
         </ul>
       </section>
     </div>
+    <section class="panel hm3-shops"><div class="hm3-act-h"><h2 class="sec-t">Shops</h2><a class="link fine" href="/app/shops">All shops</a></div>${shopGrid()}</section>
     <section class="panel hm2-s hm3-act">
       <div class="hm3-act-h"><h2 class="sec-t">Activity</h2>${visas.length ? html`<a class="link fine" href="/app/errands">All errands</a>` : ""}</div>
       ${
@@ -234,7 +256,7 @@ export function errandsPage(d: Desk, opts: { tab?: string; errandId?: string }):
 
 function errandDetail(d: Desk, v: VisaView): RawHtml {
   const look = lookForAgent(d.human, v.clientId, v.agentName);
-  const courier = courierForClient(d.human.id, v.clientId);
+  const courier = courierForErrand(d.human.id, v.clientId, v.agentName);
   const steps = d.stamps.filter((s) => s.visaId === v.id);
   const isRoom = courier && v.clientId === demoClientId(courier.id);
   const ended =
@@ -242,7 +264,7 @@ function errandDetail(d: Desk, v: VisaView): RawHtml {
     (v.effective === "expired" ? `Back since ${backBy(v.expiresAt)}` : `Ended ${timeAgo(v.revokedAt ?? v.expiresAt)}`);
   return html`<section class="panel dtl cc" style="${courierVars(look.color)}" aria-label="Errand">
     <header class="dtl-h">
-      ${portrait(look)}<div class="dtl-t"><b>${v.merchantName}</b><small>${look.name} · ${isRoom ? "errand room" : "Claude"} · ${isOut(v) ? `back by ${backBy(v.expiresAt)}` : ended}${v.autopay?.status === "on" ? " · pays with saved PayPal" : ""}${v.bond ? ` · $${(v.bond.amountCents / 100).toFixed(0)} bond ${v.bond.status}` : ""}</small></div>
+      ${portrait(look)}<div class="dtl-t"><b>${whereTo(d, v)}</b><small>${look.name} · ${isRoom ? "errand room" : "Claude"} · ${isOut(v) ? `back by ${backBy(v.expiresAt)}` : ended}${v.autopay?.status === "on" ? " · pays with saved PayPal" : ""}${v.bond ? ` · $${(v.bond.amountCents / 100).toFixed(0)} bond ${v.bond.status}` : ""}</small></div>
       <span class="dtl-a">
         ${isOut(v) && isRoom ? html`<a class="btn sm" href="/errand?c=${courier!.id}">Open${ARROW}</a>` : ""}
         ${isOut(v) ? html`<form method="post" action="/app/visas/${v.id}/revoke"><input type="hidden" name="next" value="/app/errands?e=${v.id}"><button class="btn danger sm" type="submit">Call back</button></form>` : ""}
@@ -267,12 +289,25 @@ function errandDetail(d: Desk, v: VisaView): RawHtml {
   </section>`;
 }
 
+/* ---------------- shops ---------------- */
+
+export function shopsPage(d: Desk): string {
+  const main = html`<div class="sett shops-main">
+    <h1 class="big">Shops</h1>
+    <p class="lead">Name one in Claude, with a budget: “Get me a burger on Floor Dash, I have about $15.”</p>
+    ${shopGrid()}
+    <p class="fine">Demo shops with made-up names and products, not affiliated with any real brand. No real money moves.</p>
+  </div>`;
+  return shell("Shops", d, "shops", main);
+}
+
 /* ---------------- couriers: list + detail ---------------- */
 
 export function couriersPage(d: Desk, opts: { courierId?: string }): string {
   const sel = d.couriers.find((c) => c.id === opts.courierId) ?? d.couriers[0]!;
   const look = courierLook(d.human, sel);
-  const mine = d.visas.filter((v) => courierForClient(d.human.id, v.clientId)?.id === sel.id);
+  const mine = d.visas.filter((v) => courierForErrand(d.human.id, v.clientId, v.agentName)?.id === sel.id);
+  const inClaude = d.connections.length > 0;
   const spent = mine.reduce((sum, v) => sum + v.spentCents, 0);
   const out = mine.filter(isOut);
   const roomErrand = out.find((v) => v.clientId === demoClientId(sel.id));
@@ -284,7 +319,7 @@ export function couriersPage(d: Desk, opts: { courierId?: string }): string {
           c,
         ) => html`<a class="erow cc" style="${courierVars(c.color)}" href="/app/couriers?c=${c.id}" ${c.id === sel.id ? raw('aria-current="true"') : ""}>
           ${portrait(c)}<span class="et"><b>${c.name}</b><small class="mono">${c.idNo}</small></span>
-          <span class="where-pill ${c.clientId ? "on" : ""}">${c.clientId ? "In Claude" : "Not in Claude"}</span></a>`,
+          <span class="where-pill ${inClaude ? "on" : ""}">${inClaude ? "In Claude" : "Not in Claude"}</span></a>`,
       )}</div>
       <div class="panel-f"><a class="btn sm" href="/start/courier?new=1">New courier${ARROW}</a></div>
     </section>
@@ -299,8 +334,8 @@ export function couriersPage(d: Desk, opts: { courierId?: string }): string {
           <div><dt>Spent</dt><dd>${short(spent)}</dd></div>
           <div><dt>Since</dt><dd>${new Date(sel.createdAt).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}</dd></div>
         </dl>
-        <div class="live-row ${sel.clientId ? "on" : ""}"><i aria-hidden="true"></i><div><b>Claude</b><small>${sel.clientId ? "Connected. Ask for something in any chat." : "Not connected yet"}</small></div>
-          <a class="btn ${sel.clientId ? "ghost" : ""} sm" href="${sel.clientId ? "/app/settings" : `/start/claude?c=${sel.id}`}">${sel.clientId ? "Manage" : "Connect"}</a></div>
+        <div class="live-row ${inClaude ? "on" : ""}"><i aria-hidden="true"></i><div><b>Claude</b><small>${inClaude ? `Connected. Say “send ${sel.name}” in any chat.` : "Not connected yet"}</small></div>
+          <a class="btn ${inClaude ? "ghost" : ""} sm" href="${inClaude ? "/app/settings" : `/start/claude?c=${sel.id}`}">${inClaude ? "Manage" : "Connect"}</a></div>
         <div class="live-row on"><i aria-hidden="true"></i><div><b>Errand room</b><small>The demo, on this website</small></div>
           <a class="btn ghost sm" href="${roomErrand ? `/errand?c=${sel.id}` : `/errand/new?c=${sel.id}`}">Open</a></div>
       </div>
@@ -316,7 +351,7 @@ const row = (title: unknown, sub: unknown, action?: unknown) =>
 
 export function settingsPage(d: Desk, savedEmail?: string | null | false): string {
   const first = d.couriers[0]!;
-  const inClaude = d.couriers.filter((c) => c.clientId);
+  const inClaude = d.connections.length > 0;
   const hasSaved = savedEmail !== undefined;
   const main = html`<div class="sett">
     <h1 class="big">Settings</h1>
@@ -335,7 +370,7 @@ export function settingsPage(d: Desk, savedEmail?: string | null | false): strin
       )}
       ${row(
         "Claude",
-        inClaude.length ? `Connected as ${inClaude.map((c) => c.name).join(", ")}.` : "Not connected yet.",
+        inClaude ? `Connected. It can send ${d.couriers.map((c) => c.name).join(", ")}.` : "Not connected yet.",
         d.connections.length
           ? html`${d.connections.map(
               (c) =>
@@ -343,8 +378,14 @@ export function settingsPage(d: Desk, savedEmail?: string | null | false): strin
             )}`
           : html`<a class="btn sm" href="/start/claude?c=${first.id}">Connect</a>`,
       )}
-      <div class="srow col"><div><b>Connector address</b></div><code class="copy inp code sm">${STORE_RESOURCE}</code></div>
-      ${row(config.store.name, "A record shop that welcomes couriers.", html`<a class="link fine" href="${config.store.url}" target="_blank" rel="noopener">Visit ↗</a>`)}
+      <div class="srow col"><div><b>Connector address</b></div><code class="copy inp code sm">${COURIER_RESOURCE}</code></div>
+    </div></section>
+    <section><h2 class="sec-t">When Claude can start an errand without asking</h2><div class="panel slist">
+      <form class="srow col capform" method="post" action="/app/settings/cap">
+        ${capFields(d.human)}
+        <p class="fine">Under these it starts right away, using the budget you name in the chat. Above them you confirm first. Put 0 to always be asked. It needs saved PayPal to work.${d.human.cap ? "" : " Not on yet: until you save this, Claude always asks."}</p>
+        <div><button class="btn sm" type="submit">Save</button></div>
+      </form>
     </div></section>
     <section><h2 class="sec-t">Account</h2><div class="panel slist">
       ${row(firstName(d.human) ?? "You", "Your name is never shared with shops.", html`<a class="btn ghost sm" href="/logout">Sign out</a>`)}
@@ -365,7 +406,7 @@ export function deleteAccountPage(d: Desk): string {
         <li>${out ? `${out === 1 ? "Your 1 errand" : `Your ${out} errands`} still out will be called back.` : "You have no errands out."} Any bond or saved PayPal is released.</li>
         <li>Any Claude connected to Courier loses access.</li>
       </ul>
-      <p class="fine">Receipts you already have keep working. ${config.store.name} keeps its own order records, which don't include your name, and PayPal keeps its own payment history.</p>
+      <p class="fine">Receipts you already have keep working. Shops keep their own order records, which don't include your name, and PayPal keeps its own payment history.</p>
       <form class="acts-row" method="post" action="/app/account/delete">
         <button class="btn danger" type="submit">Delete my account</button>
         <a class="btn ghost" href="/app/settings">Keep my account</a>

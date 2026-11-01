@@ -1,12 +1,13 @@
 import { createHmac } from "node:crypto";
 import {
   ALL_SCOPES,
+  COURIER_RESOURCE,
   type CourierColor,
   config,
   DocStore,
+  JUNIPER,
   newId,
   type Scope,
-  STORE_RESOURCE,
   type Visa,
 } from "@courier/shared";
 
@@ -22,14 +23,16 @@ export interface Human {
   accountType: string | null;
   /** First name the person gave their courier (or PayPal's display name, when shared). Never sent to merchants. */
   displayName?: string | null;
+  /** The most Claude may start on its own. Above this, or with none set, the person confirms the errand. */
+  cap?: { perErrandCents: number; perDayCents: number } | null;
   createdAt: string;
   lastLoginAt: string;
 }
 
 /**
- * A person's courier: a named agent identity. One courier per AI assistant: the demo one in the errand room has its
- * own OAuth client, and a person's own Claude is bound to a courier (by its OAuth client id) the first time it asks
- * for an errand. Each errand is then a separate visa, one shop, one budget, one return time.
+ * A person's courier: a named agent identity. Through the Courier connector, Claude can send any of them on any number
+ * of errands at once. Each errand is a separate visa: one budget, any shop, one return time. An older per-shop
+ * connection is bound to a single courier by its OAuth client id instead.
  */
 export interface Courier {
   /** Courier id. A person's first courier uses their human id. */
@@ -86,6 +89,8 @@ export interface AuthRequest {
   ticket?: {
     connectionId: string;
     humanId: string;
+    /** Who was asked for by name, through the Courier connector. */
+    courierName?: string;
     /** Prefilled from what the agent suggested. The person edits and sends it; it's never applied on its own. */
     intent: string;
     spendLimit: number;
@@ -183,14 +188,24 @@ export interface SavedPayPalRecord {
 
 /* ---------------- merchants ---------------- */
 
+/** What an OAuth client can connect to: the Courier connector, and the older direct connector for one shop. */
 export const MERCHANTS: Merchant[] = [
   {
-    resource: STORE_RESOURCE,
-    name: config.store.name,
+    resource: COURIER_RESOURCE,
+    name: "any shop",
     homepage: config.store.url,
     scopes: [...ALL_SCOPES],
   },
+  {
+    resource: JUNIPER.resource,
+    name: JUNIPER.name,
+    homepage: `${config.store.url}/juniper`,
+    scopes: [...ALL_SCOPES],
+  },
 ];
+
+/** An errand through the Courier connector: its budget works at every shop. */
+export const anyShop = (visa: Pick<Visa, "resource">) => visa.resource === COURIER_RESOURCE;
 
 export function normalizeResource(resource: string): string {
   try {
@@ -203,7 +218,7 @@ export function normalizeResource(resource: string): string {
 }
 
 export function findMerchant(resource: string | undefined): Merchant | undefined {
-  if (!resource) return MERCHANTS.length === 1 ? MERCHANTS[0] : undefined;
+  if (!resource) return MERCHANTS[0];
   const wanted = normalizeResource(resource);
   return MERCHANTS.find((m) => normalizeResource(m.resource) === wanted);
 }
@@ -259,9 +274,10 @@ export function saveCourier(courier: Courier): void {
 
 /** The name a connection acts under: its courier's, or the client's until it has one. */
 export function connectionAgent(connection: Connection): string {
-  return (
-    listCouriers(connection.humanId).find((c) => c.clientId === connection.clientId)?.name ?? connection.clientName
-  );
+  const couriers = listCouriers(connection.humanId);
+  const named =
+    connection.resource === COURIER_RESOURCE ? couriers[0] : couriers.find((c) => c.clientId === connection.clientId);
+  return named?.name ?? connection.clientName;
 }
 
 /** True when PayPal's age range says the person is under 18. */

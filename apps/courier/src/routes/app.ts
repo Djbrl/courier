@@ -44,10 +44,11 @@ import {
   errandsPage,
   homePage,
   settingsPage,
+  shopsPage,
   signInPage,
   startPage,
 } from "../pages/index.ts";
-import { decideApproval, revokeVisa, savedPayPal } from "../visas.ts";
+import { decideApproval, parseCap, revokeVisa, savedPayPal } from "../visas.ts";
 
 /**
  * The first-run experience behind "Try the demo": sign in with PayPal, meet your courier, connect Claude, then run a
@@ -265,6 +266,11 @@ appRouter.get("/app/errands", (req, res) => {
   if (d) res.send(errandsPage(d, { tab: q(req.query.tab), errandId: q(req.query.e) }));
 });
 
+appRouter.get("/app/shops", (req, res) => {
+  const d = requireDesk(req, res);
+  if (d) res.send(shopsPage(d));
+});
+
 appRouter.get("/app/couriers", (req, res) => {
   const d = requireDesk(req, res);
   if (d) res.send(couriersPage(d, { courierId: q(req.query.c) }));
@@ -273,6 +279,13 @@ appRouter.get("/app/couriers", (req, res) => {
 appRouter.get("/app/settings", (req, res) => {
   const d = requireDesk(req, res);
   if (d) res.send(settingsPage(d, savedPayPal(d.human.id)?.email));
+});
+
+appRouter.post("/app/settings/cap", (req, res) => {
+  const d = requireDesk(req, res);
+  if (!d) return;
+  db.put("humans", d.human.id, { ...d.human, cap: parseCap(req.body.cap_errand, req.body.cap_day) });
+  res.redirect(303, "/app/settings");
 });
 
 appRouter.get("/app/connections", (_req, res) => {
@@ -291,7 +304,7 @@ appRouter.get("/app/api/status", (req, res) => {
     couriers: d.couriers.map((c) => ({
       id: c.id,
       name: c.name,
-      claude: Boolean(c.clientId),
+      claude: Boolean(c.clientId) || d.connections.length > 0,
       clientName: c.clientName ?? null,
     })),
     errandsOut: d.visas.filter((v) => v.effective === "active").length,

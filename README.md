@@ -11,9 +11,9 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="MIT license"></a>
 </p>
 
-Courier gives your AI agent an ID. PayPal verifies you, you write the agent a ticket ("jazz records for my dad, $60 max,
-back by Sunday"), and it can shop anywhere that accepts Courier. Anything off the ticket comes back to you. Shops see a
-verified agent and its limits, not your name.
+Courier gives your AI agents an ID. PayPal verifies you, you add one connector to Claude, and then each thing you ask for
+is an errand with its own budget ("flowers on Floor Dash, about $20"), at any shop that accepts Courier. Limits are
+enforced in code. Shops see a verified agent and its limits, not your name.
 
 It's standard MCP and OAuth 2.1, so Claude connects with no custom client.
 
@@ -37,7 +37,7 @@ accounts are involved.
 | ------------------ | -------------------------------- |
 | Courier            | <http://localhost:4000>          |
 | Release the bots   | <http://localhost:4000/bots>     |
-| The shop           | <http://localhost:4100>          |
+| The shops          | <http://localhost:4100>          |
 | What the shop sees | <http://localhost:4100/merchant> |
 
 To use your own Claude, see [the live test](docs/live-test.md). The connector needs a public URL, which
@@ -82,7 +82,7 @@ flowchart LR
 
 ```text
 apps/courier      The authorization server, spend limits and your app
-apps/store        Juniper Records, a demo shop with an MCP server
+apps/store        Five demo shops, each with its own MCP server
 packages/shared   PayPal gateway, intent check, visa model, design system
 tests             Unit tests, an end-to-end run, an official MCP client check
 ```

@@ -1,5 +1,5 @@
 /**
- * Connects to the demo MCP server with the official MCP TypeScript SDK's own OAuth client (the same discovery,
+ * Connects to the Courier connector with the official MCP TypeScript SDK's own OAuth client (the same discovery,
  * dynamic registration, PKCE and resource-indicator logic third-party MCP clients use), then completes the
  * human part of the flow in a scripted browser.
  *
@@ -15,8 +15,8 @@ import type {
   OAuthTokens,
 } from "@modelcontextprotocol/sdk/shared/auth.js";
 
-const STORE = process.env.STORE_URL ?? "http://localhost:4100";
-const MCP = new URL(`${STORE}/mcp`);
+const COURIER = process.env.COURIER_URL ?? "http://localhost:4000";
+const MCP = new URL(`${COURIER}/mcp`);
 const REDIRECT = "http://localhost:4998/sdk-callback";
 
 class MemoryProvider implements OAuthClientProvider {
@@ -80,7 +80,7 @@ async function go(url: string, form?: Record<string, string | string[]>): Promis
 }
 
 const provider = new MemoryProvider();
-console.log("\nMCP SDK reference client → Juniper Records → Courier\n");
+console.log("\nMCP SDK reference client → Courier → the shops\n");
 
 // 1. Connect without a token: the SDK discovers Courier, registers, and asks us to send the user to /authorize.
 let client = new Client({ name: "sdk-check", version: "1" });
@@ -122,13 +122,13 @@ await transport.finishAuth(back.searchParams.get("code")!);
 client = new Client({ name: "sdk-check", version: "1" });
 await client.connect(transport);
 const who: any = await client.callTool({ name: "whoami", arguments: {} });
-assert.equal(who.structuredContent.sent_by.verified_human, true);
-assert.equal(who.structuredContent.visa, null);
+assert.ok(who.structuredContent.couriers.includes("Otto"));
+assert.deepEqual(who.structuredContent.errands, []);
 console.log(`  ✓ token exchanged by the SDK; whoami → ${who.content[0].text.split("\n")[0]}`);
 
-const search: any = await client.callTool({ name: "search_catalog", arguments: { query: "ambient" } });
+const search: any = await client.callTool({ name: "search_shop", arguments: { shop: "Amazoo", query: "novel" } });
 assert.ok(search.structuredContent.results.length > 0);
-console.log(`  ✓ search_catalog → ${search.structuredContent.results.length} results`);
+console.log(`  ✓ search_shop at Amazoo → ${search.structuredContent.results.length} results`);
 await client.close();
 console.log("\nThe official MCP SDK client works end to end against Courier.\n");
 process.exit(0);

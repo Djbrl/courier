@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Exposes local Courier and the demo shop on temporary public HTTPS URLs (Cloudflare quick tunnels, no account),
-# writes them into .env, and restarts the apps. Then add "$STORE_URL/mcp" as a custom connector in Claude.
+# writes them into .env, and restarts the apps. Then add "$COURIER_URL/mcp" as a custom connector in Claude.
 #
 #   ./scripts/tunnel.sh        (Ctrl+C stops tunnels and apps)
 set -euo pipefail
@@ -37,7 +37,7 @@ cat <<MSG
   Juniper Records: $STORE_URL
   Claude connector URL (Settings → Connectors → Add custom connector):
 
-      $STORE_URL/mcp
+      $COURIER_URL/mcp
 
   Note: these URLs change every time you run this script, and PayPal's Log in return URL must match
   $COURIER_URL/auth/paypal/callback when using real sandbox credentials.
