@@ -16,10 +16,10 @@ Courier.
 3. **You add Courier to Claude.** You paste one address into Claude's settings and click Connect. This only happens once,
    and nothing is bought or charged.
 4. **You ask.** "Find me a jazz record under $40 at Juniper Records and buy it."
-5. **You write Juno a ticket.** The first time, Claude gives you a link to a ticket filled in from what you asked. It's
-   like a note you'd give someone running an errand: "Jazz records for my dad, $60 in total, $40 at most per item, back by
-   Sunday." You can change anything before you send it.
-6. **You save PayPal once.** PayPal asks if this errand can pay without asking each time. You agree.
+5. **You set a budget.** Claude asks in the chat how much Juno can spend, say $60. Apps that can't show that question
+   give you a link instead. Juno works out the rest, and the errand ends by itself after 7 days.
+6. **You save PayPal once.** The first time, PayPal asks if Courier can pay without asking each time. You agree, and you
+   won't see that page again.
 7. **Juno does the shopping.** Back in Claude, Juno searches the shop, picks a record and pays. You don't see a checkout
    page, and you get a receipt you can open.
 8. **If something's off the ticket, Juno asks.** Say Juno wants to add a slipmat, which isn't a jazz record. A yes-or-no
@@ -45,14 +45,14 @@ end of this section.
 | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
 | PayPal sign-in      | Confirms you're real, and turns away unverified accounts and under-18s                                                                |
 | Couriers            | Your AI gets a name, a colour and an ID card, and you can have several                                                                |
-| Errand tickets      | Set what it's for, the total budget, the limit per item and when it ends                                                              |
+| Errand tickets      | Set one budget, in the chat or on a page. The courier works out the rest                                                              |
 | Works inside Claude | Connect once from the shop's address, with no ticket or payment, and browse straight away                                             |
 | Errand room         | Send a courier shopping from the Courier website, with no Claude setup                                                                |
 | Asking first        | Off-ticket purchases get a question in the chat, or a link if the chat app can't ask. One yes covers those items for the whole errand |
-| Pay without asking  | Save PayPal once for an errand, and purchases inside the limits just go through                                                       |
+| Pay without asking  | Save PayPal once on your account, and purchases inside a budget just go through                                                       |
 | Pay by link         | Without a saved PayPal, the courier sends a link and you approve the payment                                                          |
 | Receipts            | Every purchase comes with a page showing what was bought, what it cost and who bought it                                              |
-| Refundable bond     | An optional $5 hold on your PayPal. You get it back unless the shop reports abuse                                                     |
+| Refundable bond     | A $5 hold on your PayPal, returned unless the shop reports abuse. Built, but no longer offered on the ticket                          |
 | Call back           | Ends an errand within seconds                                                                                                         |
 | Errand history      | Shows every step a courier took and what it spent                                                                                     |
 

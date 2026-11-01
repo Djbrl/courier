@@ -132,6 +132,16 @@ async function ticketFor(base: ConnectionTokenClaims, ticketToken: string | null
   }
 }
 
+/** Looks again for a ticket on this connection, for when the person has just written one mid-call. */
+export async function withFreshTicket(claims: AgentClaims): Promise<AgentClaims> {
+  const id = claims.connection!.id;
+  connectionCache.delete(id);
+  const standing = await connectionStatus(id);
+  const ticket =
+    standing?.status === "active" ? await ticketFor(claims as ConnectionTokenClaims, standing.ticketToken) : null;
+  return ticket ? { ...claims, ...ticket, visa: ticket.visa, connection: claims.connection } : claims;
+}
+
 /* ---------------- bearer middleware ---------------- */
 
 function challenge(res: Response, status: number, error?: string, description?: string): void {

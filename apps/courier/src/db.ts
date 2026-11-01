@@ -174,11 +174,11 @@ export interface Report {
   at: string;
 }
 
-/** The person's saved PayPal for one errand (PayPal Vault payment token). Never leaves Courier. */
+/** The person's saved PayPal (PayPal Vault payment token), keyed by their id. Never leaves Courier. */
 export interface SavedPayPalRecord {
-  visaId: string;
-  setupTokenId: string;
-  vaultId: string | null;
+  humanId: string;
+  vaultId: string;
+  email?: string | null;
 }
 
 /* ---------------- merchants ---------------- */

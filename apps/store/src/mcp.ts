@@ -12,7 +12,17 @@ import type { AuthInfo } from "@modelcontextprotocol/sdk/server/auth/types.js";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import * as z from "zod";
-import { type AgentClaims, agentName, claimsOf, forgetVisa, hasTicket, logRequest, ownerId } from "./auth.ts";
+import {
+  type AgentClaims,
+  agentName,
+  claimsOf,
+  forgetVisa,
+  hasTicket,
+  logRequest,
+  ownerId,
+  type TicketClaims,
+  withFreshTicket,
+} from "./auth.ts";
 import { CATALOG, findItem, type Item, searchCatalog } from "./catalog.ts";
 import { db, type Order, type Reservation } from "./db.ts";
 import { RECEIPT_CARD, RECEIPT_CARD_MIME, RECEIPT_CARD_URI } from "./receipt-card.ts";
@@ -79,37 +89,96 @@ const TICKET_HINT = z
   .optional()
   .describe("Used to prefill a ticket if the user doesn't have one yet. The user reviews and edits it.");
 
-/** No errand yet: ask Courier for a link where the person writes the ticket, prefilled from what they asked for. */
-async function needsTicket(
+const TICKET_TIMEOUT_MS = 5 * 60 * 1000;
+
+/**
+ * No errand yet: get one without sending the person away if we can. They set a budget in a dialog in their chat app,
+ * which the model can't answer, and with PayPal already saved the purchase carries on in this same call. A first-time
+ * PayPal approval opens in the browser while this call waits. Clients that can't show dialogs get a link instead.
+ */
+async function getTicket(
+  server: McpServer,
   claims: AgentClaims,
   items: Item[],
   hint: z.infer<typeof TICKET_HINT>,
-): Promise<CallToolResult> {
-  const { url } = await internalFetch<{ url: string }>(
-    `${config.courier.url}/internal/connections/${claims.connection!.id}/ticket`,
-    {
-      body: {
-        purpose: hint?.purpose,
-        maxPerItem: hint?.max_per_item,
-        maxTotal: hint?.max_total,
-        price: Math.max(...items.map((i) => i.priceCents)) / 100,
+): Promise<{ claims: TicketClaims } | { stop: CallToolResult }> {
+  const agent = agentName(claims);
+  const price = Math.ceil(items.reduce((sum, i) => sum + i.priceCents, 0) / 100);
+  const askCourier = (extra: object) =>
+    internalFetch<{ url?: string; issued?: boolean }>(
+      `${config.courier.url}/internal/connections/${claims.connection!.id}/ticket`,
+      { body: { purpose: hint?.purpose, maxPerItem: hint?.max_per_item, maxTotal: hint?.max_total, price, ...extra } },
+    );
+  const caps = server.server.getClientCapabilities()?.elicitation as { form?: object; url?: object } | undefined;
+
+  let url: string | undefined;
+  try {
+    if (caps && (caps.form || !caps.url)) {
+      const answer = await server.server.elicitInput(
+        {
+          mode: "form",
+          message: `Courier: ${agent} wants ${items.map((i) => i.title).join(", ")} for $${price}. What's the most it can spend on this errand?`,
+          requestedSchema: {
+            type: "object",
+            properties: {
+              budget: {
+                type: "integer",
+                title: "Budget, in dollars",
+                minimum: 1,
+                maximum: 500,
+                default: Math.min(500, Math.max(price, hint?.max_total ?? 60)),
+              },
+            },
+            required: ["budget"],
+          },
+        },
+        { timeout: TICKET_TIMEOUT_MS },
+      );
+      if (answer.action === "accept" && typeof answer.content?.budget === "number") {
+        const ticket = await askCourier({ budgetFromPerson: answer.content.budget });
+        if (ticket.issued) {
+          const ready = await withFreshTicket(claims);
+          if (hasTicket(ready)) return { claims: ready };
+        }
+        url = ticket.url;
+      }
+    }
+    url ??= (await askCourier({})).url!;
+    if (caps?.url) {
+      const opened = await server.server.elicitInput(
+        { mode: "url", message: `Courier: finish setting ${agent}'s budget.`, url, elicitationId: randomToken(12) },
+        { timeout: TICKET_TIMEOUT_MS },
+      );
+      for (const until = Date.now() + TICKET_TIMEOUT_MS; opened.action === "accept" && Date.now() < until; ) {
+        const ready = await withFreshTicket(claims);
+        if (hasTicket(ready)) return { claims: ready };
+        await new Promise((r) => setTimeout(r, 1500));
+      }
+    }
+  } catch (error) {
+    console.warn("[store] in-chat ticket failed", (error as Error).message);
+    url ??= (await askCourier({})).url!;
+  }
+  return {
+    stop: text(
+      `${agent} needs a budget from the user before it can hold or buy anything.\n` +
+        `Give the user this link in one line and stop: ${url}\n` +
+        `When they say it's done, call the same tool again.`,
+      {
+        decision: "needs_ticket",
+        ticket_url: url,
+        agent,
+        items: items.map((i) => ({ ...itemView(i), hue: i.hue })),
+        total: price.toFixed(2),
       },
-    },
-  );
-  return text(
-    `${agentName(claims)} needs a ticket from the user before it can hold or buy anything.
-` +
-      `Give the user this link in one line and stop: ${url}
-` +
-      `When they say it's done, call the same tool again.`,
-    { decision: "needs_ticket", ticket_url: url },
-  );
+    ),
+  };
 }
 
 function requireScope(claims: AgentClaims, scope: string): CallToolResult | null {
   if (claims.scope.split(" ").includes(scope)) return null;
   return text(
-    `This ticket doesn't include "${scope}". Ask the user to write a new ticket for ${config.store.name} that allows it.`,
+    `This errand doesn't include "${scope}". Ask the user to start a new errand for ${config.store.name} that allows it.`,
     { error: "insufficient_scope", required_scope: scope },
     true,
   );
@@ -334,13 +403,13 @@ export function createMcpServer(): McpServer {
         `pass with a spending limit and a stated purpose. Courier, not you, decides what fits the errand. If the user asks ` +
         `for something that seems outside their errand, do not refuse or warn on your own: call hold_item or request_purchase ` +
         `anyway. Courier either allows it, or asks the user itself (a dialog in this app, or a link to give them; then retry ` +
-        `with the approval_id). request_purchase only spends inside the limits the user set on their Courier ticket: if they ` +
+        `with the approval_id). request_purchase only spends inside the limits the user set in Courier: if they ` +
         `saved PayPal there, it pays straight away and returns a receipt; otherwise it returns a PayPal link for them to ` +
-        `pay (sandbox, no real money). Browsing works without a ticket; if there's no ticket yet, hold_item and ` +
-        `request_purchase return a link for the user to write one: share it in one line and stop, passing ticket_hint ` +
-        `with what they asked for, then retry when they say it's done. After a purchase, always give the user the ` +
+        `pay (sandbox, no real money). Browsing works without a budget; if there's none yet, pass ticket_hint with what ` +
+        `they asked for: hold_item and request_purchase ask the user for a budget themselves, or return a link to share in ` +
+        `one line, then retry when they say it's done. After a purchase, always give the user the ` +
         `receipt_url so they can see it. Keep it quick: when the user wants something, call request_purchase straight away; ` +
-        `don't hold it first, and don't ask the user to confirm before calling (their ticket and Courier already did). Use ` +
+        `don't hold it first, and don't ask the user to confirm before calling (their budget and Courier already did). Use ` +
         `hold_item only when the user asks to put something aside. If Courier gives you an approval link, share it in one ` +
         `line and stop; retry with the approval_id when the user says they answered.`,
     },
@@ -377,7 +446,7 @@ export function createMcpServer(): McpServer {
       };
       if (!hasTicket(claims))
         return text(
-          `Connected to ${config.store.name} as ${agentName(claims)}, for a verified human (${claims.sub}). No ticket yet: it can browse, but holding or buying needs one.`,
+          `Connected to ${config.store.name} as ${agentName(claims)}, for a verified human (${claims.sub}). No budget yet: it can browse, but holding or buying needs one.`,
           view,
         );
       return text(
@@ -470,15 +539,17 @@ export function createMcpServer(): McpServer {
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
     async ({ item_id, approval_id, ticket_hint }, extra) => {
-      const claims = auth(extra);
-      const limited = await rateLimited(claims);
+      const asked = auth(extra);
+      const limited = await rateLimited(asked);
       if (limited) return limited;
-      const denied = requireScope(claims, "store:reserve");
+      const denied = requireScope(asked, "store:reserve");
       if (denied) return denied;
       const item = findItem(item_id);
       if (!item) return text(`No item with id ${item_id}.`, undefined, true);
       if (item.stock <= 0) return text(`${item.title} is sold out.`, undefined, true);
-      if (!hasTicket(claims)) return needsTicket(claims, [item], ticket_hint);
+      const got = hasTicket(asked) ? { claims: asked } : await getTicket(server, asked, [item], ticket_hint);
+      if ("stop" in got) return got.stop;
+      const claims = got.claims;
       const decision = await checkWithPerson(
         server,
         claims,
@@ -510,7 +581,7 @@ export function createMcpServer(): McpServer {
       title: "Buy items (within the user's Courier limits)",
       description:
         "Buy items the user wants. Courier checks the user's limits and errand first and asks the user itself if something " +
-        "doesn't fit. If the user saved PayPal on their Courier ticket, it's paid straight away and you get a receipt; " +
+        "doesn't fit. If the user saved PayPal in Courier, it's paid straight away and you get a receipt; " +
         "otherwise you get a PayPal link for the user to pay, then call order_status. Call it directly whenever the user " +
         "asks to buy (no need to hold the item first or to confirm with the user).",
       inputSchema: {
@@ -523,10 +594,10 @@ export function createMcpServer(): McpServer {
       _meta: { ui: { resourceUri: RECEIPT_CARD_URI } },
     },
     async ({ item_ids, approval_id, note, ticket_hint }, extra) => {
-      const claims = auth(extra);
-      const limited = await rateLimited(claims);
+      const asked = auth(extra);
+      const limited = await rateLimited(asked);
       if (limited) return limited;
-      const denied = requireScope(claims, "store:buy");
+      const denied = requireScope(asked, "store:buy");
       if (denied) return denied;
 
       const items: Item[] = [];
@@ -537,7 +608,9 @@ export function createMcpServer(): McpServer {
         items.push(item);
       }
       const totalCents = items.reduce((s, i) => s + i.priceCents, 0);
-      if (!hasTicket(claims)) return needsTicket(claims, items, ticket_hint);
+      const got = hasTicket(asked) ? { claims: asked } : await getTicket(server, asked, items, ticket_hint);
+      if ("stop" in got) return got.stop;
+      const claims = got.claims;
 
       const what = `${items.map((i) => i.title).join(", ")} for ${money(totalCents)}`;
       const decision = await checkWithPerson(server, claims, "checkout", items, what, approval_id, note);
@@ -641,7 +714,7 @@ export function createMcpServer(): McpServer {
 
       return text(
         (savedFailed
-          ? "PayPal refused the saved payment on this ticket, so the user pays on PayPal's page instead. Tell them that.\n"
+          ? "PayPal refused the saved payment, so the user pays on PayPal's page instead. Tell them that.\n"
           : "") +
           `PayPal checkout created for ${money(totalCents)} (${items.map((i) => i.title).join(", ")}).\n` +
           `Ask the user to approve the payment here: ${order.approveUrl}\n` +

@@ -19,6 +19,7 @@ export const DURATIONS = {
   "1h": { label: "1 hour", ms: 60 * 60 * 1000 },
   "24h": { label: "24 hours", ms: 24 * 60 * 60 * 1000 },
   "3d": { label: "3 days", ms: 3 * 24 * 60 * 60 * 1000 },
+  "7d": { label: "7 days", ms: 7 * 24 * 60 * 60 * 1000 },
 } as const;
 export type DurationKey = keyof typeof DURATIONS;
 
@@ -50,8 +51,8 @@ export interface Visa {
     status: "pending" | "authorized" | "voided" | "captured" | "failed";
   } | null;
   /**
-   * Saved PayPal: the person approved, once, that purchases on this errand are charged straight to their PayPal
-   * (within the limits). The payment token itself lives in Courier's "saved_paypal" collection, never on the visa.
+   * Saved PayPal: purchases on this errand are charged straight to the PayPal the person saved on their account (within
+   * the limits). The payment token itself lives in Courier's "saved_paypal" collection, never on the visa.
    */
   autopay?: {
     status: "pending" | "on" | "declined" | "failed" | "removed";
