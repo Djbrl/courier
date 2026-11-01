@@ -5400,3 +5400,422 @@ html:has(body.app-page) {
   margin: 0;
   overflow-wrap: anywhere;
 }
+
+/* ---------- inside the app: calm, standard controls. The fancy ones belong to the landing page. ---------- */
+.app-page .btn,
+.wiz .btn,
+.solo .btn,
+.ob .btn {
+  height: 44px;
+  padding: 0 18px;
+  gap: 8px;
+  border-radius: 10px;
+  font-family: "Instrument Sans", sans-serif;
+  font-style: normal;
+  font-stretch: 100%;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0;
+  transition: opacity 0.15s;
+}
+.app-page .btn:hover,
+.wiz .btn:hover,
+.solo .btn:hover,
+.ob .btn:hover {
+  transform: none;
+  opacity: 0.85;
+}
+.app-page .btn .go,
+.wiz .btn .go,
+.solo .btn .go,
+.ob .btn .go {
+  display: none;
+}
+.app-page .btn.ghost,
+.wiz .btn.ghost,
+.solo .btn.ghost,
+.ob .btn.ghost {
+  background: #fff;
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+.app-page .btn.sm {
+  height: 34px;
+  padding: 0 12px;
+  font-size: 13.5px;
+}
+.app-page .btn.danger,
+.solo .btn.danger {
+  box-shadow: inset 0 0 0 1px currentColor;
+}
+
+/* Validation screens: a small card with an edge, so there's one place to look. */
+.solo:has(.solo-card) {
+  background: var(--paper);
+}
+.solo-card {
+  width: min(100%, 420px);
+  padding: 32px 28px;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+}
+.solo-card h1,
+.solo-card h1.big {
+  font-size: 28px;
+  line-height: 1.05;
+  overflow-wrap: anywhere;
+}
+.solo-card .lead {
+  margin-top: 12px;
+  max-width: none;
+  font-size: 15.5px;
+}
+.solo-card .acts-row {
+  align-items: stretch;
+  gap: 8px;
+  margin-top: 24px;
+}
+.solo-card .acts-row .btn {
+  justify-content: center;
+}
+.solo-card .pair-ids {
+  margin-bottom: 16px;
+}
+.solo-card .pair-ids .pt {
+  --s: 4em;
+}
+.solo-card.rcpt {
+  width: min(100%, 520px);
+}
+
+/* The step-by-step card: same height on every step, buttons in the same place. */
+.wiz-page {
+  min-height: calc(100svh - 90px);
+  display: grid;
+  place-items: center;
+  padding: 24px var(--gut) 56px;
+  background: var(--paper);
+}
+.wiz {
+  width: min(100%, 480px);
+  min-height: 480px;
+  display: flex;
+  flex-direction: column;
+  padding: 28px;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+}
+.wiz .prog {
+  margin-bottom: 18px;
+}
+.wiz-n {
+  margin-bottom: 12px;
+  font-size: 13px;
+  color: var(--mute);
+}
+.wiz-step {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+.wiz-step[hidden] {
+  display: none;
+}
+.wiz-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 14px;
+}
+.wiz-body > .btn {
+  align-self: flex-start;
+}
+.wiz h1,
+.wiz h1.big {
+  font-size: 30px;
+  line-height: 1.05;
+  overflow-wrap: anywhere;
+}
+.wiz .lead {
+  margin: 0;
+  font-size: 15.5px;
+}
+.wiz .copy.inp {
+  height: auto;
+  min-height: 48px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  font-size: 13.5px;
+  overflow-wrap: anywhere;
+}
+.wiz .live {
+  margin-top: 4px;
+  border-radius: 10px;
+}
+.wiz-alt summary {
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.wiz-alt > *:not(summary) {
+  margin-top: 10px;
+}
+.wiz-list {
+  margin: 0;
+  padding-left: 20px;
+  display: grid;
+  gap: 8px;
+  font-size: 15.5px;
+}
+.wiz-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 24px;
+}
+.wiz-foot .btn:only-child {
+  margin-left: auto;
+}
+.wiz-who {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.wiz-who .pt {
+  --s: 2.6em;
+  flex: none;
+}
+.budget {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 16px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+.budget:focus-within {
+  border-color: var(--ink);
+}
+.budget i {
+  font-style: normal;
+  font-size: 34px;
+  font-weight: 600;
+  color: var(--mute);
+}
+.budget input {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  font: inherit;
+  font-size: 34px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.payo {
+  display: flex;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  cursor: pointer;
+}
+.payo:has(input:checked) {
+  border-color: var(--ink);
+}
+.payo input {
+  flex: none;
+  margin-top: 3px;
+  accent-color: var(--ink);
+}
+.payo b {
+  display: block;
+}
+.payo small {
+  display: block;
+  margin-top: 3px;
+  color: var(--mute);
+  font-size: 13.5px;
+  line-height: 1.4;
+}
+
+/* Home: one column to read, one quiet column of status. */
+.hm2,
+.sett {
+  height: 100%;
+  overflow: auto;
+  padding: 28px clamp(8px, 3vw, 40px) 40px;
+}
+.hm2-top {
+  max-width: 980px;
+  margin: 0 auto 24px;
+}
+.hm2-top h1 {
+  font-size: clamp(34px, 4vw, 48px);
+  line-height: 1.02;
+  overflow-wrap: anywhere;
+}
+.hm2-top .lead {
+  margin-top: 8px;
+  font-size: 17px;
+  color: var(--mute);
+}
+.hm2-g {
+  max-width: 980px;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 280px;
+  align-items: start;
+  gap: 16px;
+}
+.hm2-main,
+.hm2-side {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+}
+.hm2-s {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 12px;
+  padding: 18px 20px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+}
+.hm2-s > .link {
+  align-self: flex-start;
+}
+.hm2-start > .btn {
+  align-self: flex-start;
+}
+.hm2-c {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.hm2-c .pt {
+  --s: 2.6em;
+  flex: none;
+}
+.hm2-c b {
+  display: block;
+  overflow-wrap: anywhere;
+}
+.hm2-c small {
+  font-size: 12px;
+  color: var(--mute);
+}
+.hm2-st {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+  font-size: 14px;
+}
+.hm2-st li {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  overflow-wrap: anywhere;
+}
+.hm2-st li > i {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  margin: 6px 4px;
+  border-radius: 50%;
+  background: var(--mute);
+}
+.hm2-st li.ok > i {
+  background: var(--green);
+}
+.hm2-st small {
+  display: block;
+  color: var(--mute);
+}
+
+/* Settings: rows, not cards. */
+.sett > * {
+  max-width: 680px;
+  margin-inline: auto;
+}
+.sett h1 {
+  font-size: clamp(30px, 3.4vw, 40px);
+  margin-bottom: 24px;
+}
+.sett section {
+  margin-bottom: 24px;
+}
+.sett .sec-t {
+  margin-bottom: 8px;
+}
+.slist {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+}
+.srow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 18px;
+}
+.srow + .srow {
+  border-top: 1px solid var(--line);
+}
+.srow.col {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+}
+.srow b {
+  display: block;
+  font-weight: 600;
+}
+.srow small {
+  display: block;
+  color: var(--mute);
+  font-size: 13.5px;
+  overflow-wrap: anywhere;
+}
+.srow .copy.inp {
+  height: auto;
+  min-height: 40px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 860px) {
+  .hm2-g {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .wiz {
+    min-height: 440px;
+    padding: 22px;
+  }
+  .srow:not(.col) {
+    flex-wrap: wrap;
+  }
+}
+
+/* Errand detail: the facts alone, one column. */
+.dtl-b {
+  display: block;
+}
+.dtl-b .fact + .fact {
+  margin-top: 16px;
+}
+.dtl-for {
+  margin: 0;
+  font-size: 15px;
+}

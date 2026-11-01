@@ -2,7 +2,6 @@ import {
   ARROW,
   avatar,
   CK,
-  type CourierLook,
   config,
   courierLayout,
   courierVars,
@@ -41,7 +40,7 @@ export interface Desk {
   connections: Connection[];
 }
 
-type View = "home" | "errands" | "couriers" | "connections";
+type View = "home" | "errands" | "couriers" | "settings";
 
 const ICON: Record<View, string> = {
   home: '<svg viewBox="0 0 20 20"><path d="M3 9.2 10 3l7 6.2V17h-5v-4.5H8V17H3z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>',
@@ -49,8 +48,8 @@ const ICON: Record<View, string> = {
     '<svg viewBox="0 0 20 20"><rect x="4" y="2.8" width="12" height="14.4" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M7 7h6M7 10h6M7 13h3.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>',
   couriers:
     '<svg viewBox="0 0 20 20"><rect x="2.5" y="4" width="15" height="12" rx="2.4" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="7.3" cy="9.3" r="1.9" fill="currentColor"/><path d="M11 9h4M11 12h3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>',
-  connections:
-    '<svg viewBox="0 0 20 20"><path d="M7 2.5v4M13 2.5v4M5 6.5h10v3a5 5 0 0 1-10 0zM10 14.5v3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  settings:
+    '<svg viewBox="0 0 20 20"><path d="M3 6h8M15 6h2M3 14h2M9 14h8" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="13" cy="6" r="2" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="7" cy="14" r="2" fill="none" stroke="currentColor" stroke-width="1.8"/></svg>',
 };
 
 const isOut = (v: VisaView) => v.effective === "active";
@@ -60,7 +59,7 @@ export function shell(
   d: Desk,
   view: View | null,
   main: RawHtml,
-  opts: { scripts?: string[]; selected?: string } = {},
+  opts: { scripts?: string[] } = {},
 ): string {
   const out = d.visas.filter(isOut).length;
   const item = (v: View, label: string, href: string, n?: number, hot = false) =>
@@ -76,18 +75,8 @@ export function shell(
           ${item("home", "Home", "/app", d.approvals.length, true)}
           ${item("errands", "Errands", "/app/errands", out)}
           ${item("couriers", "Couriers", "/app/couriers")}
-          ${item("connections", "Connections", "/app/connections")}
+          ${item("settings", "Settings", "/app/settings")}
         </nav>
-        <div class="crew" aria-label="Your couriers">
-          <span class="crew-h">Your couriers</span>
-          ${d.couriers.map(
-            (
-              c,
-            ) => html`<a class="crew-c cc" style="${courierVars(c.color)}" href="/app/couriers?c=${c.id}" ${opts.selected === c.id ? raw('aria-current="true"') : ""}>
-              ${portrait(c)}<span><b>${c.name}</b><small>${c.clientId ? "In Claude" : "Errand room"}</small></span><i class="${c.clientId ? "on" : ""}" aria-hidden="true"></i></a>`,
-          )}
-          <a class="crew-add" href="/start/courier?new=1"><span aria-hidden="true">+</span>New courier</a>
-        </div>
         <div class="rail-who">${avatar()}<span><b>${firstName(d.human) ?? "You"}</b>${VERIFIED}</span><a class="fine" href="/logout">Sign out</a></div>
       </aside>
       <main class="pane">${main}</main>
@@ -129,130 +118,91 @@ export function homePage(d: Desk, opts: { welcome: boolean; courierId?: string }
   const selErrand = out.find((v) => v.clientId === demoClientId(sel.id));
   const inClaude = couriers.filter((c) => c.clientId);
   const visaById = new Map(visas.map((v) => [v.id, v]));
-  const quiet = !approvals.length && !out.length;
 
   const lead = approvals.length
     ? `${approvals.length === 1 ? "One question" : `${approvals.length} questions`} waiting for you.`
     : out.length
       ? `${out.length === 1 ? "One errand" : `${out.length} errands`} out right now.`
-      : visas.length
-        ? `All quiet. ${look.name} is ready when you are.`
-        : `${look.name} has its ID. Time for a first errand.`;
+      : `${look.name} is ready when you are.`;
+  const ask = `Find me a jazz record under $40 at ${config.store.name}.`;
+  const live = new Set(out.map((v) => v.id));
+  const latest = d.stamps.filter((s) => live.has(s.visaId)).slice(0, 4);
 
-  const ask = `Ask ${look.name} to find me a jazz record under $40 at ${config.store.name}.`;
-
-  const main = html`<div class="hm">
-    <header class="hm-top">
-      <div><h1 class="big">${opts.welcome || !visas.length ? `Welcome${name ? `, ${name}` : ""}.` : `Hi${name ? `, ${name}` : ""}.`}</h1><p class="lead">${lead}</p></div>
-      <ul class="stats" aria-label="Status">
-        <li class="ok">${CK}<span><b>Verified PayPal account</b><small>${paypal.mode === "simulated" ? "Simulated sandbox" : "Sandbox"}</small></span></li>
-        <li class="${inClaude.length ? "ok" : "todo"}"><i aria-hidden="true"></i><span><b>${inClaude.length ? `In Claude: ${inClaude.map((c) => c.name).join(", ")}` : "Not in Claude yet"}</b>${inClaude.length ? html`<small>Connector linked</small>` : html`<a class="link" href="/start/claude?c=${sel.id}">Connect</a>`}</span></li>
-        <li class="${config.anthropicConfigured ? "ok" : "todo"}"><i aria-hidden="true"></i><span><b>Errand room</b><small>${config.anthropicConfigured ? `Runs on Claude` : "Demo stand-in for Claude"}</small></span></li>
-      </ul>
+  const main = html`<div class="hm2">
+    <header class="hm2-top">
+      <h1 class="big">${opts.welcome || !visas.length ? "Welcome" : "Hi"}${name ? `, ${name}` : ""}.</h1>
+      <p class="lead">${lead}</p>
     </header>
-
-    <section class="tile c hm-desk" aria-label="${look.name}">${dots()}<div class="tile-in">
-      <div class="desk-top">
-        <span class="lbl">Your courier</span>
-        <nav class="switch" aria-label="Switch courier">
-          ${couriers.map((c) => html`<a class="cc" style="${courierVars(c.color)}" href="/app?c=${c.id}" title="${c.name}" ${c.id === sel.id ? raw('aria-current="true"') : ""}>${portrait(c)}</a>`)}
-          <a class="add" href="/start/courier?new=1" title="New courier" aria-label="New courier">+</a>
-        </nav>
-      </div>
-      <div class="desk-card"><div class="idwrap">${idCard(look, name)}</div></div>
-      <div class="bottom">
+    <div class="hm2-g">
+      <div class="hm2-main">
         ${
-          selErrand
-            ? html`<a class="btn" href="/errand?c=${sel.id}">Open the errand${ARROW}</a>`
-            : html`<a class="btn" href="/errand/new?c=${sel.id}">Send on an errand${ARROW}</a>`
-        }
-        <details class="pop">
-          <summary class="btn ghost">Summon from Claude</summary>
-          <div class="pop-in">
-            ${
-              sel.clientId
-                ? html`<p>In any Claude chat, say:</p><code class="copy inp code sm">${ask}</code>`
-                : html`<p><b>${look.name} isn’t in Claude yet.</b></p><a class="btn sm" href="/start/claude?c=${sel.id}">Set it up${ARROW}</a>`
-            }
-          </div>
-        </details>
-      </div>
-    </div></section>
-
-    ${
-      quiet
-        ? html`<section class="tile g hm-now" aria-label="First errand">${dots()}<div class="tile-in">
-          <h2>${visas.length ? "Send it on an errand." : "Try your first errand."}</h2>
-          <div class="center"><div class="notepv">${ticket(look)}</div></div>
-          <div class="two-ways">
-            <a href="/errand/new?c=${sel.id}"><b>From here</b><span>Open the errand room${ARROW}</span></a>
-            <a href="${sel.clientId ? "/app/connections" : `/start/claude?c=${sel.id}`}"><b>From Claude</b><span>${sel.clientId ? "Just ask in any chat" : "Set up the connector"}${ARROW}</span></a>
-          </div>
-          ${past.length ? html`<a class="fine past-link" href="/app/errands?tab=past">${past.length} past ${past.length === 1 ? "errand" : "errands"} →</a>` : ""}
-        </div></section>`
-        : html`<section class="panel hm-now" aria-label="Now">
-          ${
-            approvals.length
-              ? html`<div class="sec"><h2 class="sec-t">Needs you</h2>${approvals.map((a) => {
-                  const v = visaById.get(a.visaId);
-                  const al = v ? lookForAgent(human, v.clientId, v.agentName) : look;
-                  return html`<a class="ask cc" style="${courierVars(al.color)}" href="/approvals/${a.id}">${portrait(al)}
+          approvals.length
+            ? html`<section class="panel hm2-s"><h2 class="sec-t">Needs you</h2>${approvals.map((a) => {
+                const v = visaById.get(a.visaId);
+                const al = v ? lookForAgent(human, v.clientId, v.agentName) : look;
+                return html`<a class="ask cc" style="${courierVars(al.color)}" href="/approvals/${a.id}">${portrait(al)}
                   <span><b>${al.name} asks: ${a.items.map((i) => i.title.replace(/ \(.*\)$/, "")).join(", ")}, ${money(a.totalCents)}?</b><small>${a.reason}</small></span>
-                  <span class="btn sm">Answer${ARROW}</span></a>`;
-                })}</div>`
-              : ""
-          }
-          ${
-            out.length
-              ? html`<div class="sec"><h2 class="sec-t">Out now <span>${out.length}</span></h2><div class="rows">${out.map((v) => errandRow(d, v))}</div></div>`
-              : ""
-          }
-          ${
-            out.length
-              ? (
-                  () => {
-                    const live = new Set(out.map((v) => v.id));
-                    const latest = d.stamps.filter((s) => live.has(s.visaId)).slice(0, 4);
-                    return latest.length
-                      ? html`<div class="sec"><h2 class="sec-t">Latest steps</h2><ul class="feed tight" data-autorefresh="8000">${latest.map(
-                          (s) => {
-                            const ic = STAMP_ICON[s.kind];
-                            const v = visaById.get(s.visaId)!;
-                            return html`<li><span class="k ${ic.cls}" aria-hidden="true">${ic.k}</span><div><b>${s.title}</b><span class="d">${lookForAgent(human, v.clientId, v.agentName).name}${s.detail ? ` · ${s.detail}` : ""}</span></div><time>${timeAgo(s.at)}</time></li>`;
-                          },
-                        )}</ul></div>`
-                      : "";
-                  }
-                )()
-              : ""
-          }
-          ${
-            past.length
-              ? html`<div class="sec"><h2 class="sec-t">Recently</h2><div class="rows">${past.slice(0, 3).map((v) => errandRow(d, v))}</div></div>`
-              : ""
-          }
-          <div class="panel-f"><a class="link fine" href="/app/errands">All errands</a><span class="fine">${visas.length} in total</span></div>
-        </section>`
-    }
-  </div>`;
-  return shell("Home", d, "home", main, { selected: sel.id });
-}
-
-/** An errand as a ticket: a receipt-style slip, so it never reads as a second ID card. */
-export function ticket(look: CourierLook, visa?: VisaView): RawHtml {
-  const row = (k: string, v: string | RawHtml) => html`<div class="tr"><span>${k}</span><b>${v}</b></div>`;
-  return html`<div class="tkt-lift"><div class="tkt zz cc" style="${courierVars(look.color)}" aria-hidden="true">
-    <div class="th"><span>Errand ticket</span><span>${visa ? `#${visa.id.slice(-6).toUpperCase()}` : "#000001"}</span></div>
-    <div class="tshop">${visa?.merchantName ?? config.store.name}</div>
-    <div class="tfor">${visa ? visa.intent || "Anything within the limits" : "Jazz records for my dad"}</div>
-    <div class="tlines">
-      ${row("Max", visa ? short(visa.spendLimitCents) : "$60")}
-      ${row("Each", visa ? short(visa.perPurchaseLimitCents) : "$40")}
-      ${row("Back by", visa ? backBy(visa.expiresAt) : "Tomorrow")}
-      ${visa ? row("Spent", short(visa.spentCents)) : ""}
+                  <span class="btn sm">Answer</span></a>`;
+              })}</section>`
+            : ""
+        }
+        ${
+          out.length
+            ? html`<section class="panel hm2-s"><h2 class="sec-t">Out now</h2><div class="rows">${out.map((v) => errandRow(d, v))}</div></section>`
+            : ""
+        }
+        ${
+          latest.length
+            ? html`<section class="panel hm2-s"><h2 class="sec-t">Latest steps</h2><ul class="feed tight" data-autorefresh="8000">${latest.map(
+                (s) => {
+                  const ic = STAMP_ICON[s.kind];
+                  const v = visaById.get(s.visaId)!;
+                  return html`<li><span class="k ${ic.cls}" aria-hidden="true">${ic.k}</span><div><b>${s.title}</b><span class="d">${lookForAgent(human, v.clientId, v.agentName).name}${s.detail ? ` · ${s.detail}` : ""}</span></div><time>${timeAgo(s.at)}</time></li>`;
+                },
+              )}</ul></section>`
+            : ""
+        }
+        ${
+          !approvals.length && !out.length
+            ? html`<section class="panel hm2-s hm2-start">
+                <h2 class="sec-t">${visas.length ? "Send it on an errand" : "Your first errand"}</h2>
+                ${
+                  sel.clientId
+                    ? html`<p>In any Claude chat, ask:</p><code class="copy inp code sm">${ask}</code>`
+                    : html`<p>Connect Claude and just ask it to buy something.</p><a class="btn" href="/start/claude?c=${sel.id}">Connect Claude</a>`
+                }
+                <a class="link fine" href="${selErrand ? `/errand?c=${sel.id}` : `/errand/new?c=${sel.id}`}">Or try it on this website</a>
+              </section>`
+            : ""
+        }
+        ${
+          past.length
+            ? html`<section class="panel hm2-s"><h2 class="sec-t">Recently</h2><div class="rows">${past.slice(0, 3).map((v) => errandRow(d, v))}</div>
+                <a class="link fine" href="/app/errands">All errands</a></section>`
+            : ""
+        }
+      </div>
+      <aside class="hm2-side">
+        <section class="panel hm2-s">
+          <h2 class="sec-t">Couriers</h2>
+          ${couriers.map(
+            (c) =>
+              html`<a class="hm2-c cc" style="${courierVars(c.color)}" href="/app/couriers?c=${c.id}">${portrait(c)}<span><b>${c.name}</b><small class="mono">${c.idNo}</small></span></a>`,
+          )}
+          <a class="link fine" href="/start/courier?new=1">New courier</a>
+        </section>
+        <section class="panel hm2-s">
+          <h2 class="sec-t">Status</h2>
+          <ul class="hm2-st">
+            <li class="ok">${CK}<span>Verified PayPal account<small>${paypal.mode === "simulated" ? "Simulated" : "Sandbox"}</small></span></li>
+            <li class="${inClaude.length ? "ok" : "todo"}"><i aria-hidden="true"></i><span>${inClaude.length ? `In Claude: ${inClaude.map((c) => c.name).join(", ")}` : html`<a class="link" href="/start/claude?c=${sel.id}">Connect Claude</a>`}</span></li>
+          </ul>
+          <a class="link fine" href="/app/settings">Settings</a>
+        </section>
+      </aside>
     </div>
-    <div class="tby">${portrait(look)}<span><b data-fit>${look.name}</b><small>${look.idNo}</small></span></div>
-  </div></div>`;
+  </div>`;
+  return shell("Home", d, "home", main);
 }
 
 /* ---------------- errands: list + detail ---------------- */
@@ -316,8 +266,8 @@ function errandDetail(d: Desk, v: VisaView): RawHtml {
       </span>
     </header>
     <div class="dtl-b">
-      <div class="dtl-note"><div class="notepv">${ticket(look, v)}</div></div>
       <div class="dtl-facts">
+        ${v.intent ? html`<div class="fact"><p class="dtl-for">${v.intent}</p></div>` : ""}
         <div class="fact">${meter(v)}<div class="money-row"><span><b>${money(v.spentCents)}</b> spent</span><span>of ${money(v.spendLimitCents)}</span></div></div>
         <div class="fact grow">
           ${
@@ -370,55 +320,52 @@ export function couriersPage(d: Desk, opts: { courierId?: string }): string {
       </div>
     </section>
   </div>`;
-  return shell(look.name, d, "couriers", main, { selected: sel.id });
+  return shell(look.name, d, "couriers", main);
 }
 
 /* ---------------- connections ---------------- */
 
-const TOOLS: [string, string][] = [
-  ["search_catalog", "Search the shop"],
-  ["get_item", "Look at an item"],
-  ["hold_item", "Hold an item"],
-  ["request_purchase", "Buy within the ticket"],
-  ["order_status", "Check an order"],
-  ["whoami", "Show its ID and limits"],
-];
+const row = (title: unknown, sub: unknown, action?: unknown) =>
+  html`<div class="srow"><div><b>${title}</b><small>${sub}</small></div>${action ?? ""}</div>`;
 
-export function connectionsPage(d: Desk): string {
-  const inClaude = d.couriers.filter((c) => c.clientId);
+export function settingsPage(d: Desk, savedEmail?: string | null | false): string {
   const first = d.couriers[0]!;
-  const main = html`<div class="conn">
-    <header class="conn-h"><h1 class="big">Connections</h1></header>
-    <div class="conn-g">
-      <section class="panel cbox">
-        <div class="cbox-h"><span class="cic ok-ic" aria-hidden="true">${CK}</span><div><b>${PP}</b><small>Proves you’re a real adult. Pays for errands.</small></div><span class="st active"><i></i>Verified</span></div>
-        <p class="fine">${paypal.mode === "sandbox" ? "Sandbox" : "Simulated"}: no real money.</p>
-      </section>
-      <section class="panel cbox">
-        <div class="cbox-h"><span class="cic" aria-hidden="true">C</span><div><b>Claude connector</b><small>Summon a courier from any Claude chat.</small></div><span class="st ${inClaude.length ? "active" : "expired"}"><i></i>${inClaude.length ? `${inClaude.length} linked` : "Not linked"}</span></div>
-        <code class="copy inp code sm">${STORE_RESOURCE}</code>
-        <p class="fine">${inClaude.length ? `Linked: ${inClaude.map((c) => `${c.name} (${c.clientName ?? "Claude"})`).join(", ")}.` : "No Claude has connected yet."} <a href="/start/claude?c=${first.id}">Walkthrough</a></p>
-        ${d.connections.map(
-          (c) =>
-            html`<form method="post" action="/app/connections/${c.id}/revoke"><button class="btn ghost sm" type="submit" title="Ends its errands and removes its access">Disconnect ${c.clientName}</button></form>`,
-        )}
-      </section>
-      <section class="panel cbox">
-        <div class="cbox-h"><span class="cic room-ic" aria-hidden="true">R</span><div><b>Errand room</b><small>The courier you chat with on this website.</small></div><span class="st ${config.anthropicConfigured ? "active" : "expired"}"><i></i>${config.anthropicConfigured ? "Claude" : "Demo"}</span></div>
-        <p class="fine">${config.anthropicConfigured ? html`<span class="mono">${config.agent.model}</span>` : "Scripted stand-in. Add ANTHROPIC_API_KEY to run it on Claude."}</p>
-      </section>
-      <section class="panel cbox">
-        <div class="cbox-h"><span class="cic" aria-hidden="true">Y</span><div><b>Your account</b><small>Erase it and start again from scratch.</small></div></div>
-        <a class="btn ghost sm cbox-act" href="/app/account/delete">Delete my account</a>
-      </section>
-      <section class="panel cbox tools">
-        <div class="cbox-h"><span class="cic jr-ic" aria-hidden="true">J</span><div><b>${config.store.name}</b><small>A record shop that welcomes couriers.</small></div><a class="link fine" href="${config.store.url}" target="_blank" rel="noopener">Visit ↗</a></div>
-        <span class="lbl">A courier can</span>
-        <ul class="tool-list">${TOOLS.map(([t, label]) => html`<li title="${t}">${label}</li>`)}</ul>
-      </section>
-    </div>
+  const inClaude = d.couriers.filter((c) => c.clientId);
+  const hasSaved = savedEmail !== undefined;
+  const main = html`<div class="sett">
+    <h1 class="big">Settings</h1>
+    <section><h2 class="sec-t">Connections</h2><div class="panel slist">
+      ${row(PP, `Verified. ${paypal.mode === "sandbox" ? "Sandbox" : "Simulated"}: no real money.`)}
+      ${row(
+        "Saved PayPal",
+        hasSaved
+          ? savedEmail
+            ? `Pays for errands: ${savedEmail}`
+            : "Pays for errands inside your budget."
+          : "Not saved. You’ll be offered this on your next errand.",
+        hasSaved
+          ? html`<form method="post" action="/app/paypal/remove"><button class="btn ghost sm" type="submit">Remove</button></form>`
+          : "",
+      )}
+      ${row(
+        "Claude",
+        inClaude.length ? `Connected as ${inClaude.map((c) => c.name).join(", ")}.` : "Not connected yet.",
+        d.connections.length
+          ? html`${d.connections.map(
+              (c) =>
+                html`<form method="post" action="/app/connections/${c.id}/revoke"><button class="btn ghost sm" type="submit" title="Ends its errands and removes its access">Disconnect</button></form>`,
+            )}`
+          : html`<a class="btn sm" href="/start/claude?c=${first.id}">Connect</a>`,
+      )}
+      <div class="srow col"><div><b>Connector address</b></div><code class="copy inp code sm">${STORE_RESOURCE}</code></div>
+      ${row(config.store.name, "A record shop that welcomes couriers.", html`<a class="link fine" href="${config.store.url}" target="_blank" rel="noopener">Visit ↗</a>`)}
+    </div></section>
+    <section><h2 class="sec-t">Account</h2><div class="panel slist">
+      ${row(firstName(d.human) ?? "You", "Your name is never shared with shops.", html`<a class="btn ghost sm" href="/logout">Sign out</a>`)}
+      ${row("Delete account", "Erase everything and start again from scratch.", html`<a class="btn ghost sm" href="/app/account/delete">Delete my account</a>`)}
+    </div></section>
   </div>`;
-  return shell("Connections", d, "connections", main);
+  return shell("Settings", d, "settings", main);
 }
 
 export function deleteAccountPage(d: Desk): string {
@@ -435,7 +382,7 @@ export function deleteAccountPage(d: Desk): string {
       <p class="fine">Receipts you already have keep working. ${config.store.name} keeps its own order records, which don't include your name, and PayPal keeps its own payment history.</p>
       <form class="acts-row" method="post" action="/app/account/delete">
         <button class="btn danger" type="submit">Delete my account</button>
-        <a class="btn ghost" href="/app/connections">Keep my account</a>
+        <a class="btn ghost" href="/app/settings">Keep my account</a>
       </form>
     </section>
   </div>`;

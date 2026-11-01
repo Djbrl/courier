@@ -85,8 +85,8 @@ Two sandbox accounts are involved:
 
 - [ ] Errands → Call back on an errand Claude is using. Claude stays connected, and its next purchase gets a new ticket
   link. It should not ask you to reconnect.
-- [ ] Connections → Disconnect. Claude's next tool call should fail with 401 and it should ask you to connect again.
-- [ ] Connections → Delete my account. Claude's next tool call should fail, and signing in with the same PayPal should
+- [ ] Settings → Disconnect. Claude's next tool call should fail with 401 and it should ask you to connect again.
+- [ ] Settings → Delete my account. Claude's next tool call should fail, and signing in with the same PayPal should
   start from the first screen.
 - [ ] The errand's steps say "Saved PayPal removed". On sandbox.paypal.com (Personal account → Settings → Payments
   → Manage automatic payments), Juniper Records should no longer be listed.

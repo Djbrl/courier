@@ -11,14 +11,14 @@ reproduce it and what an attacker could do.
 
 ## What the design protects
 
-| Guarantee                                         | Where it's enforced                                                                                |
-| ------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
-| Spending limits can't be talked around by a model | Plain code in `/internal/spend/check`, before any intent check                                     |
-| A token works at one shop only                    | RFC 8707 audience, checked on every request                                                        |
-| A call-back takes effect within seconds           | The shop checks live status as well as the token                                                   |
-| Tokens and MCP calls never identify the person    | Tokens carry a per-shop pseudonym and a verified flag                                              |
-| Saved PayPal never reaches the shop or agent      | Payment tokens stay in Courier, and are deleted when an errand is called back, reported or expires |
-| Agent text can't issue commands                   | Notes reach the intent check as untrusted data, and the model never sets amounts                   |
+| Guarantee                                         | Where it's enforced                                                                                   |
+| ------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| Spending limits can't be talked around by a model | Plain code in `/internal/spend/check`, before any intent check                                        |
+| A token works at one shop only                    | RFC 8707 audience, checked on every request                                                           |
+| A call-back takes effect within seconds           | The shop checks live status as well as the token                                                      |
+| Tokens and MCP calls never identify the person    | Tokens carry a per-shop pseudonym and a verified flag                                                 |
+| Saved PayPal never reaches the shop or agent      | Payment tokens stay in Courier, and are deleted when the person removes them or deletes their account |
+| Agent text can't issue commands                   | Notes reach the intent check as untrusted data, and the model never sets amounts                      |
 
 `npm test` fires eight attacks at the real MCP endpoint on every run, covering forged, expired, revoked and
 wrong-audience tokens, overspending and prompt injection.
@@ -30,7 +30,10 @@ wrong-audience tokens, overspending and prompt injection.
 - A PayPal payment shows the buyer to the shop's PayPal account, as any PayPal payment does.
 - `/merchant` and its Report button have no login, because they're a demo view. A real shop would put them behind one.
 - The shop's `/internal/*` calls share one secret, with no per-shop scoping, and Courier knows only the one demo shop.
-- If PayPal fails to delete a saved payment token, the delete is logged but not retried.
+- A saved PayPal lasts until the person removes it, so a bug in the limits could reach it after an errand has ended. Only
+  an active errand can charge it, and only within that errand's budget.
+- A budget set in a chat dialog reaches Courier through the shop, which Courier trusts over the shared internal secret.
+  The dialog is shown by the chat app, and the model can't answer it, but a real shop shouldn't be trusted to relay this.
 - Deleting an account doesn't cancel a PayPal link the person already has open. If they pay it afterwards, the shop
   records the order and issues a receipt, and Courier has no account to add it to.
 - Deleting an account erases Courier's live records, not any backups the operator keeps.

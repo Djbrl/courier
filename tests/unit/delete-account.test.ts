@@ -11,7 +11,7 @@ const { db } = await import("../../apps/courier/src/db.ts");
 const { deleteAccount } = await import("../../apps/courier/src/visas.ts");
 
 const OF_PERSON = ["connections", "stamps", "approvals", "refresh_tokens", "codes", "errand_sessions", "couriers"];
-const OF_VISA = ["holds", "reports", "saved_paypal", "visa_requests"];
+const OF_VISA = ["holds", "reports", "visa_requests"];
 
 function seed(humanId: string, visaId: string) {
   db.put("humans", humanId, { id: humanId, payerId: `PAYER-${humanId}` });
@@ -26,7 +26,7 @@ function seed(humanId: string, visaId: string) {
     db.put(collection, `${collection}-${humanId}`, { id: humanId, humanId, authRequestId: `req-${humanId}` });
   for (const collection of OF_VISA)
     db.put(collection, `${collection}-${visaId}`, { visaId, vaultId: `vault-${visaId}` });
-  db.put("saved_paypal", visaId, { visaId, vaultId: `vault-${visaId}` });
+  db.put("saved_paypal", humanId, { humanId, vaultId: `vault-${visaId}` });
   db.put("auth_requests", `req-${humanId}`, { id: `req-${humanId}` });
   db.put("clients", `courier-demo-couriers-${humanId}`, { client_id: `courier-demo-couriers-${humanId}` });
 }
@@ -55,11 +55,13 @@ test("deleting an account releases PayPal first, keeps everything if that fails,
 
   assert.equal(db.get("humans", "hum_me"), undefined);
   assert.equal(db.get("visas", "visa_me"), undefined);
+  assert.equal(db.get("saved_paypal", "hum_me"), undefined);
   assert.equal(db.get("auth_requests", "req-hum_me"), undefined);
   for (const collection of OF_PERSON) assert.equal(db.get(collection, `${collection}-hum_me`), undefined, collection);
   for (const collection of OF_VISA) assert.equal(db.get(collection, `${collection}-visa_me`), undefined, collection);
 
   assert.ok(db.get("humans", "hum_other"));
+  assert.ok(db.get("saved_paypal", "hum_other"));
   assert.equal(db.get<{ status: string }>("visas", "visa_other")?.status, "active");
   assert.ok(db.get("auth_requests", "req-hum_other"));
   for (const collection of OF_PERSON) assert.ok(db.get(collection, `${collection}-hum_other`), collection);
