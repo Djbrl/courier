@@ -3,7 +3,9 @@
 Courier lets you ask Claude to buy something and have it just happen, inside limits you set. PayPal confirms you're a
 real person, and your AI gets its own ID and spending rules.
 
-This page covers what Courier does, what works today and what's next, as of October 31, 2026.
+This page covers what Courier does, what works today and what's next, as of November 1, 2026. It also covers
+[the ways to try it](#ways-to-try-it), [how to run it on your machine with PayPal's test
+environment](#run-it-locally-with-paypal-sandbox) and [what changed recently](#changelog).
 
 ## The story
 
@@ -99,3 +101,97 @@ We're on a tight timeline, so the near-term list is short.
   and to hand tasks to each other.
 
 **Still to decide:** does group buying ship in the first release?
+
+## Ways to try it
+
+PayPal sandbox is PayPal's test environment. It works like the real thing, but no real money moves.
+
+| What you want to do                                                      | Where                                                            | Keys needed | Tunnel needed |
+| ------------------------------------------------------------------------ | ---------------------------------------------------------------- | ----------- | ------------- |
+| Try the full flow with your Claude and PayPal sandbox                    | [The hosted site](#use-the-hosted-site)                          | No          | No            |
+| Look around with a pretend PayPal                                        | Your machine, [`npm run demo`](README.md#try-it)                 | No          | No            |
+| Test code changes in Claude Code with a pretend PayPal                   | Your machine, `npm run demo`                                     | No          | No            |
+| Test code changes with PayPal sandbox, or in claude.ai or Claude Desktop | Your machine, [steps below](#run-it-locally-with-paypal-sandbox) | Yes         | Yes           |
+
+### Use the hosted site
+
+1. Get a **Personal** PayPal sandbox account ([step 1 of the PayPal setup](#3-set-up-paypal-sandbox)).
+2. Open <https://courier.167-99-248-134.sslip.io/start> and sign in with that account.
+3. To use your own Claude, add `https://courier.167-99-248-134.sslip.io/mcp` as a custom connector.
+
+## Run it locally with PayPal sandbox
+
+Follow these steps only to test your own code changes with PayPal sandbox, or in claude.ai or Claude Desktop. Never commit
+`.env` or share what's in it.
+
+### 1. Create your settings file
+
+```bash
+cp .env.example .env
+```
+
+### 2. Fill in the secrets
+
+| Setting                                    | Needed? | How to get it                                                                                                    |
+| ------------------------------------------ | ------- | ---------------------------------------------------------------------------------------------------------------- |
+| `COURIER_SECRET`, `INTERNAL_SECRET`        | Yes     | Generate a different value for each with `openssl rand -hex 32`                                                  |
+| `PAYPAL_CLIENT_ID`, `PAYPAL_CLIENT_SECRET` | Yes     | Your PayPal sandbox app, see step 3                                                                              |
+| `ANTHROPIC_API_KEY`                        | No      | [Anthropic Console](https://console.anthropic.com). Usage is billed                                              |
+| `PAYPAL_WEBHOOK_ID`                        | No      | From your PayPal app, only to confirm payment updates came from PayPal. Send them to `STORE_URL/webhooks/paypal` |
+| `JEV_API_KEY`, `JEV_BASE_URL`              | No      | Jev is in early access. Otherwise, leave these empty                                                             |
+| `COURIER_SIGNING_KEY`                      | No      | Leave it empty. Courier creates one the first time it runs                                                       |
+
+Without an Anthropic key, the errand room on Courier's website follows a fixed script. Your own Claude still works without
+one.
+
+### 3. Set up PayPal sandbox
+
+Sign in at [developer.paypal.com](https://developer.paypal.com), then:
+
+1. Go to **Testing Tools** > **Sandbox Accounts** and make sure you have a **Personal** account (the buyer) and a
+   **Business** account (the shop). **Create account** adds one. To see an account's login, open its menu in the
+   **Settings** column and choose **View/Edit account**.
+2. Go to **Apps & Credentials**, stay on **Sandbox**, and choose **Create App**. Copy its client ID and secret into
+   `.env`.
+3. In the app, enable **Log in with PayPal** and share only "Account verification status" and "PayPal account ID (payer
+   ID)".
+4. To use **Pay without asking**, go to App Feature Options > Accept payments > Advanced options and tick **Vault**.
+   Without it, Courier sends a PayPal link for each purchase instead.
+
+### 4. Start it with a tunnel
+
+A tunnel gives your machine a temporary public address, so claude.ai and Claude Desktop can reach it. We also use it for
+PayPal sign-in, because PayPal may not accept a `localhost` address and we've only tested this setup through the tunnel.
+You don't need an account, only [`cloudflared`](https://github.com/cloudflare/cloudflared), which you can install with
+`brew install cloudflared`.
+
+```bash
+./scripts/tunnel.sh
+```
+
+Leave it running. It saves the new addresses in `.env` and starts both apps. In your PayPal app, set the return URL to
+`COURIER_URL/auth/paypal/callback`. The addresses change every time you run the script, so update the return URL each
+time.
+
+Then check your setup from a second terminal:
+
+```bash
+npm run preflight -- --paypal
+```
+
+When every line shows ✓, sign in with your **Personal** sandbox account. To connect Claude and check that the money
+reached your **Business** account, follow the [live test](docs/live-test.md).
+
+## Changelog
+
+### November 1, 2026
+
+- **Moved to DigitalOcean.** Courier and the demo shops now run at <https://courier.167-99-248-134.sslip.io> and
+  <https://shop.167-99-248-134.sslip.io>. You no longer need a tunnel to use them.
+- **One connector for every shop.** You add Courier to Claude once, and it reaches every shop and courier.
+- **Budgets in the chat.** You can set an errand's budget inside the chat.
+- **New landing page.** It now tells one story from start to finish, addressed to you, with a new header and cards that
+  arrive one at a time.
+- **App redesign.** The app now has one budget and fewer screens.
+- **Delete your account.** You can now delete your account and start again.
+- **Connecting and receipts.** You can connect Claude before writing a ticket, and every purchase comes with a receipt.

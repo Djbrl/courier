@@ -33,7 +33,7 @@ Keep each pull request to one change. Commit messages are short and imperative, 
 | `npm run test:unit` | Unit tests only                                                    |
 | `npm run format`    | Applies formatting and safe lint fixes                             |
 | `npm run preflight` | Checks your setup before a live test                               |
-| `npm run keys`      | Prints a signing key for hosts with an ephemeral disk              |
+| `npm run keys`      | Prints a signing key, for hosts that lose their files on restart   |
 
 ## Where things go
 
