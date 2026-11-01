@@ -19,7 +19,8 @@ flowchart LR
 | ---------------- | -------------------------------------------------------------------------------------------------------------------- |
 | **Courier**      | The product and `apps/courier`. Also the name for a person's agent, such as "Juno"                                   |
 | **Errand**       | What the person sees: a job for a courier, written on a ticket                                                       |
-| **Visa**         | What the code sees: the signed, limited permission behind an errand. Carried in the access token                     |
+| **Visa**         | What the code sees: the signed, limited permission behind an errand. Sent to the shop as a signed token              |
+| **Connection**   | A person's own Claude, linked to Courier. It carries no limits and outlasts errands                                  |
 | **Stamp**        | One entry in an errand's step-by-step record                                                                         |
 | **Hold**         | Budget set aside while a payment is pending, so parallel purchases can't overspend                                   |
 | **Approval**     | A question to the person, created when a purchase is off the ticket                                                  |
@@ -53,10 +54,15 @@ sequenceDiagram
     A->>C: /authorize (PKCE, resource = shop)
     C->>P: Log in with PayPal
     P-->>C: Verified, age band
-    Note over C: Person fills in the ticket
+    Note over C: Person says yes. No ticket, no payment
     C-->>A: Code
     A->>C: POST /token
-    C-->>A: JWT with pseudonym and visa claims
+    C-->>A: JWT with pseudonym, no limits
+    A->>S: hold_item or request_purchase
+    S-->>A: Link to write a ticket
+    Note over C: Person sends the ticket
+    S->>C: /internal/connections/:id on each request
+    C-->>S: Short-lived JWT with visa claims
 ```
 
 ## Buying

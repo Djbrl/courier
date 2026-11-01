@@ -134,12 +134,7 @@ async function discover(): Promise<Flow> {
   return { client: await reg.json(), courier, asMeta };
 }
 
-async function authorize(
-  flow: Flow,
-  browser: Browser,
-  persona: string,
-  consent: Record<string, string | string[]> | null,
-) {
+async function authorize(flow: Flow, browser: Browser, persona: string, opts: { refused?: boolean } = {}) {
   const verifier = b64url(randomBytes(32));
   const challenge = b64url(createHash("sha256").update(verifier).digest());
   const state = b64url(randomBytes(8));
@@ -173,36 +168,26 @@ async function authorize(
   });
   const callback = loginPost.headers.get("location")!;
   const cb = await browser.req(callback);
-  if (!consent) return { refusal: await cb.text(), cbStatus: cb.status };
+  if (opts.refused) return { refusal: await cb.text(), cbStatus: cb.status };
   assert.equal(cb.status, 302, "callback should redirect to consent");
   assert.ok(cb.headers.get("location")!.includes(`/consent/${reqId}`));
 
-  // Consent → maybe saving PayPal → maybe bond approval → redirect to the agent with a code
-  let followed: { location: string | null; url?: string } = await browser.follow(
-    `${flow.courier}/consent/${reqId}`,
-    REDIRECT,
-    { form: consent },
-  );
-  let redirect = followed.location;
-  if (!redirect && consent.autopay) {
-    // Saved PayPal: we're on the simulator's "Save PayPal" page; agree (or cancel).
-    const setupId = followed.url!.split("/sim-paypal/vault/")[1];
-    assert.ok(setupId, `expected the Save PayPal page, got ${followed.url}`);
-    followed = await browser.follow(`${flow.courier}/sim-paypal/vault/${setupId}`, REDIRECT, {
-      form: { decision: String(consent.autopay_decision ?? "approve") },
+  // First time: the person names a courier in the middle of connecting, and comes straight back.
+  const ask = await browser.req(`${flow.courier}/consent/${reqId}`);
+  if (ask.status === 302) {
+    assert.match(ask.headers.get("location")!, /\/start\/courier\?req=/);
+    const made = await browser.req(`${flow.courier}/start/courier`, {
+      form: { name: "Juno", human: "Maya", color: "cobalt", req: reqId },
     });
-    redirect = followed.location;
+    assert.equal(made.status, 303);
+    assert.ok(made.headers.get("location")!.includes(`/consent/${reqId}`));
   }
-  if (!redirect && consent.bond) {
-    // Bond: we're on the simulator's approval page; approve the hold.
-    const orderId = followed.url!.split("/sim-paypal/checkout/")[1];
-    const approve = await browser.follow(`${flow.courier}/sim-paypal/checkout/${orderId}`, REDIRECT, {
-      form: { decision: "approve" },
-    });
-    redirect = approve.location;
-  }
-  assert.ok(redirect, "expected a redirect back to the agent");
-  const back = new URL(redirect!);
+
+  // One yes, and the agent gets its code: no ticket, no PayPal page.
+  const consent = await browser.req(`${flow.courier}/consent/${reqId}`, { form: { decision: "approve" } });
+  assert.equal(consent.status, 302);
+  const back = new URL(consent.headers.get("location")!);
+  assert.equal(back.origin + back.pathname, REDIRECT);
   assert.equal(back.searchParams.get("state"), state);
   assert.equal(back.searchParams.get("iss"), flow.courier, "RFC 9207 iss");
   const code = back.searchParams.get("code")!;
@@ -225,6 +210,39 @@ async function authorize(
   return { tokens, reqId };
 }
 
+/** The agent asks to hold something, gets a ticket link, and the person sends the ticket from it. */
+async function writeTicket(browser: Browser, token: string, ticket: Record<string, string | string[]>) {
+  const chat = await mcpClient(token);
+  const asked = await chat.callTool({ name: "hold_item", arguments: { item_id: "jr-002" } });
+  const url = String(structured(asked).ticket_url);
+  assert.equal(structured(asked).decision, "needs_ticket", JSON.stringify(asked));
+
+  let followed: { res: Response; location: string | null; url?: string } = await browser.follow(url, "http://none/", {
+    form: ticket,
+  });
+  if (ticket.autopay) {
+    // Saved PayPal: we're on the simulator's "Save PayPal" page; agree (or cancel).
+    const setupId = followed.url!.split("/sim-paypal/vault/")[1];
+    assert.ok(setupId, `expected the Save PayPal page, got ${followed.url}`);
+    followed = await browser.follow(`${new URL(url).origin}/sim-paypal/vault/${setupId}`, "http://none/", {
+      form: { decision: String(ticket.autopay_decision ?? "approve") },
+    });
+  }
+  if (ticket.bond) {
+    // Bond: we're on the simulator's approval page; approve the hold.
+    const orderId = followed.url!.split("/sim-paypal/checkout/")[1];
+    followed = await browser.follow(`${new URL(url).origin}/sim-paypal/checkout/${orderId}`, "http://none/", {
+      form: { decision: "approve" },
+    });
+  }
+  assert.match(await followed.res.text(), /has its ticket/);
+  await new Promise((r) => setTimeout(r, 3200)); // the shop caches a connection's standing for 3 seconds
+  const who = structured(await chat.callTool({ name: "whoami", arguments: {} }));
+  await chat.close();
+  assert.ok(who.visa, "the ticket should be live on the next call");
+  return who.visa;
+}
+
 const decode = (jwt: string) => JSON.parse(Buffer.from(jwt.split(".")[1], "base64url").toString());
 
 /* ---------------- the run ---------------- */
@@ -241,36 +259,67 @@ await step("Discovery: 401 → protected resource metadata → AS metadata → d
 });
 
 await step("Unverified PayPal account is refused", async () => {
-  const out = await authorize(flow, new Browser(), "sam", null);
+  const out = await authorize(flow, new Browser(), "sam", { refused: true });
   assert.match(out.refusal!, /isn&#39;t verified|isn't verified/);
 });
 
 await step("Under-18 PayPal account is refused", async () => {
-  const out = await authorize(flow, new Browser(), "riley", null);
+  const out = await authorize(flow, new Browser(), "riley", { refused: true });
   assert.match(out.refusal!, /for adults/);
 });
 
+await step("Connecting takes one yes, with no ticket or payment (PKCE + resource + iss)", async () => {
+  const out = await authorize(flow, browser, "ada");
+  tokens = out.tokens;
+  const claims = decode(tokens.access_token);
+  assert.equal(claims.aud, MCP);
+  assert.equal(claims.human.verified, true);
+  assert.match(claims.sub, /^pp_/);
+  assert.equal(claims.visa, undefined, "a connection carries no limits");
+  assert.equal(claims.connection.agent, "Juno");
+  assert.ok(!JSON.stringify(claims).includes("SIMPAYER"), "no PayPal id leaks to the merchant");
+});
+
 await step(
-  "Verified human signs in with PayPal, issues a visa, agent gets a token (PKCE + resource + iss)",
+  "Connected without a ticket: it can browse, and holding or buying gets a prefilled ticket link",
   async () => {
-    const out = await authorize(flow, browser, "ada", {
-      decision: "approve",
-      scopes: ["store:browse", "store:reserve", "store:buy"],
-      spend_limit: "60",
-      per_purchase_limit: "40",
-      duration: "24h",
-      intent: "Jazz records for my dad",
+    const chat = await mcpClient(tokens.access_token);
+    const who = structured(await chat.callTool({ name: "whoami", arguments: {} }));
+    assert.equal(who.visa, null);
+    assert.equal(who.agent, "Juno");
+    const search = await chat.callTool({ name: "search_catalog", arguments: { query: "jazz", max_price: 40 } });
+    assert.ok(structured(search).results.length > 0);
+    const buy = await chat.callTool({
+      name: "request_purchase",
+      arguments: {
+        item_ids: ["jr-002"],
+        ticket_hint: { purpose: "Jazz for <b>dad</b>", max_per_item: 35, max_total: 5000 },
+      },
     });
-    tokens = out.tokens;
-    const claims = decode(tokens.access_token);
-    assert.equal(claims.aud, MCP);
-    assert.equal(claims.human.verified, true);
-    assert.match(claims.sub, /^pp_/);
-    assert.equal(claims.visa.spend_limit.value, "60.00");
-    assert.ok(!JSON.stringify(claims).includes("SIMPAYER"), "no PayPal id leaks to the merchant");
-    visaId = claims.visa.id;
+    const sc = structured(buy);
+    assert.equal(sc.decision, "needs_ticket", JSON.stringify(buy));
+    const page = await (await browser.req(sc.ticket_url)).text();
+    assert.match(page, /value="Jazz for &lt;b&gt;dad&lt;\/b&gt;"/, "the agent's text is escaped");
+    assert.match(page, /name="per_purchase_limit"[^>]*value="35"/);
+    assert.match(page, /name="spend_limit"[^>]*value="500"/, "suggestions are capped");
+    const stranger = await new Browser().req(sc.ticket_url);
+    assert.equal(stranger.status, 302, "signed out: sign in first");
+    await chat.close();
   },
 );
+
+await step("The ticket goes live on the agent's next call, with no reconnecting", async () => {
+  const visa = await writeTicket(browser, tokens.access_token, {
+    decision: "approve",
+    scopes: ["store:browse", "store:reserve", "store:buy"],
+    spend_limit: "60",
+    per_purchase_limit: "40",
+    duration: "24h",
+    intent: "Jazz records for my dad",
+  });
+  assert.equal(visa.spend_limit.value, "60.00");
+  visaId = visa.id;
+});
 
 await step("MCP: list tools and whoami over MCP", async () => {
   client = await mcpClient(tokens.access_token);
@@ -409,11 +458,6 @@ await step("Courier names work like usernames: bad names are refused", async () 
 });
 
 await step("Courier home shows the errand; its detail shows every step", async () => {
-  // Making a courier is part of onboarding; the Claude that connected first becomes it.
-  const made = await browser.req(`${flow.courier}/start/courier`, {
-    form: { name: "Juno", human: "Maya", color: "cobalt" },
-  });
-  assert.equal(made.status, 303);
   const home = await (await browser.req(`${flow.courier}/app`)).text();
   assert.match(home, /Verified PayPal account/);
   assert.match(home, /Jazz records for my dad/);
@@ -428,40 +472,33 @@ await step("A stranger can't cancel someone else's errand through the bond link"
   assert.match(page, /Call back/);
 });
 
-await step("Revoking the visa locks the agent out within seconds", async () => {
+await step("Calling back ends the errand within seconds; Claude stays connected but can't buy", async () => {
   const res = await browser.req(`${flow.courier}/app/visas/${visaId}/revoke`, { form: {} });
   assert.equal(res.status, 303);
   await new Promise((r) => setTimeout(r, 3200));
-  const raw = await fetch(MCP, {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      accept: "application/json, text/event-stream",
-      authorization: `Bearer ${tokens.access_token}`,
-    },
-    body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "whoami", arguments: {} } }),
-  });
-  assert.equal(raw.status, 401);
+  const chat = await mcpClient(tokens.access_token);
+  const buy = await chat.callTool({ name: "request_purchase", arguments: { item_ids: ["jr-002"] } });
+  assert.equal(structured(buy).decision, "needs_ticket", JSON.stringify(buy));
+  await chat.close();
 });
 
 await step(
   "Saved PayPal: one OK on the ticket, then purchases are paid straight away; calling back removes it",
   async () => {
     const b = browser;
-    const out = await authorize(flow, b, "ada", {
+    const visa = await writeTicket(b, tokens.access_token, {
       decision: "approve",
-      scopes: ["store:browse", "store:buy"],
+      scopes: ["store:browse", "store:reserve", "store:buy"],
       spend_limit: "60",
       per_purchase_limit: "40",
       duration: "24h",
       intent: "Jazz records",
       autopay: "1",
     });
-    const claims = decode(out.tokens.access_token);
-    assert.equal(claims.visa.autopay, true);
-    assert.ok(!JSON.stringify(claims).includes("VT-"), "the saved PayPal token never reaches the shop or agent");
+    assert.equal(visa.autopay, true);
+    assert.ok(!JSON.stringify(visa).includes("VT-"), "the saved PayPal token never reaches the shop or agent");
     const asked: string[] = [];
-    const chat = await mcpClient(out.tokens.access_token, (message) => {
+    const chat = await mcpClient(tokens.access_token, (message) => {
       asked.push(message);
       return "Yes, allow it";
     });
@@ -474,6 +511,15 @@ await step(
     assert.equal(sc.approve_url, undefined);
     assert.equal(sc.remaining_budget, "35.00");
     assert.equal(asked.length, 0);
+    const receipt = await fetch(sc.receipt_url);
+    assert.equal(receipt.status, 200);
+    const receiptPage = await receipt.text();
+    assert.match(receiptPage, /✓ Paid/);
+    assert.match(receiptPage, new RegExp(sc.items[0].title));
+    assert.ok(!receiptPage.includes("SIMPAYER"), "no PayPal id on the receipt");
+    assert.equal((await fetch(`${STORE}/receipts/not-a-key`)).status, 404);
+    const card: any = await chat.readResource({ uri: "ui://courier/receipt.html" });
+    assert.match(card.contents[0].mimeType, /profile=mcp-app/);
     assert.equal(
       structured(await chat.callTool({ name: "order_status", arguments: { order_id: sc.order_id } })).status,
       "paid",
@@ -487,22 +533,24 @@ await step(
     assert.equal(structured(rap).remaining_budget, "9.00");
 
     // Spend landed on the errand; the shop sees the paid orders.
-    const errand = await (await b.req(`${flow.courier}/app/errands?e=${claims.visa.id}`)).text();
+    const errand = await (await b.req(`${flow.courier}/app/errands?e=${visa.id}`)).text();
     assert.match(errand, /pays with saved PayPal/);
     assert.match(errand, /Paid with saved PayPal/);
 
     // Calling the courier back deletes the saved PayPal at PayPal.
-    assert.equal((await b.req(`${flow.courier}/app/visas/${claims.visa.id}/revoke`, { form: {} })).status, 303);
-    const after = await (await b.req(`${flow.courier}/app/errands?e=${claims.visa.id}`)).text();
+    assert.equal((await b.req(`${flow.courier}/app/visas/${visa.id}/revoke`, { form: {} })).status, 303);
+    const after = await (await b.req(`${flow.courier}/app/errands?e=${visa.id}`)).text();
     assert.match(after, /Saved PayPal removed/);
     await chat.close();
   },
 );
 
 await step("Not saving PayPal is fine: the errand goes ahead and purchases get a PayPal page", async () => {
-  const out = await authorize(flow, new Browser(), "malik", {
+  const malik = new Browser();
+  const out = await authorize(flow, malik, "malik");
+  const visa = await writeTicket(malik, out.tokens.access_token, {
     decision: "approve",
-    scopes: ["store:browse", "store:buy"],
+    scopes: ["store:browse", "store:reserve", "store:buy"],
     spend_limit: "60",
     per_purchase_limit: "40",
     duration: "1h",
@@ -510,8 +558,7 @@ await step("Not saving PayPal is fine: the errand goes ahead and purchases get a
     autopay: "1",
     autopay_decision: "cancel",
   });
-  const claims = decode(out.tokens.access_token);
-  assert.equal(claims.visa.autopay, false);
+  assert.equal(visa.autopay, false);
   const chat = await mcpClient(out.tokens.access_token);
   const buy = await chat.callTool({ name: "request_purchase", arguments: { item_ids: ["jr-030"] } });
   assert.ok(structured(buy).approve_url, JSON.stringify(buy));
@@ -519,21 +566,47 @@ await step("Not saving PayPal is fine: the errand goes ahead and purchases get a
 });
 
 await step("Bonded visa: $5 hold authorized; merchant report suspends the visa and captures the bond", async () => {
-  const out = await authorize(flow, browser, "ada", {
+  const visa = await writeTicket(browser, tokens.access_token, {
     decision: "approve",
-    scopes: ["store:browse", "store:buy"],
+    scopes: ["store:browse", "store:reserve", "store:buy"],
     spend_limit: "30",
     per_purchase_limit: "30",
     duration: "1h",
     intent: "",
     bond: "1",
   });
-  const claims = decode(out.tokens.access_token);
-  assert.equal(claims.visa.bond.status, "authorized");
-  const report = await fetch(`${STORE}/merchant/report/${claims.visa.id}`, { method: "POST", redirect: "manual" });
+  assert.equal(visa.bond.status, "authorized");
+  const report = await fetch(`${STORE}/merchant/report/${visa.id}`, { method: "POST", redirect: "manual" });
   assert.equal(report.status, 303);
-  const page = await (await browser.req(`${flow.courier}/app/errands?e=${claims.visa.id}`)).text();
+  const page = await (await browser.req(`${flow.courier}/app/errands?e=${visa.id}`)).text();
   assert.match(page, /bond captured/);
+});
+
+await step("Disconnecting removes Claude: its token and refresh token stop working", async () => {
+  const { id } = decode(tokens.access_token).connection;
+  const home = await browser.req(`${flow.courier}/app/connections/${id}/revoke`, { form: {} });
+  assert.equal(home.status, 303);
+  await new Promise((r) => setTimeout(r, 3200));
+  const raw = await fetch(MCP, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      accept: "application/json, text/event-stream",
+      authorization: `Bearer ${tokens.access_token}`,
+    },
+    body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "whoami", arguments: {} } }),
+  });
+  assert.equal(raw.status, 401);
+  const refresh = await fetch(flow.asMeta.token_endpoint, {
+    method: "POST",
+    headers: { "content-type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      grant_type: "refresh_token",
+      refresh_token: tokens.refresh_token,
+      client_id: flow.client.client_id,
+    }),
+  });
+  assert.equal(refresh.status, 400);
 });
 
 await step("Release the bots: every attack is blocked or flagged", async () => {

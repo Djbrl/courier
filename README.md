@@ -59,7 +59,8 @@ To use your own Claude, see [the live test](docs/live-test.md). The connector ne
 - **Limits live in code.** Budget, per-item limit, shop and expiry are enforced before any model runs.
 - **Off the ticket, it asks you.** An AI check compares each purchase with your purpose, and asks you in the chat if it
   doesn't fit.
-- **Call it back any time.** Revoking takes effect in seconds and deletes the saved PayPal.
+- **Call it back any time.** Revoking takes effect in seconds and deletes the saved PayPal. Claude stays connected, ready
+  for the next ticket.
 
 <p align="center">
   <img src="docs/images/bots.png" alt="Eight attacks on the shop, all blocked or flagged" width="100%">
@@ -98,8 +99,9 @@ tests             Unit tests, an end-to-end run, an official MCP client check
 
 Courier is a prototype. It only handles sandbox and simulated money.
 
-- **Working with real Claude and the PayPal sandbox:** connecting, the ticket, and paying through a PayPal link.
-- **Built and tested on the simulator, not yet on the sandbox:** paying with saved PayPal, and the $5 bond.
+- **Working with real Claude and the PayPal sandbox:** connecting, the ticket, paying through a PayPal link and paying
+  with saved PayPal.
+- **Built and tested on the simulator, not yet on the sandbox:** the $5 bond.
 - **Next:** Runs, where several people's couriers buy one thing together.
 
 ## License

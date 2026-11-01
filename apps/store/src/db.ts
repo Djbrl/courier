@@ -16,6 +16,8 @@ export interface Order {
   /** "saved_paypal": paid straight away with the PayPal the person saved on their Courier ticket. */
   paidWith?: "paypal_page" | "saved_paypal";
   captureId?: string | null;
+  /** The unguessable part of the receipt link. Older orders don't have one. */
+  receiptKey?: string;
   createdAt: string;
   paidAt?: string | null;
   /** What the merchant can show in a dispute: the human's signed delegation and the decision trail. */

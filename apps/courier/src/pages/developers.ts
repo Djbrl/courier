@@ -33,7 +33,7 @@ export function developersPage(human: Human | null): string {
           <h2 class="sec-t">Use it in Claude</h2>
           <ol class="steps">
             <li><b>Add a custom connector with this URL.</b><code class="copy inp code">${STORE_RESOURCE}</code></li>
-            <li><b>Connect, and pick your courier.</b><span>Courier opens: sign in with PayPal and write the errand ticket.</span></li>
+            <li><b>Connect, and pick your courier.</b><span>Courier opens: sign in with PayPal and say yes. Nothing is bought.</span></li>
             <li><b>Ask in any chat.</b><span><q>Find me a jazz record under $40 at ${config.store.name}.</q></span></li>
           </ol>
           <a class="btn sm" href="/start">Get a courier${ARROW}</a>
@@ -43,7 +43,7 @@ export function developersPage(human: Human | null): string {
           <ol class="steps">
             <li><b>Point your MCP server’s protected-resource metadata at Courier.</b><span>RFC 9728. Clients find Courier and register themselves.</span></li>
             <li><b>Verify the access token.</b><span>Signature (JWKS), issuer, audience = your MCP URL, expiry.</span></li>
-            <li><b>Read the <code>visa</code> claim; check spends before charging.</b><span>Put the visa id in the PayPal order’s <code>custom_id</code> as evidence.</span></li>
+            <li><b>Get the current ticket; check spends before charging.</b><span>A connected agent’s token has no limits. Courier gives you its <code>visa</code> as a short-lived signed token. Put the visa id in the PayPal order’s <code>custom_id</code> as evidence.</span></li>
           </ol>
           <ul class="eps">
             ${ep("Authorization server", `${issuer}/.well-known/oauth-authorization-server`)}
@@ -53,7 +53,7 @@ export function developersPage(human: Human | null): string {
         </section>
         <section class="panel devs-c devs-claims">
           <h2 class="sec-t">What a shop sees</h2>
-          <p class="fine">The token’s claims. <code>sub</code> is a different pseudonym for every shop.</p>
+          <p class="fine">The ticket’s claims. <code>sub</code> is a different pseudonym for every shop.</p>
           <pre class="claims">${CLAIMS_EXAMPLE}</pre>
           <p class="fine">Try to break it: <a href="/bots">release the bots</a>.</p>
         </section>

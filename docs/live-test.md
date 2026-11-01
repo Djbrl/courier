@@ -34,13 +34,17 @@ Two sandbox accounts are involved:
 ## 1. An errand inside the ticket
 
 1. In Claude: _"Ask my courier to find me a jazz record under $40 at Juniper Records and buy it."_
-2. First time only: Courier opens. Sign in with the **Personal** account, pick your courier, write the
-   ticket ("Jazz records for my dad", $60 / $40), leave **Pay without asking** on, and send it. PayPal asks once to
-   save PayPal for Juniper Records: agree.
-3. Claude calls `request_purchase` and comes back with "Bought … paid with your saved PayPal". No link, no questions.
+2. First time only: connecting asks you to sign in with the **Personal** account, name or pick a courier, and say yes.
+   Nothing is bought yet.
+3. First purchase on a ticketless Claude: it gives you a ticket link. Check the prefill ("Jazz records for my dad",
+   $60 / $40), leave **Pay without asking** on, and send it. PayPal asks once to save PayPal for Juniper Records: agree.
+   Back in Claude, say "done".
+4. Claude calls `request_purchase` and comes back with "Bought … paid with your saved PayPal". No link, no questions.
    (With Pay without asking off, or Vault off on the app: a PayPal link instead; pay it with the **Personal** account.)
-4. Check:
-   - [ ] Claude's reply is a receipt (order id, amount left), and `order_status` says paid.
+5. Check:
+   - [ ] Claude's reply includes a receipt link that opens a page showing the record, the price and "Paid". If the app
+     supports MCP Apps, a receipt card appears in the chat too.
+   - [ ] `order_status` says paid.
    - [ ] Courier → Errands: the ticket shows the spend and "pays with saved PayPal"; the steps show "Bought …" with
      "Paid with saved PayPal".
    - [ ] What the shop sees: the order is **Paid**, with the courier's name and "Signed proof".
@@ -79,8 +83,9 @@ Two sandbox accounts are involved:
 
 ## 4. Calling a courier back
 
-- [ ] Errands → Call back on an errand Claude is using. Claude's next tool call should fail with 401 and it
-  should ask you to connect again.
+- [ ] Errands → Call back on an errand Claude is using. Claude stays connected, and its next purchase gets a new ticket
+  link. It should not ask you to reconnect.
+- [ ] Connections → Disconnect. Claude's next tool call should fail with 401 and it should ask you to connect again.
 - [ ] The errand's steps say "Saved PayPal removed". On sandbox.paypal.com (Personal account → Settings → Payments
   → Manage automatic payments), Juniper Records should no longer be listed.
 

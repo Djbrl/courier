@@ -15,9 +15,11 @@ import type { OAuthClientInformationFull } from "@modelcontextprotocol/sdk/share
 import express, { Router } from "express";
 import { decodeJwt } from "jose";
 import { type AgentMemory, freshAccessToken, runAgent, type TokenHolder, tokenRequest, withStore } from "../agent.ts";
+import { findAuthRequest } from "../auth/oauth.ts";
 import { currentHuman } from "../auth/session.ts";
 import {
   type Approval,
+  type Connection,
   type Courier,
   courierIdNo,
   db,
@@ -36,7 +38,6 @@ import {
   connectionsPage,
   courierSetupPage,
   couriersPage,
-  DEMO_CLIENT_PREFIX,
   type Desk,
   demoClientId,
   errandRoom,
@@ -45,7 +46,6 @@ import {
   howPage,
   signInPage,
   startPage,
-  summonPage,
 } from "../pages/index.ts";
 import { decideApproval, revokeVisa } from "../visas.ts";
 
@@ -119,6 +119,11 @@ function requireCourier(
   return { human, courier };
 }
 
+/** The Claude that's waiting on this courier, when someone made one in the middle of connecting. */
+function connectingRequest(value: unknown): string | undefined {
+  return typeof value === "string" && findAuthRequest(value) ? value : undefined;
+}
+
 appRouter.get("/start", (req, res) => {
   const human = currentHuman(req);
   if (!human) {
@@ -138,13 +143,14 @@ appRouter.get("/start/courier", (req, res) => {
   if (!human) return;
   const editing = typeof req.query.c === "string" ? findCourier(human.id, req.query.c) : undefined;
   const adding = !editing && req.query.new === "1" && listCouriers(human.id).length > 0;
+  const reqId = connectingRequest(req.query.req);
   // First run, already made one: keep going rather than making a second by accident.
   const existing = !editing && !adding ? findCourier(human.id) : undefined;
   if (existing) {
-    res.redirect(302, `/start/summon?c=${existing.id}`);
+    res.redirect(302, reqId ? `/consent/${reqId}` : `/start/claude?c=${existing.id}&first=1`);
     return;
   }
-  res.send(courierSetupPage(human, editing, { adding }));
+  res.send(courierSetupPage(human, editing, { adding, reqId }));
 });
 
 appRouter.post("/start/courier", (req, res) => {
@@ -165,7 +171,9 @@ appRouter.post("/start/courier", (req, res) => {
       : taken
         ? `You already have a courier called ${name}.`
         : `That name won't work. ${COURIER_NAME_HINT}`;
-    res.status(400).send(courierSetupPage(human, editing, { adding, error, name }));
+    res
+      .status(400)
+      .send(courierSetupPage(human, editing, { adding, error, name, reqId: connectingRequest(req.body.req) }));
     return;
   }
   const firstRun = !editing && !findCourier(human.id);
@@ -182,32 +190,11 @@ appRouter.post("/start/courier", (req, res) => {
     mode: editing?.mode ?? "demo",
     createdAt: editing?.createdAt ?? new Date().toISOString(),
   };
-  // A Claude that's out on an errand already (it connected before the person made a courier) becomes their first courier.
-  const earlier = firstRun
-    ? db
-        .list<Visa>(
-          "visas",
-          (v) =>
-            v.humanId === human.id && !v.clientId.startsWith(DEMO_CLIENT_PREFIX) && effectiveStatus(v) === "active",
-        )
-        .sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0]
-    : undefined;
-  if (earlier)
-    Object.assign(courier, {
-      mode: "claude",
-      clientId: earlier.clientId,
-      clientName: earlier.agentName,
-      boundAt: new Date().toISOString(),
-    });
   saveCourier(courier);
   db.put("humans", human.id, { ...human, displayName: humanName });
   ensureDemoClient(courier);
-  res.redirect(303, editing ? `/app/couriers?c=${id}` : `/start/summon?c=${id}`);
-});
-
-appRouter.get("/start/summon", (req, res) => {
-  const ctx = requireCourier(req, res);
-  if (ctx) res.send(summonPage(ctx.human, ctx.courier));
+  const reqId = connectingRequest(req.body.req);
+  res.redirect(303, reqId ? `/consent/${reqId}` : editing ? `/app/couriers?c=${id}` : `/start/claude?c=${id}&first=1`);
 });
 
 appRouter.get("/start/claude", (req, res) => {
@@ -234,7 +221,8 @@ function desk(human: Human): Desk {
     );
   const stamps = db.list<Stamp>("stamps", (s) => s.humanId === human.id, 500).sort((a, b) => b.at.localeCompare(a.at));
   const approvals = db.list<Approval>("approvals", (a) => a.humanId === human.id && a.status === "pending");
-  return { human, couriers: listCouriers(human.id), visas, stamps, approvals };
+  const connections = db.list<Connection>("connections", (c) => c.humanId === human.id && c.status === "active");
+  return { human, couriers: listCouriers(human.id), visas, stamps, approvals, connections };
 }
 
 /** The app needs a courier; people who signed in without one finish onboarding first. */

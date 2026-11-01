@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import {
+  type ConnectionTokenClaims,
   centsToValue,
   config,
   isScope,
@@ -27,6 +28,8 @@ import { jwtVerify, SignJWT } from "jose";
 import {
   type AuthCode,
   type AuthRequest,
+  type Connection,
+  connectionAgent,
   db,
   effectiveStatus,
   findMerchant,
@@ -40,6 +43,7 @@ import { signingKey } from "./keys.ts";
 const ACCESS_TOKEN_TTL_SECONDS = 60 * 60;
 const AUTH_REQUEST_TTL_MS = 20 * 60 * 1000;
 const CODE_TTL_MS = 2 * 60 * 1000;
+const CONNECTION_REFRESH_TTL_MS = 90 * 24 * 60 * 60 * 1000;
 
 const sha256 = (value: string) => createHash("sha256").update(value).digest("hex");
 
@@ -153,6 +157,46 @@ async function issueTokens(visa: Visa, human: Human, clientId: string): Promise<
   };
 }
 
+/** A connection's token says who Claude acts for and carries no limits, so it lasts across errands. */
+async function issueConnectionTokens(connection: Connection, human: Human): Promise<OAuthTokens> {
+  const { privateKey, kid } = await signingKey();
+  const claims: Omit<ConnectionTokenClaims, "iss" | "aud" | "sub" | "exp" | "iat" | "jti"> = {
+    client_id: connection.clientId,
+    scope: connection.scopes.join(" "),
+    human: { verified: human.verified, age_range: human.ageRange },
+    connection: { id: connection.id, agent: connectionAgent(connection) },
+  };
+  const token = await new SignJWT(claims as Record<string, unknown>)
+    .setProtectedHeader({ alg: "EdDSA", kid, typ: "at+jwt" })
+    .setIssuer(config.courier.url)
+    .setAudience(connection.resource)
+    .setSubject(pairwiseSubject(human.id, connection.resource))
+    .setIssuedAt()
+    .setExpirationTime(`${ACCESS_TOKEN_TTL_SECONDS}s`)
+    .setJti(newId("at"))
+    .sign(privateKey);
+  const refresh = `crt_${randomToken(32)}`;
+  db.put<RefreshTokenRecord>("refresh_tokens", sha256(refresh), {
+    id: sha256(refresh),
+    clientId: connection.clientId,
+    connectionId: connection.id,
+    humanId: human.id,
+    expiresAt: new Date(Date.now() + CONNECTION_REFRESH_TTL_MS).toISOString(),
+    revoked: false,
+  });
+  return {
+    access_token: token,
+    token_type: "Bearer",
+    expires_in: ACCESS_TOKEN_TTL_SECONDS,
+    scope: connection.scopes.join(" "),
+    refresh_token: refresh,
+  };
+}
+
+function assertConnectionUsable(connection: Connection | undefined): asserts connection is Connection {
+  if (connection?.status !== "active") throw new InvalidGrantError("this connection was removed");
+}
+
 function assertVisaUsable(visa: Visa | undefined): asserts visa is Visa {
   if (!visa) throw new InvalidGrantError("visa not found");
   const status = effectiveStatus(visa);
@@ -161,7 +205,11 @@ function assertVisaUsable(visa: Visa | undefined): asserts visa is Visa {
 
 /* ---------------- authorization codes ---------------- */
 
-export function issueAuthorizationCode(request: AuthRequest, visa: Visa, human: Human): string {
+export function issueAuthorizationCode(
+  request: AuthRequest,
+  grant: { visaId: string } | { connectionId: string },
+  human: Human,
+): string {
   const code = `cc_${randomToken(24)}`;
   db.put<AuthCode>("codes", sha256(code), {
     code: sha256(code),
@@ -169,13 +217,13 @@ export function issueAuthorizationCode(request: AuthRequest, visa: Visa, human: 
     clientId: request.clientId,
     redirectUri: request.redirectUri,
     codeChallenge: request.codeChallenge,
-    visaId: visa.id,
+    ...grant,
     humanId: human.id,
     resource: request.resource,
     expiresAt: new Date(Date.now() + CODE_TTL_MS).toISOString(),
     used: false,
   });
-  db.update<AuthRequest>("auth_requests", request.id, (r) => ({ ...r, completed: true, visaId: visa.id }));
+  db.update<AuthRequest>("auth_requests", request.id, (r) => ({ ...r, completed: true, ...grant }));
   return code;
 }
 
@@ -245,10 +293,15 @@ export class CourierOAuthProvider implements OAuthServerProvider {
     }
     db.update<AuthCode>("codes", id, (c) => ({ ...c, used: true }));
 
-    const visa = db.get<Visa>("visas", code.visaId);
-    assertVisaUsable(visa);
     const human = db.get<Human>("humans", code.humanId);
     if (!human) throw new InvalidGrantError("unknown person");
+    if (code.connectionId) {
+      const connection = db.get<Connection>("connections", code.connectionId);
+      assertConnectionUsable(connection);
+      return issueConnectionTokens(connection, human);
+    }
+    const visa = db.get<Visa>("visas", code.visaId ?? "");
+    assertVisaUsable(visa);
     return issueTokens(visa, human, client.client_id);
   }
 
@@ -262,18 +315,20 @@ export class CourierOAuthProvider implements OAuthServerProvider {
     const record = db.get<RefreshTokenRecord>("refresh_tokens", id);
     if (!record || record.revoked || record.clientId !== client.client_id)
       throw new InvalidGrantError("invalid refresh token");
-    if (new Date(record.expiresAt).getTime() < Date.now())
-      throw new InvalidGrantError("refresh token expired with its visa");
-    const visa = db.get<Visa>("visas", record.visaId);
-    assertVisaUsable(visa);
-    if (resource && normalizeResource(resource.href) !== normalizeResource(visa.resource)) {
-      throw new InvalidTargetError("resource does not match this visa");
+    if (new Date(record.expiresAt).getTime() < Date.now()) throw new InvalidGrantError("refresh token expired");
+    const connection = record.connectionId ? db.get<Connection>("connections", record.connectionId) : undefined;
+    const visa = record.visaId ? db.get<Visa>("visas", record.visaId) : undefined;
+    if (record.connectionId) assertConnectionUsable(connection);
+    else assertVisaUsable(visa);
+    const granted = connection?.resource ?? visa?.resource ?? "";
+    if (resource && normalizeResource(resource.href) !== normalizeResource(granted)) {
+      throw new InvalidTargetError("resource does not match this grant");
     }
     const human = db.get<Human>("humans", record.humanId);
     if (!human) throw new InvalidGrantError("unknown person");
     // Rotate: the old refresh token can't be used again.
     db.update<RefreshTokenRecord>("refresh_tokens", id, (r) => ({ ...r, revoked: true }));
-    return issueTokens(visa, human, client.client_id);
+    return connection ? issueConnectionTokens(connection, human) : issueTokens(visa!, human, client.client_id);
   }
 
   async verifyAccessToken(token: string): Promise<AuthInfo> {

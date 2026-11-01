@@ -9,6 +9,7 @@ import {
   LOGO,
   money,
   PP,
+  paypal,
   portrait,
   type RawHtml,
   raw,
@@ -16,7 +17,7 @@ import {
   timeAgo,
 } from "@courier/shared";
 import type { RequestLogEntry } from "./auth.ts";
-import type { Item } from "./catalog.ts";
+import { findItem, type Item } from "./catalog.ts";
 import type { Order } from "./db.ts";
 
 /* Juniper Records' own pages, in the Courier design system: the shop front humans see, and what the shop sees of couriers. */
@@ -118,7 +119,8 @@ export function paymentResult(order: Order | undefined, ok: boolean, message: st
         order
           ? html`<div class="paycard" style="margin-top:26px;text-align:left">
             ${order.items.map((i) => html`<div class="li"><span>${i.title}</span><span>${money(i.priceCents)}</span></div>`)}
-            <div class="tot" style="margin-bottom:0"><span>${config.store.name}</span><b>${money(order.totalCents)}</b></div></div>`
+            <div class="tot" style="margin-bottom:0"><span>${config.store.name}</span><b>${money(order.totalCents)}</b></div></div>
+            ${ok && order.receiptKey ? html`<p class="fine" style="margin-top:14px"><a class="link" href="${receiptUrl(order)}">See your receipt</a></p>` : ""}`
           : ""
       }
       <p class="fine" style="margin-top:22px" id="closing">You can close this window and go back to your courier.</p>
@@ -127,6 +129,48 @@ export function paymentResult(order: Order | undefined, ok: boolean, message: st
     ${raw(handoff)}`,
   });
 }
+
+export const receiptUrl = (order: Order) => `${config.store.url}/receipts/${order.receiptKey}`;
+
+/** What a person sees after their courier buys something: proof it happened, without opening anything else. */
+export function receiptPage(order: Order | undefined): string {
+  if (!order)
+    return storePage(
+      "Receipt",
+      "shop",
+      html`<main class="solo"><div class="solo-card"><h1 class="big">No receipt here.</h1><p class="lead">This link doesn’t match an order.</p></div></main>`,
+    );
+  const paid = order.status === "paid";
+  return storePage(
+    paid ? "Receipt" : STATUS[order.status],
+    "shop",
+    html`<main class="solo"><article class="solo-card rcpt">
+      <p class="rcpt-st ${paid ? "paid" : ""}">${paid ? "✓ Paid" : STATUS[order.status]}</p>
+      <h1 class="big">${paid ? `${order.agent} got it.` : "Not paid yet."}</h1>
+      <ul class="rcpt-items">${order.items.map((line) => {
+        const item = findItem(line.id);
+        return html`<li>${item ? html`<div class="cv" style="--h:${item.hue}">${cover(item)}</div>` : ""}
+          <div><b>${line.title}</b>${item ? html`<small>${item.artist} · ${item.category}</small>` : ""}</div>
+          <span class="pr">${money(line.priceCents)}</span></li>`;
+      })}</ul>
+      <dl class="rcpt-facts">
+        <dt>Total</dt><dd><b>${money(order.totalCents)}</b></dd>
+        <dt>Paid with</dt><dd>${order.paidWith === "saved_paypal" ? html`Saved ${PP}` : PP}</dd>
+        <dt>Bought by</dt><dd>${order.agent}, a verified courier</dd>
+        <dt>Order</dt><dd><code>${order.id}</code></dd>
+        ${order.paidAt ? html`<dt>When</dt><dd><time datetime="${order.paidAt}">${new Date(order.paidAt).toUTCString()}</time></dd>` : ""}
+      </dl>
+      <div class="acts-row">
+        ${!paid && order.status === "awaiting_approval" && order.approveUrl ? html`<a class="btn" href="${order.approveUrl}">Pay with PayPal</a>` : ""}
+        <a class="btn ghost" href="${config.courier.url}/app/errands?e=${order.visaId}">See it in Courier</a>
+      </div>
+      <p class="fine" style="margin-top:18px">${paypalNote()}</p>
+    </article></main>`,
+  );
+}
+
+const paypalNote = () =>
+  paypal.mode === "sandbox" ? "PayPal sandbox: no real money moved." : "Simulated PayPal: no real money moved.";
 
 /** A stable colour for a courier the shop only knows by name. */
 function colorFor(name: string): CourierColor {

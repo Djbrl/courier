@@ -87,6 +87,14 @@ export interface VisaTokenClaims {
   };
 }
 
+/**
+ * Claims of the access token a person's own Claude holds: who it acts for, with no limits of its own. Limits live on
+ * the current errand's visa, which the shop gets from Courier as a short-lived signed token on each request.
+ */
+export interface ConnectionTokenClaims extends Omit<VisaTokenClaims, "visa"> {
+  connection: { id: string; agent: string };
+}
+
 export function centsToValue(cents: number): string {
   return (cents / 100).toFixed(2);
 }
