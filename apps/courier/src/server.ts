@@ -736,6 +736,6 @@ app.use("/bots", botsRouter);
 migrateSavedPayPal();
 setInterval(() => void sweepExpiredVisas(), 60_000).unref();
 
-app.listen(config.courier.port, () => {
+app.listen(config.courier.port, config.bindHost, () => {
   console.log(`Courier  → ${config.courier.url}  (PayPal: ${paypal.mode}, intent: ${config.intent.model})`);
 });

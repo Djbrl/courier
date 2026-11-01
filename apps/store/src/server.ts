@@ -270,6 +270,6 @@ app.get("/healthz", (_req, res) => {
   res.json({ ok: true, paypal: paypal.mode });
 });
 
-app.listen(config.store.port, () => {
+app.listen(config.store.port, config.bindHost, () => {
   console.log(`${config.store.name} → ${config.store.url}  (MCP: ${config.store.url}/mcp)`);
 });

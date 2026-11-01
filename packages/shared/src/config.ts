@@ -26,6 +26,8 @@ const paypalClientId = env("PAYPAL_CLIENT_ID");
 const paypalClientSecret = env("PAYPAL_CLIENT_SECRET");
 
 export const config = {
+  // Empty means every interface. A host behind a reverse proxy sets 127.0.0.1.
+  bindHost: env("BIND_HOST"),
   courier: {
     port: courierPort,
     url: stripSlash(env("COURIER_URL", `http://localhost:${courierPort}`)),
