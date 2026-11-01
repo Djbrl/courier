@@ -177,7 +177,10 @@ class SandboxPayPal implements PayPalGateway {
     url.searchParams.set("flowEntry", "static");
     url.searchParams.set("client_id", config.paypal.clientId);
     url.searchParams.set("response_type", "code");
-    url.searchParams.set("scope", "openid https://uri.paypal.com/services/paypalattributes");
+    url.searchParams.set(
+      "scope",
+      `openid ${config.paypal.askName ? "profile " : ""}https://uri.paypal.com/services/paypalattributes`,
+    );
     url.searchParams.set("redirect_uri", redirectUri);
     url.searchParams.set("state", state);
     return url.toString();

@@ -57,8 +57,8 @@ To use your own Claude, see [the live test](docs/live-test.md). The connector ne
 </table>
 
 - **Limits live in code.** Budget, per-item limit, shop and expiry are enforced before any model runs.
-- **Off the ticket, it asks you.** An AI check compares each purchase with your purpose, and asks you in the chat if it
-  doesn't fit.
+- **Only you set the budget.** You type it in the chat or on Courier. The model can fill in the number, but can't confirm
+  it.
 - **Call it back any time.** Revoking takes effect in seconds. Claude stays connected, ready for the next ticket, and you
   can remove your saved PayPal in Settings.
 

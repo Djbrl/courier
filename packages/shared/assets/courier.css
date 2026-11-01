@@ -5819,3 +5819,251 @@ html:has(body.app-page) {
   margin: 0;
   font-size: 15px;
 }
+
+/* Onboarding: one card, the same size on every step, and no page scroll. */
+.onb {
+  overflow-x: hidden;
+}
+.wiz-page {
+  min-height: calc(100svh - 96px);
+  padding: 16px var(--gut);
+}
+.wiz {
+  height: min(600px, calc(100svh - 128px));
+  min-height: 0;
+  padding: 24px 28px;
+}
+.wiz-body {
+  min-height: 0;
+  overflow-y: auto;
+  gap: 12px;
+}
+.wiz-foot {
+  flex: none;
+  margin-top: 16px;
+}
+.wiz-foot > a[href^="/auth/"] {
+  flex: 1;
+}
+.wiz-id {
+  display: grid;
+  place-items: center;
+  padding: 4px 0 12px;
+  font-size: min(10px, 2.3vw);
+}
+.wiz-fields {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.wiz .fld > span {
+  font-size: 13.5px;
+}
+.wiz .fld .inp {
+  height: 44px;
+  font-size: 15px;
+  border-radius: 10px;
+}
+.wiz .hint {
+  margin: -4px 0 0;
+  font-size: 12.5px;
+}
+.wiz .fld.wiz-sw {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  overflow: visible;
+}
+.wiz-sw .sw span {
+  width: 28px;
+  height: 28px;
+}
+@media (max-height: 620px), (max-width: 560px) {
+  .wiz {
+    height: auto;
+  }
+  .wiz-body {
+    overflow: visible;
+  }
+}
+
+/* Home: the courier's card is the hero, the money beside it, what happened below. */
+.hm3 {
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 4px 8px 24px;
+  display: grid;
+  gap: 16px;
+}
+.hm3-top .big {
+  font-size: 40px;
+}
+.hm3-top .lead {
+  margin: 4px 0 0;
+  font-size: 16px;
+}
+.hm3-g {
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) minmax(300px, 1fr);
+  gap: 16px;
+}
+.hm3-stage {
+  position: relative;
+  overflow: hidden;
+  min-height: 380px;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  border-radius: 20px;
+}
+.hm3-stack {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  justify-items: center;
+  font-size: min(1.15vw, 15px);
+}
+.hm3-card {
+  position: relative;
+  display: block;
+  margin-top: -1.6em;
+  color: inherit;
+  text-decoration: none;
+  transition: transform 0.15s;
+}
+.hm3-card:hover {
+  transform: translateY(-3px);
+}
+.hm3-peek {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  width: 27em;
+  min-height: 5.6em;
+  padding: 0.9em 1.2em 2.2em;
+  margin-bottom: -1em;
+  border-radius: 1.2em 1.2em 0 0;
+  background: var(--ac);
+  color: var(--at, #fff);
+  font-size: 1em;
+  text-decoration: none;
+}
+.hm3-peek b {
+  font-size: 15px;
+}
+.hm3-peek small {
+  font-size: 12px;
+  opacity: 0.8;
+}
+.hm3-peek.ghost {
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.45);
+  border: 1.5px dashed rgba(20, 20, 20, 0.28);
+  border-bottom: 0;
+  color: var(--soft);
+}
+.hm3-peek.ghost:hover {
+  background: rgba(255, 255, 255, 0.75);
+  color: var(--ink);
+}
+.hm3-now {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 22px;
+}
+.hm3-fig small {
+  display: block;
+  font-size: 13.5px;
+  color: var(--soft);
+}
+.hm3-fig b {
+  display: block;
+  font-size: 44px;
+  line-height: 1.1;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+.hm3-fig span {
+  font-size: 13.5px;
+  color: var(--soft);
+}
+.hm3-state {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+.hm3-state p {
+  margin: 0;
+  font-size: 15px;
+}
+.hm3-state .rows,
+.hm3-state .copy {
+  width: 100%;
+}
+.hm3-state .copy {
+  height: auto;
+  padding: 10px 12px;
+  border-radius: 10px;
+  font-size: 12.5px;
+  overflow-wrap: anywhere;
+}
+.hm3-act-h {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+.hm3-sk {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.hm3-sk i {
+  display: block;
+  height: 38px;
+  border-radius: 10px;
+  background: var(--paper);
+}
+.hm3-sk i:nth-child(2) {
+  opacity: 0.7;
+}
+.hm3-sk i:nth-child(3) {
+  opacity: 0.4;
+}
+@media (max-width: 900px) {
+  .hm3-g {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .hm3-stage {
+    min-height: 0;
+  }
+  .hm3-stack {
+    font-size: min(2.5vw, 12px);
+  }
+}
+
+/* A courier's numbers. */
+.cstats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  margin: 0 0 8px;
+}
+.cstats dt {
+  font-size: 13px;
+  color: var(--soft);
+}
+.cstats dd {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 700;
+}
+.lives .live-row:first-of-type {
+  border-top: 1px solid var(--line);
+}

@@ -193,7 +193,14 @@ appRouter.post("/start/courier", (req, res) => {
   db.put("humans", human.id, { ...human, displayName: humanName });
   ensureDemoClient(courier);
   const reqId = connectingRequest(req.body.req);
-  res.redirect(303, reqId ? `/consent/${reqId}` : editing ? `/app/couriers?c=${id}` : `/start/claude?c=${id}&first=1`);
+  res.redirect(
+    303,
+    reqId
+      ? `/consent/${reqId}`
+      : editing
+        ? `/app/couriers?c=${id}`
+        : `/start/claude?c=${id}${firstRun ? "&first=1" : ""}`,
+  );
 });
 
 appRouter.get("/start/claude", (req, res) => {

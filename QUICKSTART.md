@@ -16,19 +16,18 @@ Courier.
 3. **You add Courier to Claude.** You paste one address into Claude's settings and click Connect. This only happens once,
    and nothing is bought or charged.
 4. **You ask.** "Find me a jazz record under $40 at Juniper Records and buy it."
-5. **You set a budget.** Claude asks in the chat how much Juno can spend, say $60. Apps that can't show that question
-   give you a link instead. Juno works out the rest, and the errand ends by itself after 7 days.
+5. **You set a budget.** Type how much Juno can spend, say $60, right in the chat: in a dialog or in a card under
+   Claude's reply. Claude can fill the number in if you already said it, but only you can confirm it. There's also a link
+   if you prefer. Juno works out the rest, and the errand ends by itself after 7 days.
 6. **You save PayPal once.** The first time, PayPal asks if Courier can pay without asking each time. You agree, and you
    won't see that page again.
-7. **Juno does the shopping.** Back in Claude, Juno searches the shop, picks a record and pays. You don't see a checkout
-   page, and you get a receipt you can open.
-8. **If something's off the ticket, Juno asks.** Say Juno wants to add a slipmat, which isn't a jazz record. A yes-or-no
-   question appears in your chat.
-9. **If it breaks the rules, the answer is no.** A $149 turntable is over the $40 limit, so it's refused without anyone
+7. **Juno does the shopping.** Claude notices the budget by itself and carries on. Juno searches the shop, picks a record
+   and pays. You don't see a checkout page, and you get a receipt you can open.
+8. **If it breaks the rules, the answer is no.** A $149 turntable is over a $60 budget, so it's refused without anyone
    being asked.
-10. **The shop knows who it's dealing with.** It sees that a verified courier is shopping and what it's allowed to do,
-    but Courier doesn't give it your name.
-11. **You stay in charge.** Every step shows up in your Courier home, and you can call Juno back at any time. When the
+9. **The shop knows who it's dealing with.** It sees that a verified courier is shopping and what it's allowed to do,
+   but Courier doesn't give it your name.
+10. **You stay in charge.** Every step shows up in your Courier home, and you can call Juno back at any time. When the
     errand ends, the saved PayPal is removed, and Claude stays connected for next time.
 
 That's the whole idea: one ticket, then it just happens. To try it yourself, follow the steps under
@@ -48,7 +47,7 @@ end of this section.
 | Errand tickets      | Set one budget, in the chat or on a page. The courier works out the rest                                                              |
 | Works inside Claude | Connect once from the shop's address, with no ticket or payment, and browse straight away                                             |
 | Errand room         | Send a courier shopping from the Courier website, with no Claude setup                                                                |
-| Asking first        | Off-ticket purchases get a question in the chat, or a link if the chat app can't ask. One yes covers those items for the whole errand |
+| Asking first        | Built, but off by default: a courier can buy anything inside its budget at its shop. Set `INTENT_CHECK=on` to bring the question back |
 | Pay without asking  | Save PayPal once on your account, and purchases inside a budget just go through                                                       |
 | Pay by link         | Without a saved PayPal, the courier sends a link and you approve the payment                                                          |
 | Receipts            | Every purchase comes with a page showing what was bought, what it cost and who bought it                                              |

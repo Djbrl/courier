@@ -90,6 +90,24 @@ const TICKET_HINT = z
   .describe("Used to prefill a ticket if the user doesn't have one yet. The user reviews and edits it.");
 
 const TICKET_TIMEOUT_MS = 5 * 60 * 1000;
+const WAIT_MS = 40_000;
+const PASS_TTL_MS = 15 * 60 * 1000;
+
+/**
+ * One-time passes for the budget field in the chat card. A budget has to come from the person, never the model, so the
+ * pass travels in the result's _meta for the card alone and the tool that takes it is hidden from the model.
+ */
+const budgetPasses = new Map<
+  string,
+  { connectionId: string; hint: z.infer<typeof TICKET_HINT>; price: number; expires: number }
+>();
+
+function budgetPass(connectionId: string, hint: z.infer<typeof TICKET_HINT>, price: number): string {
+  for (const [key, pass] of budgetPasses) if (pass.expires < Date.now()) budgetPasses.delete(key);
+  const pass = randomToken(24);
+  budgetPasses.set(pass, { connectionId, hint, price, expires: Date.now() + PASS_TTL_MS });
+  return pass;
+}
 
 /**
  * No errand yet: get one without sending the person away if we can. They set a budget in a dialog in their chat app,
@@ -110,6 +128,8 @@ async function getTicket(
       { body: { purpose: hint?.purpose, maxPerItem: hint?.max_per_item, maxTotal: hint?.max_total, price, ...extra } },
     );
   const caps = server.server.getClientCapabilities()?.elicitation as { form?: object; url?: object } | undefined;
+  console.log(`[store] budget needed; client dialogs: ${caps ? Object.keys(caps).join(",") || "form" : "none"}`);
+  const suggested = Math.min(500, hint?.max_total ?? Math.max(price, 60));
 
   let url: string | undefined;
   try {
@@ -126,7 +146,7 @@ async function getTicket(
                 title: "Budget, in dollars",
                 minimum: 1,
                 maximum: 500,
-                default: Math.min(500, Math.max(price, hint?.max_total ?? 60)),
+                default: suggested,
               },
             },
             required: ["budget"],
@@ -160,18 +180,23 @@ async function getTicket(
     url ??= (await askCourier({})).url!;
   }
   return {
-    stop: text(
-      `${agent} needs a budget from the user before it can hold or buy anything.\n` +
-        `Give the user this link in one line and stop: ${url}\n` +
-        `When they say it's done, call the same tool again.`,
-      {
-        decision: "needs_ticket",
-        ticket_url: url,
-        agent,
-        items: items.map((i) => ({ ...itemView(i), hue: i.hue })),
-        total: price.toFixed(2),
-      },
-    ),
+    stop: {
+      ...text(
+        `${agent} needs a budget from the user before it can hold or buy anything. You can't set it for them.\n` +
+          `Tell them in one line that they can set it in the card above, or at this link: ${url}\n` +
+          `Then call wait_for_budget straight away, and again each time it says to. As soon as it says the budget is ` +
+          `set, call this same tool again without asking them anything.`,
+        {
+          decision: "needs_ticket",
+          ticket_url: url,
+          agent,
+          suggested_budget: suggested,
+          items: items.map((i) => ({ ...itemView(i), hue: i.hue })),
+          total: price.toFixed(2),
+        },
+      ),
+      _meta: { "courier/budget_pass": budgetPass(claims.connection!.id, hint, price) },
+    },
   };
 }
 
@@ -400,14 +425,15 @@ export function createMcpServer(): McpServer {
     {
       instructions:
         `${config.store.name} is an independent record shop, reached through the user's Courier: a PayPal-verified errand ` +
-        `pass with a spending limit and a stated purpose. Courier, not you, decides what fits the errand. If the user asks ` +
-        `for something that seems outside their errand, do not refuse or warn on your own: call hold_item or request_purchase ` +
-        `anyway. Courier either allows it, or asks the user itself (a dialog in this app, or a link to give them; then retry ` +
-        `with the approval_id). request_purchase only spends inside the limits the user set in Courier: if they ` +
+        `pass with a spending limit. Courier, not you, enforces the limit, so don't refuse or warn on your own: call ` +
+        `hold_item or request_purchase. If Courier needs the user, it asks them itself (a dialog in this app, or a link to ` +
+        `give them; then retry with the approval_id). request_purchase only spends inside the limits the user set in Courier: if they ` +
         `saved PayPal there, it pays straight away and returns a receipt; otherwise it returns a PayPal link for them to ` +
         `pay (sandbox, no real money). Browsing works without a budget; if there's none yet, pass ticket_hint with what ` +
-        `they asked for: hold_item and request_purchase ask the user for a budget themselves, or return a link to share in ` +
-        `one line, then retry when they say it's done. After a purchase, always give the user the ` +
+        `they asked for: if they named an amount, put it in ticket_hint.max_total to fill in the form for them. hold_item and ` +
+        `request_purchase get the budget from the user themselves. If they return needs_ticket, follow what it says: ` +
+        `you can't set a budget, so point the user to the card or link, then call wait_for_budget until it's set and ` +
+        `retry without asking. After a purchase, always give the user the ` +
         `receipt_url so they can see it. Keep it quick: when the user wants something, call request_purchase straight away; ` +
         `don't hold it first, and don't ask the user to confirm before calling (their budget and Courier already did). Use ` +
         `hold_item only when the user asks to put something aside. If Courier gives you an approval link, share it in one ` +
@@ -416,6 +442,65 @@ export function createMcpServer(): McpServer {
   );
 
   const auth = (extra: { authInfo?: AuthInfo }) => claimsOf(extra.authInfo);
+
+  server.registerTool(
+    "wait_for_budget",
+    {
+      title: "Wait for the user to set a budget",
+      description:
+        "After a tool returned needs_ticket and you told the user where to set a budget, call this. It returns once the " +
+        "budget is set, or after about 40 seconds so you can call it again. Stop after 10 calls and ask the user to say when it's done.",
+      inputSchema: {},
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    },
+    async (_args, extra) => {
+      const claims = auth(extra);
+      for (const until = Date.now() + WAIT_MS; Date.now() < until; await new Promise((r) => setTimeout(r, 2000))) {
+        if (hasTicket(await withFreshTicket(claims))) {
+          return text("The budget is set. Call the tool you were using again now, without asking the user.", {
+            ready: true,
+          });
+        }
+      }
+      return text("Not set yet. Call wait_for_budget again.", { ready: false });
+    },
+  );
+
+  // Only the chat card calls this. See budgetPasses.
+  server.registerTool(
+    "set_budget",
+    {
+      title: "Set the budget the user typed in the card",
+      description: "For the Courier card only. Models can't use this: it needs a pass only the card has.",
+      inputSchema: { budget: z.number().int().min(1).max(500), pass: z.string() },
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+      _meta: { ui: { resourceUri: RECEIPT_CARD_URI, visibility: ["app"] } },
+    },
+    async ({ budget, pass }, extra) => {
+      const claims = auth(extra);
+      const held = budgetPasses.get(pass);
+      budgetPasses.delete(pass);
+      if (!held || held.expires < Date.now() || held.connectionId !== claims.connection?.id) {
+        return text("That budget form has expired.", { error: "invalid_pass" }, true);
+      }
+      const ticket = await internalFetch<{ url?: string; issued?: boolean }>(
+        `${config.courier.url}/internal/connections/${held.connectionId}/ticket`,
+        {
+          body: {
+            purpose: held.hint?.purpose,
+            maxPerItem: held.hint?.max_per_item,
+            maxTotal: held.hint?.max_total,
+            price: held.price,
+            budgetFromPerson: budget,
+          },
+        },
+      );
+      return text(ticket.issued ? "The budget is set." : "One PayPal approval left.", {
+        issued: Boolean(ticket.issued),
+        url: ticket.url,
+      });
+    },
+  );
 
   // A card for chat apps that can show one (MCP Apps). Others ignore it and use the text, which has the same link.
   server.registerResource(

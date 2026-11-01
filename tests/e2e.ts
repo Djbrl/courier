@@ -332,6 +332,8 @@ await step("MCP: list tools and whoami over MCP", async () => {
     "order_status",
     "request_purchase",
     "search_catalog",
+    "set_budget",
+    "wait_for_budget",
     "whoami",
   ]);
   const who = await client.callTool({ name: "whoami", arguments: {} });
@@ -485,6 +487,57 @@ await step("Calling back ends the errand within seconds; Claude stays connected 
 });
 
 await step(
+  "With no purpose to check against, anything inside the budget goes through, and the limit still holds",
+  async () => {
+    const visa = await writeTicket(browser, tokens.access_token, {
+      decision: "approve",
+      scopes: ["store:browse", "store:reserve", "store:buy"],
+      spend_limit: "30",
+      per_purchase_limit: "30",
+      duration: "24h",
+      intent: "",
+    });
+    const chat = await mcpClient(tokens.access_token);
+    const slipmat = await chat.callTool({ name: "search_catalog", arguments: { query: "slipmat" } });
+    const id = String((structured(slipmat).results as { id: string }[])[0]!.id);
+    const buy = structured(await chat.callTool({ name: "request_purchase", arguments: { item_ids: [id] } }));
+    assert.ok(buy.approve_url, JSON.stringify(buy));
+    const over = structured(await chat.callTool({ name: "request_purchase", arguments: { item_ids: ["jr-023"] } }));
+    assert.equal(over.decision, "deny", JSON.stringify(over));
+    await chat.close();
+    const res = await browser.req(`${flow.courier}/app/visas/${visa.id}/revoke`, { form: {} });
+    assert.equal(res.status, 303);
+    await new Promise((r) => setTimeout(r, 3200));
+  },
+);
+
+await step("Only the card can set a budget in the chat: the model has no pass, and passes work once", async () => {
+  const chat = await mcpClient(tokens.access_token);
+  const { tools } = await chat.listTools();
+  const hidden = tools.find((t) => t.name === "set_budget");
+  assert.deepEqual((hidden?._meta?.ui as { visibility?: string[] })?.visibility, ["app"]);
+  assert.ok(tools.some((t) => t.name === "wait_for_budget"));
+  const refused = await chat.callTool({ name: "set_budget", arguments: { budget: 400, pass: "made-up" } });
+  assert.equal(refused.isError, true);
+  const buy = await chat.callTool({
+    name: "request_purchase",
+    arguments: { item_ids: ["jr-002"], ticket_hint: { max_total: 35 } },
+  });
+  const sc = structured(buy);
+  assert.equal(sc.decision, "needs_ticket");
+  assert.equal(sc.suggested_budget, 35);
+  const pass = String(buy._meta?.["courier/budget_pass"]);
+  assert.ok(pass.length > 16);
+  // The model reads the text and maybe the structured part. The pass is in neither.
+  assert.ok(!JSON.stringify([buy.content, buy.structuredContent]).includes(pass));
+  const set = structured(await chat.callTool({ name: "set_budget", arguments: { budget: 35, pass } }));
+  assert.match(String(set.url), /\/consent\/.+pay=1/);
+  const again = await chat.callTool({ name: "set_budget", arguments: { budget: 35, pass } });
+  assert.equal(again.isError, true);
+  await chat.close();
+});
+
+await step(
   "Saved PayPal: one OK on the ticket, then purchases are paid straight away; it outlives the errand until removed",
   async () => {
     const b = browser;
@@ -498,6 +551,9 @@ await step(
       autopay: "1",
     });
     assert.equal(visa.autopay, true);
+    const waiting = await mcpClient(tokens.access_token);
+    assert.equal(structured(await waiting.callTool({ name: "wait_for_budget", arguments: {} })).ready, true);
+    await waiting.close();
     assert.ok(!JSON.stringify(visa).includes("VT-"), "the saved PayPal token never reaches the shop or agent");
     const asked: string[] = [];
     const chat = await mcpClient(tokens.access_token, (message) => {
@@ -520,7 +576,11 @@ await step(
     assert.match(receiptPage, new RegExp(sc.items[0].title));
     assert.ok(!receiptPage.includes("SIMPAYER"), "no PayPal id on the receipt");
     assert.equal((await fetch(`${STORE}/receipts/not-a-key`)).status, 404);
-    const card: any = await chat.readResource({ uri: "ui://courier/receipt.html" });
+    const { tools: cardTools } = await chat.listTools();
+    const buyTool = cardTools.find((t) => t.name === "request_purchase");
+    const cardUri = String((buyTool?._meta?.ui as { resourceUri?: string } | undefined)?.resourceUri);
+    assert.match(cardUri, /^ui:\/\/courier\/receipt-[0-9a-f]+\.html$/);
+    const card: any = await chat.readResource({ uri: cardUri });
     assert.match(card.contents[0].mimeType, /profile=mcp-app/);
     assert.equal(
       structured(await chat.callTool({ name: "order_status", arguments: { order_id: sc.order_id } })).status,
