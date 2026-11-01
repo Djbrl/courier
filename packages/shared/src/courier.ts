@@ -2,7 +2,19 @@
  * Courier design system, server side: the page layout, logo, PayPal text lockup and the agent ID card.
  * Styles live in assets/courier.css. "PayPal" is only ever set as a text lockup, never the logo mark.
  */
+import { createHash } from "node:crypto";
+import fs from "node:fs";
+import path from "node:path";
+import { ROOT_DIR } from "./config.ts";
 import { escapeHtml, html, type RawHtml, raw } from "./html.ts";
+
+/** An address that changes with the file, so a deploy never meets a browser's cached copy. */
+function versioned(file: string): string {
+  const content = fs.readFileSync(path.join(ROOT_DIR, "packages/shared/assets", file));
+  return `/assets/${file}?v=${createHash("sha256").update(content).digest("hex").slice(0, 8)}`;
+}
+const CSS_URL = versioned("courier.css");
+const APP_JS_URL = versioned("app.js");
 
 /* ---------------- colours ---------------- */
 
@@ -125,7 +137,7 @@ export function courierLayout(opts: CourierLayoutOptions): string {
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Archivo:ital,wdth,wght@0,62..125,100..900;1,62..125,100..900&family=Instrument+Sans:ital,wdth,wght@0,75..100,400..700;1,75..100,400..700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="/assets/courier.css">
+<link rel="stylesheet" href="${CSS_URL}">
 ${(opts.styles ?? []).map((s) => `<link rel="stylesheet" href="${escapeHtml(s)}">`).join("\n")}
 <link rel="icon" href="/assets/courier-icon.svg" type="image/svg+xml">
 ${opts.head ? opts.head.value : ""}
@@ -134,7 +146,7 @@ ${opts.head ? opts.head.value : ""}
 ${SPRITE}
 ${opts.nav ? opts.nav.value : ""}
 ${opts.body.value}
-<script src="/assets/app.js" defer></script>
+<script src="${APP_JS_URL}" defer></script>
 ${(opts.scripts ?? []).map((s) => `<script src="${escapeHtml(s)}" defer></script>`).join("\n")}
 </body>
 </html>`;

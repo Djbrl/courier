@@ -74,8 +74,8 @@ export function connectConsentPage(request: AuthRequest, human: Human): string {
 export function capFields(human: Human) {
   const dollars = (cents: number | undefined, fallback: number) => (cents === undefined ? fallback : cents / 100);
   return html`<div class="wiz-fields capf">
-    <label class="fld"><span>Each errand, up to</span><span class="capi"><i>$</i><input class="inp" type="number" name="cap_errand" min="0" max="500" step="1" value="${dollars(human.cap?.perErrandCents, 50)}" aria-label="Most per errand, in dollars"></span></label>
-    <label class="fld"><span>In a day, up to</span><span class="capi"><i>$</i><input class="inp" type="number" name="cap_day" min="0" max="2000" step="1" value="${dollars(human.cap?.perDayCents, 100)}" aria-label="Most per day, in dollars"></span></label>
+    <label class="fld"><span>Per errand</span><span class="capi"><i>$</i><input class="inp" type="number" name="cap_errand" min="0" max="500" step="1" value="${dollars(human.cap?.perErrandCents, 50)}" aria-label="Most per errand, in dollars"></span></label>
+    <label class="fld"><span>Per day</span><span class="capi"><i>$</i><input class="inp" type="number" name="cap_day" min="0" max="2000" step="1" value="${dollars(human.cap?.perDayCents, 100)}" aria-label="Most per day, in dollars"></span></label>
   </div>`;
 }
 
@@ -87,13 +87,11 @@ function connectCourierPage(request: AuthRequest, human: Human): string {
     html`<main class="solo"><div class="solo-card">
       <form method="post" action="/consent/${request.id}">
         <h1 class="big">Connect ${request.clientName} to Courier.</h1>
-        <p class="lead">It can send ${listCouriers(human.id)
-          .map((c) => c.name)
-          .join(", ")} to any of these. Nothing is charged now.</p>
-        <div class="shopg mini" aria-hidden="true">${SHOPS.map((s) => shopLogo(s))}</div>
-        <h2 class="sec-t">When can Claude start an errand without asking?</h2>
+        <p class="lead">Your couriers can shop here. Nothing is charged now.</p>
+        <div class="shopg shopg-row">${SHOPS.map((s) => html`<span class="shopg-m">${shopLogo(s)}<small>${s.name}</small></span>`)}</div>
+        <h2 class="sec-t">Claude can spend without asking, up to:</h2>
         ${capFields(human)}
-        <p class="fine">Under these it starts right away, using the budget you name in the chat. Above them you confirm first. Put 0 to always be asked. Change it any time in Settings.</p>
+        <p class="fine">Above this, it asks you first. Put 0 to always be asked.</p>
         <div class="acts-row">
           <button class="btn" type="submit" name="decision" value="approve">Connect</button>
           <button class="btn ghost" type="submit" name="decision" value="deny">Not now</button>

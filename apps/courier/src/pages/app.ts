@@ -380,10 +380,10 @@ export function settingsPage(d: Desk, savedEmail?: string | null | false): strin
       )}
       <div class="srow col"><div><b>Connector address</b></div><code class="copy inp code sm">${COURIER_RESOURCE}</code></div>
     </div></section>
-    <section><h2 class="sec-t">When Claude can start an errand without asking</h2><div class="panel slist">
+    <section><h2 class="sec-t">Claude can spend without asking, up to</h2><div class="panel slist">
       <form class="srow col capform" method="post" action="/app/settings/cap">
         ${capFields(d.human)}
-        <p class="fine">Under these it starts right away, using the budget you name in the chat. Above them you confirm first. Put 0 to always be asked. It needs saved PayPal to work.${d.human.cap ? "" : " Not on yet: until you save this, Claude always asks."}</p>
+        <p class="fine">Above this, it asks you first. Put 0 to always be asked. Needs saved PayPal.${d.human.cap ? "" : " Off until you save."}</p>
         <div><button class="btn sm" type="submit">Save</button></div>
       </form>
     </div></section>
