@@ -7,7 +7,6 @@ import {
   html,
   LOGO,
   money,
-  PP,
   paypal,
   type RawHtml,
   raw,
@@ -20,7 +19,7 @@ export function tryDemo(where: { req?: string; next?: string }): RawHtml | strin
   return html`<form method="post" action="/auth/demo" class="try-demo">
     ${where.req ? html`<input type="hidden" name="req" value="${where.req}">` : ""}
     ${where.next ? html`<input type="hidden" name="next" value="${where.next}">` : ""}
-    <button class="btn ghost" type="submit">Try with simulated ${PP}</button>
+    <button class="link fine" type="submit">Try the demo instead</button>
   </form>`;
 }
 

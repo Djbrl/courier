@@ -249,7 +249,7 @@ export function signInPage(): string {
     html`<main class="solo"><div class="solo-card">
       <h1 class="big">Open your Courier.</h1>
       <p class="lead">See your errands, answer your courier, and call it back anytime.</p>
-      <div class="acts-row">${paypalButton("/auth/paypal/start?login=1")}${tryDemo({})}<a class="link fine" href="/start">New here? Start with the demo</a></div>
+      <div class="acts-row">${paypalButton("/auth/paypal/start?login=1")}${tryDemo({})}<a class="link fine" href="/start">New here? Get started</a></div>
     </div></main>`,
   );
 }

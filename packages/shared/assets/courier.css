@@ -2752,6 +2752,9 @@ a {
 
 /* ---------- small screens ---------- */
 @media (max-width: 560px) {
+  .sim-acts {
+    grid-template-columns: 1fr;
+  }
   .opts,
   .lims {
     grid-template-columns: minmax(0, 1fr);
@@ -5586,9 +5589,14 @@ html:has(body.app-page) {
 .wiz-foot:has(.try-demo) > a[href^="/auth/"] {
   flex: none;
 }
-.try-demo .btn {
-  width: 100%;
-  justify-content: center;
+.try-demo {
+  text-align: center;
+}
+.try-demo button {
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
 }
 .wiz-who {
   display: flex;
