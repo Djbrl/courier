@@ -407,6 +407,10 @@ export function connectionsPage(d: Desk): string {
         <div class="cbox-h"><span class="cic room-ic" aria-hidden="true">R</span><div><b>Errand room</b><small>The courier you chat with on this website.</small></div><span class="st ${config.anthropicConfigured ? "active" : "expired"}"><i></i>${config.anthropicConfigured ? "Claude" : "Demo"}</span></div>
         <p class="fine">${config.anthropicConfigured ? html`<span class="mono">${config.agent.model}</span>` : "Scripted stand-in. Add ANTHROPIC_API_KEY to run it on Claude."}</p>
       </section>
+      <section class="panel cbox">
+        <div class="cbox-h"><span class="cic" aria-hidden="true">Y</span><div><b>Your account</b><small>Erase it and start again from scratch.</small></div></div>
+        <a class="btn ghost sm cbox-act" href="/app/account/delete">Delete my account</a>
+      </section>
       <section class="panel cbox tools">
         <div class="cbox-h"><span class="cic jr-ic" aria-hidden="true">J</span><div><b>${config.store.name}</b><small>A record shop that welcomes couriers.</small></div><a class="link fine" href="${config.store.url}" target="_blank" rel="noopener">Visit ↗</a></div>
         <span class="lbl">A courier can</span>
@@ -415,4 +419,25 @@ export function connectionsPage(d: Desk): string {
     </div>
   </div>`;
   return shell("Connections", d, "connections", main);
+}
+
+export function deleteAccountPage(d: Desk): string {
+  const out = d.visas.filter(isOut).length;
+  const main = html`<div class="conn">
+    <header class="conn-h"><h1 class="big">Delete your account?</h1></header>
+    <section class="panel cbox gone">
+      <p class="lead">This erases your account right away, and it can't be undone.</p>
+      <ul class="gone-list">
+        <li>Your couriers, errands and history are erased.</li>
+        <li>${out ? `${out === 1 ? "Your 1 errand" : `Your ${out} errands`} still out will be called back.` : "You have no errands out."} Any bond or saved PayPal is released.</li>
+        <li>Any Claude connected to Courier loses access.</li>
+      </ul>
+      <p class="fine">Receipts you already have keep working. ${config.store.name} keeps its own order records, which don't include your name, and PayPal keeps its own payment history.</p>
+      <form class="acts-row" method="post" action="/app/account/delete">
+        <button class="btn danger" type="submit">Delete my account</button>
+        <a class="btn ghost" href="/app/connections">Keep my account</a>
+      </form>
+    </section>
+  </div>`;
+  return shell("Delete account", d, null, main);
 }

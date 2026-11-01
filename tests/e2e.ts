@@ -609,6 +609,66 @@ await step("Disconnecting removes Claude: its token and refresh token stop worki
   assert.equal(refresh.status, 400);
 });
 
+await step(
+  "Deleting an account ends its access and keeps its receipts, and signing in again starts from scratch",
+  async () => {
+    const person = new Browser();
+    const first = await authorize(flow, person, "ada");
+    const visa = await writeTicket(person, first.tokens.access_token, {
+      decision: "approve",
+      scopes: ["store:browse", "store:reserve", "store:buy"],
+      spend_limit: "60",
+      per_purchase_limit: "40",
+      duration: "24h",
+      intent: "Jazz for deleting",
+      autopay: "1",
+    });
+    const chat = await mcpClient(first.tokens.access_token);
+    const buy = structured(await chat.callTool({ name: "request_purchase", arguments: { item_ids: ["jr-011"] } }));
+    assert.equal(buy.status, "paid", JSON.stringify(buy));
+    await chat.close();
+
+    assert.match(await (await person.req(`${flow.courier}/app/account/delete`)).text(), /Your 1 errand still out/);
+    // Someone with no session deletes nothing: the person's errand is still there.
+    assert.equal((await new Browser().req(`${flow.courier}/app/account/delete`, { form: {} })).status, 303);
+    assert.match(await (await person.req(`${flow.courier}/app/errands?e=${visa.id}`)).text(), /Jazz for deleting/);
+
+    const gone = await person.req(`${flow.courier}/app/account/delete`, { form: {} });
+    assert.equal(gone.status, 303);
+    assert.equal(gone.headers.get("location"), "/account-deleted");
+    assert.equal(person.jar.has("courier_session"), false, "the session ends");
+    await new Promise((r) => setTimeout(r, 3200));
+
+    const raw = await fetch(MCP, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        accept: "application/json, text/event-stream",
+        authorization: `Bearer ${first.tokens.access_token}`,
+      },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "whoami", arguments: {} } }),
+    });
+    assert.equal(raw.status, 401, "the old token stops working");
+    const refresh = await fetch(flow.asMeta.token_endpoint, {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        grant_type: "refresh_token",
+        refresh_token: first.tokens.refresh_token,
+        client_id: flow.client.client_id,
+      }),
+    });
+    assert.equal(refresh.status, 400, "the old refresh token stops working");
+    assert.equal((await fetch(buy.receipt_url)).status, 200, "the receipt still opens");
+
+    // Same PayPal, new account: it's asked to name a courier again, has no history and looks new to the shop.
+    const again = await authorize(flow, person, "ada");
+    assert.notEqual(decode(again.tokens.access_token).sub, decode(first.tokens.access_token).sub);
+    const home = await (await person.req(`${flow.courier}/app/errands`)).text();
+    assert.ok(!home.includes("Jazz for deleting"), "the old errand is gone");
+  },
+);
+
 await step("Release the bots: every attack is blocked or flagged", async () => {
   const res = await fetch(`${flow.courier}/bots/run`, {
     method: "POST",

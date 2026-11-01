@@ -130,6 +130,7 @@ to it. Chat apps that support MCP Apps also show `receipt-card.ts` inside the co
 `revokeVisa` in `visas.ts` ends the errand, voids any bond and deletes the saved PayPal through `forgetSavedPayPal`. The
 connection stays, so Claude's next purchase gets a new ticket link instead. `sweepExpiredVisas` does the same on a timer
 for errands that ran out. `disconnect` removes the Claude itself, and its next call fails `requireVisa`.
+`deleteAccount` ends every errand, then erases the person's records, stopping first if PayPal won't release something.
 
 ## 11. See it attacked
 

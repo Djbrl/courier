@@ -39,6 +39,7 @@ import {
   courierSetupPage,
   couriersPage,
   type Desk,
+  deleteAccountPage,
   demoClientId,
   errandRoom,
   errandsPage,
@@ -245,6 +246,11 @@ const q = (v: unknown) => (typeof v === "string" ? v : undefined);
 appRouter.get("/app", (req, res) => {
   const d = requireDesk(req, res);
   if (d) res.send(homePage(d, { welcome: req.query.welcome === "1", courierId: q(req.query.c) }));
+});
+
+appRouter.get("/app/account/delete", (req, res) => {
+  const d = requireDesk(req, res);
+  if (d) res.send(deleteAccountPage(d));
 });
 
 appRouter.get("/app/errands", (req, res) => {

@@ -70,6 +70,14 @@ export class DocStore {
   delete(collection: string, id: string): void {
     this.db.prepare(`DELETE FROM docs WHERE collection = ? AND id = ?`).run(collection, id);
   }
+
+  deleteWhere<T>(collection: string, filter: (doc: T) => boolean): void {
+    const rows = this.db.prepare(`SELECT id, json FROM docs WHERE collection = ?`).all(collection) as {
+      id: string;
+      json: string;
+    }[];
+    for (const row of rows) if (filter(JSON.parse(row.json) as T)) this.delete(collection, row.id);
+  }
 }
 
 export function newId(prefix: string): string {

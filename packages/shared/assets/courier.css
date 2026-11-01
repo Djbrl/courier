@@ -4129,6 +4129,23 @@ html:has(body.app-page) {
   gap: 14px;
   padding: 22px;
 }
+.cbox-act {
+  align-self: flex-start;
+}
+.cbox.gone {
+  max-width: 620px;
+}
+.gone-list {
+  margin: 0;
+  padding-left: 20px;
+  display: grid;
+  gap: 8px;
+}
+.cbox.gone .acts-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
 .cbox-h {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;

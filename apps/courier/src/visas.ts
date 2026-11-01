@@ -4,6 +4,7 @@ import { Router } from "express";
 import { mintAccessToken } from "./auth/oauth.ts";
 import {
   type Approval,
+  type AuthCode,
   type AuthRequest,
   activeTicket,
   type Connection,
@@ -22,6 +23,7 @@ import {
   type StampKind,
   saveCourier,
 } from "./db.ts";
+import { demoClientId } from "./pages/shared.ts";
 
 /* ---------------- stamps ---------------- */
 
@@ -77,21 +79,24 @@ export async function forgetSavedPayPal(visa: Visa): Promise<string> {
   }
 }
 
+/** Releases a held bond at PayPal, if there is one. Returns a note for the stamp. */
+async function releaseBond(visa: Visa): Promise<string> {
+  if (visa.bond?.status !== "authorized" || !visa.bond.authorizationId) return "";
+  try {
+    await paypal.voidAuthorization(visa.bond.authorizationId);
+    visa.bond.status = "voided";
+    return " Bond released.";
+  } catch (error) {
+    return ` Bond release failed: ${(error as Error).message}`;
+  }
+}
+
 /** Revokes a visa, releases its bond (void) if one is held, and removes its saved PayPal. */
 export async function revokeVisa(visaId: string, reason: string): Promise<Visa | undefined> {
   const visa = db.get<Visa>("visas", visaId);
   if (!visa) return undefined;
   if (visa.status === "revoked") return visa;
-  let bondNote = "";
-  if (visa.bond?.status === "authorized" && visa.bond.authorizationId) {
-    try {
-      await paypal.voidAuthorization(visa.bond.authorizationId);
-      visa.bond.status = "voided";
-      bondNote = " Bond released.";
-    } catch (error) {
-      bondNote = ` Bond release failed: ${(error as Error).message}`;
-    }
-  }
+  let bondNote = await releaseBond(visa);
   bondNote += await forgetSavedPayPal(visa);
   visa.status = "revoked";
   visa.revokedAt = new Date().toISOString();
@@ -127,6 +132,44 @@ export async function disconnect(connection: Connection): Promise<void> {
     const { clientId: _clientId, clientName: _clientName, boundAt: _boundAt, ...free } = courier;
     saveCourier(free as Courier);
   }
+}
+
+/**
+ * Erases a person from Courier. Returns false, having erased nothing, if PayPal wouldn't release a bond or saved PayPal:
+ * once the records are gone, nothing could release them. Safe to run again. The shop keeps its own order records, which
+ * carry only the pseudonym, so receipts keep working.
+ */
+export async function deleteAccount(human: Human): Promise<boolean> {
+  const theirs = (doc: { humanId: string }) => doc.humanId === human.id;
+  const visas = db.list<Visa>("visas", theirs, Infinity);
+  let released = true;
+  for (const { id } of visas) {
+    const visa = (await revokeVisa(id, "Account deleted"))!;
+    // Also retries anything PayPal refused when this errand ended earlier.
+    await releaseBond(visa);
+    await forgetSavedPayPal(visa);
+    db.put("visas", visa.id, visa);
+    if (visa.bond?.status === "authorized" || visa.autopay?.status === "on") released = false;
+  }
+  if (!released) return false;
+
+  const visaIds = new Set(visas.map((v) => v.id));
+  const ofTheirVisa = (doc: { visaId: string }) => visaIds.has(doc.visaId);
+  const requestIds = new Set(db.list<AuthCode>("codes", theirs, Infinity).map((c) => c.authRequestId));
+  db.deleteWhere<AuthRequest>(
+    "auth_requests",
+    (r) => requestIds.has(r.id) || r.ticket?.humanId === human.id || visaIds.has(r.visaId ?? ""),
+  );
+  for (const collection of ["codes", "refresh_tokens", "connections", "stamps", "approvals", "errand_sessions"])
+    db.deleteWhere(collection, theirs);
+  for (const collection of ["holds", "reports", "saved_paypal", "visa_requests"])
+    db.deleteWhere(collection, ofTheirVisa);
+  for (const courier of listCouriers(human.id)) db.delete("clients", demoClientId(courier.id));
+  db.deleteWhere("couriers", theirs);
+  db.deleteWhere("visas", theirs);
+  // Last, so a crash part-way leaves an account the person can still sign in to and delete.
+  db.delete("humans", human.id);
+  return true;
 }
 
 /** Includes errands abandoned on a PayPal page, so they don't linger. */

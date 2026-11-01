@@ -188,6 +188,16 @@ export function refusalPage(human: Human | null, title: string, message: string,
   );
 }
 
+export function accountDeletedPage(human: Human | null): string {
+  return cpage(
+    "Your account is deleted",
+    human,
+    html`<main class="solo"><div class="solo-card"><h1 class="big">Your account is deleted</h1><p class="lead">Your couriers, errands and history are gone. Signing in with PayPal starts a new account from scratch.</p>
+      <p class="fine">If Claude was connected, reconnect Courier in Claude's settings to use it again.</p>
+      <div class="acts-row"><a class="btn acc" href="/start">Start again</a><a class="btn ghost" href="/">Back home</a></div></div></main>`,
+  );
+}
+
 export function errorPage(human: Human | null, title: string, message: string): string {
   return cpage(
     title,

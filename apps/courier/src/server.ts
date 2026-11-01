@@ -32,6 +32,7 @@ import {
   saveCourier,
 } from "./db.ts";
 import {
+  accountDeletedPage,
   approvalPage,
   connectConsentPage,
   connectPage,
@@ -50,7 +51,15 @@ import {
 import { simPaypalRouter } from "./paypal-simulator.ts";
 import { appRouter } from "./routes/app.ts";
 import { botsRouter } from "./routes/bots.ts";
-import { addStamp, decideApproval, disconnect, internalRouter, revokeVisa, sweepExpiredVisas } from "./visas.ts";
+import {
+  addStamp,
+  decideApproval,
+  deleteAccount,
+  disconnect,
+  internalRouter,
+  revokeVisa,
+  sweepExpiredVisas,
+} from "./visas.ts";
 
 const app = express();
 app.set("trust proxy", "loopback");
@@ -651,6 +660,32 @@ app.post("/app/connections/:id/revoke", async (req, res) => {
   }
   await disconnect(connection);
   res.redirect(303, "/app/connections");
+});
+
+app.post("/app/account/delete", async (req, res) => {
+  const human = currentHuman(req);
+  if (!human) {
+    res.redirect(303, "/");
+    return;
+  }
+  if (!(await deleteAccount(human))) {
+    res
+      .status(502)
+      .send(
+        errorPage(
+          human,
+          "Your account wasn't deleted",
+          "PayPal didn't confirm it had released your saved PayPal or bond, so we kept your account. Your errands have been called back. Please try again.",
+        ),
+      );
+    return;
+  }
+  endSession(res);
+  res.redirect(303, "/account-deleted");
+});
+
+app.get("/account-deleted", (req, res) => {
+  res.send(accountDeletedPage(currentHuman(req)));
 });
 
 /* ---------- approvals (ask_human) ---------- */

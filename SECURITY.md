@@ -31,5 +31,8 @@ wrong-audience tokens, overspending and prompt injection.
 - `/merchant` and its Report button have no login, because they're a demo view. A real shop would put them behind one.
 - The shop's `/internal/*` calls share one secret, with no per-shop scoping, and Courier knows only the one demo shop.
 - If PayPal fails to delete a saved payment token, the delete is logged but not retried.
+- Deleting an account doesn't cancel a PayPal link the person already has open. If they pay it afterwards, the shop
+  records the order and issues a receipt, and Courier has no account to add it to.
+- Deleting an account erases Courier's live records, not any backups the operator keeps.
 - Rate limiting is per process and in memory.
 - SQLite storage is meant for one instance and is not encrypted at rest.
