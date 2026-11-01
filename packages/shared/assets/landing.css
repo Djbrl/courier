@@ -92,15 +92,18 @@ h2.big {
 .nav .logo {
   font-size: 27px;
 }
-.nav .btn {
-  height: 44px;
-  font-size: 15px;
-  padding: 0 5px 0 18px;
-  gap: 10px;
+.nlinks {
+  display: flex;
+  align-items: center;
+  gap: 22px;
+  font-size: 16px;
+  font-weight: 600;
 }
-.nav .btn .go {
-  width: 34px;
-  height: 34px;
+.nlinks > a:not(.who):hover {
+  color: var(--cobalt);
+}
+.who.signin {
+  padding: 0 20px;
 }
 .hero .wrap {
   display: grid;
@@ -203,7 +206,7 @@ h2.big {
 }
 .s1 .lead {
   margin-top: 22px;
-  max-width: 28ch;
+  max-width: 36ch;
 }
 .stat {
   display: flex;
@@ -313,12 +316,12 @@ h2.big {
 }
 .pcol {
   transition:
-    opacity 0.7s var(--ease) calc(var(--i) * 0.16s),
-    transform 0.95s var(--ease) calc(var(--i) * 0.16s);
+    opacity 0.6s var(--ease),
+    transform 0.9s var(--ease);
 }
-.js .sec:not(.play) .pcol {
+.js .pcol:not(.in) {
   opacity: 0;
-  transform: translateY(80px);
+  transform: translateX(72px);
 }
 .panel {
   position: relative;
@@ -390,36 +393,36 @@ h2.big {
 .cap {
   padding: 18px 8px 0;
 }
-.cap h3 {
-  font-family: "Archivo", sans-serif;
-  font-style: italic;
-  font-weight: 900;
-  font-stretch: 125%;
-  font-size: clamp(23px, 1.8vw, 28px);
-  letter-spacing: -0.035em;
-  line-height: 1;
-}
 .cap p {
-  margin-top: 7px;
-  font-size: 18px;
+  font-size: clamp(18px, 1.35vw, 20px);
   font-weight: 500;
-  color: var(--soft);
-  line-height: 1.3;
+  line-height: 1.35;
+  text-wrap: pretty;
 }
 
-.js .s2:not(.play) .note {
+/* what's inside a card waits only for its own card */
+.s2 .note {
+  transition-delay: 0.3s;
+}
+.s2 .notif {
+  transition-delay: 0.5s;
+}
+.s2 .rcpt {
+  transition-delay: 0.4s;
+}
+.js .pcol:not(.in) .note {
   opacity: 0;
   transform: translateY(-3em) rotate(-8deg);
 }
-.js .s2:not(.play) .note .tape {
+.js .pcol:not(.in) .note .tape {
   opacity: 0;
   transform: rotate(-10deg) scale(1.7);
 }
-.js .s2:not(.play) .notif {
+.js .pcol:not(.in) .notif {
   opacity: 0;
   transform: translateY(-5em) scale(0.94);
 }
-.js .s2:not(.play) .rcpt {
+.js .pcol:not(.in) .rcpt {
   clip-path: inset(0 0 100% 0);
 }
 /* family: Juno + tethered helpers (both s3 panels) */
@@ -666,10 +669,10 @@ h2.big {
   box-shadow: 0 0.2em 0.4em rgba(0, 0, 0, 0.25);
   transition: left 0.3s var(--ease) 1.3s;
 }
-.s3.play .tog i {
+.s3 .pcol.in .tog i {
   background: #c9c4ba;
 }
-.s3.play .tog i::after {
+.s3 .pcol.in .tog i::after {
   left: 0.35em;
 }
 .rvp {
@@ -714,7 +717,7 @@ h2.big {
 .hlp.h2 .rvp {
   --d: 2.1s;
 }
-.s3.play .rvbox .rvp {
+.s3 .pcol.in .rvbox .rvp {
   opacity: 1;
   transform: none;
 }
@@ -726,29 +729,29 @@ h2.big {
 .rvbox .tether :is(path, .clip) {
   transition: stroke 0.6s 1.6s;
 }
-.s3.play .rvbox .fam :is(.idc, .hlp > :not(.rvp)) {
+.s3 .pcol.in .rvbox .fam :is(.idc, .hlp > :not(.rvp)) {
   filter: grayscale(1);
   opacity: 0.42;
 }
-.s3.play .rvbox .hlp::before {
+.s3 .pcol.in .rvbox .hlp::before {
   box-shadow: inset 0 0 0 0.32em #cfcac0;
   transition: box-shadow 0.6s 1.6s;
 }
-.s3.play .rvbox .tether :is(path, .clip) {
+.s3 .pcol.in .rvbox .tether :is(path, .clip) {
   stroke: #cfcac0;
 }
-.s3.play .rvbox .hlp {
+.s3 .pcol.in .rvbox .hlp {
   box-shadow:
     0 0.8em 1.4em -1em rgba(0, 0, 0, 0.18),
     inset 0 0 0 1px rgba(20, 20, 20, 0.05);
 }
-.s3.play .rvbox .fam .pj .idc {
+.s3 .pcol.in .rvbox .fam .pj .idc {
   box-shadow:
     0 0.8em 1.4em -1em rgba(0, 0, 0, 0.18),
     inset 0 0 0 1px rgba(20, 20, 20, 0.05);
 }
 
-/* ---------- 4–6 · buy it together: three slides ---------- */
+/* ---------- 4–6 · the gift: three slides ---------- */
 .sl .wrap {
   display: grid;
   grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr);
@@ -763,14 +766,12 @@ h2.big {
   order: 2;
 }
 .sl h2 {
-  max-width: 7em;
+  max-width: 8em;
+  text-wrap: balance;
 }
 .sl .lead {
   margin-top: 24px;
-  max-width: 22ch;
-}
-.tg h2 span {
-  color: var(--cobalt);
+  max-width: 34ch;
 }
 .stg {
   position: relative;
@@ -780,19 +781,24 @@ h2.big {
   container-type: inline-size;
   display: grid;
   place-items: center;
-  background: var(--paper);
+  background: var(--lilac);
 }
-.stg.li {
-  background: #ece6ff;
+.stg.co {
+  background: var(--cobalt);
 }
-.stg.hv {
-  background: #f0ffc2;
+.stg.gr {
+  background: var(--green);
 }
 .stg .dots {
   position: absolute;
   inset: 0;
   pointer-events: none;
-  opacity: 0.07;
+  opacity: 0.2;
+}
+.stg.co .dots,
+.stg.gr .dots {
+  color: #fff;
+  opacity: 0.16;
 }
 .stg .dots svg {
   width: 100%;
@@ -843,7 +849,7 @@ h2.big {
   position: relative;
   height: 15em;
   border-radius: 1.45em;
-  background: var(--paper);
+  background: var(--cab);
   overflow: hidden;
 }
 .art svg {
@@ -1024,19 +1030,19 @@ h2.big {
   font-size: 1.15em;
   gap: 0.35em;
 }
-.js .tg:not(.play) .prod {
+.js .st-gift:not(.play) .prod {
   opacity: 0;
   transform: translateY(2em) scale(0.96);
 }
-.js .tg:not(.play) .gid:nth-child(1) {
+.js .st-gift:not(.play) .gid:nth-child(1) {
   opacity: 0;
   transform: translateX(-4em);
 }
-.js .tg:not(.play) .gid:nth-child(2) {
+.js .st-gift:not(.play) .gid:nth-child(2) {
   opacity: 0;
   transform: translateX(4em);
 }
-.js .tg:not(.play) .gid::before {
+.js .st-gift:not(.play) .gid::before {
   transform: scaleY(0);
 }
 /* slide 2 · the Run chat + Maya's approval */
@@ -1142,11 +1148,11 @@ h2.big {
   font-weight: 600;
   color: var(--green);
 }
-.js .tg2:not(.play) .msg {
+.js .st-split:not(.play) .msg {
   opacity: 0;
   transform: translateY(1.2em) scale(0.9);
 }
-.js .tg2:not(.play) .gnote {
+.js .st-split:not(.play) .gnote {
   opacity: 0;
   transform: translateY(-4em) scale(0.95);
 }
@@ -1223,7 +1229,7 @@ h2.big {
 .rfoot b {
   font-weight: 700;
 }
-.js .tg3:not(.play) .lift {
+.js .st-paid:not(.play) .lift {
   opacity: 0;
   transform: translateY(2em) rotate(2deg);
 }
@@ -1232,84 +1238,19 @@ h2.big {
     opacity 0.6s var(--ease) 0.2s,
     transform 0.9s var(--ease) 0.2s;
 }
-.js .tg3:not(.play) .rrow {
+.js .st-paid:not(.play) .rrow {
   opacity: 0;
   transform: translateX(-1.5em);
 }
-.js .tg3:not(.play) .rrow .ck {
+.js .st-paid:not(.play) .rrow .ck {
   transform: scale(0);
 }
-.js .tg3:not(.play) .rfoot {
+.js .st-paid:not(.play) .rfoot {
   opacity: 0;
   transform: scale(0.9);
 }
 
-/* ---------- 7 · still in charge ---------- */
-.tgb .shead {
-  display: block;
-}
-.tgb .shead .lead {
-  margin-top: 20px;
-  max-width: none;
-}
-.grid4 {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: clamp(14px, 1.4vw, 22px);
-}
-.rule {
-  display: flex;
-  flex-direction: column;
-  padding: 26px 26px 32px;
-  border-radius: var(--rad);
-  background: #fff;
-  border: 1.5px solid var(--line);
-}
-.rule .ic {
-  display: grid;
-  place-items: center;
-  width: 52px;
-  height: 52px;
-  border-radius: 16px;
-  background: var(--ink);
-  color: var(--hivis);
-  flex: none;
-}
-.rule .ic svg {
-  width: 26px;
-  height: 26px;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 2.2;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
-.rule h3 {
-  padding-top: 28px;
-  font-family: "Archivo", sans-serif;
-  font-style: italic;
-  font-weight: 900;
-  font-stretch: 125%;
-  font-size: clamp(22px, 1.7vw, 27px);
-  letter-spacing: -0.035em;
-  line-height: 1.02;
-  text-wrap: balance;
-}
-.rule p {
-  margin-top: 10px;
-  font-size: 17px;
-  font-weight: 500;
-  color: var(--soft);
-  line-height: 1.3;
-  text-wrap: pretty;
-}
-@media (max-width: 1000px) {
-  .grid4 {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-
-/* ---------- 8 · closing ---------- */
+/* ---------- 7 · closing ---------- */
 .s4 .wrap {
   flex: 1;
   display: flex;
@@ -1395,6 +1336,11 @@ footer small {
     height: min(110vw, 460px);
   }
 }
+@media (max-width: 640px) {
+  .nlinks > a:not(.who) {
+    display: none;
+  }
+}
 @media (max-width: 760px) {
   body {
     font-size: 18px;
@@ -1472,30 +1418,13 @@ footer small {
     right: -0.6em;
     top: -1.1em;
   }
-  .rule {
-    min-height: 0;
-  }
-  .rule h3 {
-    padding-top: 28px;
-  }
 }
 @media (max-width: 560px) {
-  .grid4 {
-    grid-template-columns: minmax(0, 1fr);
-  }
   .nav {
     padding-top: 16px;
   }
   .nav .logo {
     font-size: 23px;
-  }
-  .nav .btn {
-    font-size: 14px;
-    height: 40px;
-  }
-  .nav .btn .go {
-    width: 30px;
-    height: 30px;
   }
   .mini {
     width: 118px;

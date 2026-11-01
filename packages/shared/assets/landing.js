@@ -175,13 +175,13 @@
     <div class="rh"><b>Juniper Records</b><span class="mono">#4471</span></div>
     <div class="ramt"><b>$28.00</b><span>paid</span></div>
     <div class="ragent">${pt(AG.juno)}<div><b>Juno</b><span class="mono">${AG.juno.id}</span></div></div>
-    <div class="rwho">${MAYA}<div><b>Sent by Maya Chen</b><br>${VT}</div></div>
+    <div class="rwho">${MAYA}<div><b>Sent by a real person</b><br>${VT}</div></div>
   </div></div>`;
 
   $("#crew").innerHTML = fam(false);
   $("#rvk").innerHTML = `<div class="tog" aria-hidden="true">${pt(AG.juno)}<span>Juno</span><i></i></div>${fam(true)}`;
 
-  /* ---------- buy it together (slides 4–6) + still in charge (7) ---------- */
+  /* ---------- the gift (slides 4–6) ---------- */
   {
     const LEO = MAYA.replace("#FFC629", "#D6FF2E");
     const OK =
@@ -248,24 +248,6 @@
         ${row(LEO, "Leo", "$50", 1)}
         <div class="rfoot">${OK}<span><b>1 order</b> · 2 verified people</span></div>
       </div></div>`;
-
-    /* 7 · rules */
-    const IC = {
-      lock: '<rect x="5" y="11" width="14" height="10" rx="2.5"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>',
-      hold: '<circle cx="12" cy="12" r="9"/><path d="M10 8.5v7M14 8.5v7"/>',
-      out: '<path d="M10 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h4"/><path d="M14 8l4 4-4 4M18 12H9"/>',
-      yes: '<rect x="6" y="2.5" width="12" height="19" rx="3"/><path d="M9 12.2l2.2 2.2L15 10.5"/>',
-    };
-    const R = [
-      ["lock", "Your limit stays yours.", "Couriers only say if it fits."],
-      ["hold", "Only charged if it’s covered.", "Your share is held until the whole thing is paid&nbsp;for."],
-      ["out", "Back out anytime.", "Leave before it’s bought and your hold is&nbsp;released."],
-      ["yes", "Nobody pays more without your&nbsp;yes.", "Covering someone’s share always asks you&nbsp;first."],
-    ];
-    $("#rules").innerHTML = R.map(
-      ([k, h, p], i) =>
-        `<div class="rule pcol" style="--i:${i}"><span class="ic"><svg viewBox="0 0 24 24" aria-hidden="true">${IC[k]}</svg></span><h3>${h}</h3><p>${p}</p></div>`,
-    ).join("");
   }
 
   {
@@ -642,6 +624,32 @@
       { rootMargin: "0px 0px -18% 0px", threshold: 0 },
     );
     secs.forEach((s) => io.observe(s));
+  }
+  /* Cards arrive one at a time, whether they're on screen together or stacked on a phone. */
+  const cards = $$(".pcol");
+  if (reduce || !("IntersectionObserver" in window)) cards.forEach((c) => c.classList.add("in"));
+  else {
+    const queue = [];
+    let busy = false;
+    const next = () => {
+      const c = queue.shift();
+      busy = !!c;
+      if (!c) return;
+      c.classList.add("in");
+      setTimeout(next, 1000);
+    };
+    const io = new IntersectionObserver(
+      (es) => {
+        for (const e of es) {
+          if (!e.isIntersecting) continue;
+          queue.push(e.target);
+          io.unobserve(e.target);
+        }
+        if (!busy) next();
+      },
+      { rootMargin: "0px 0px -18% 0px", threshold: 0 },
+    );
+    cards.forEach((c) => io.observe(c));
   }
   if (reduce) globe.still();
   else if ("IntersectionObserver" in window) {
