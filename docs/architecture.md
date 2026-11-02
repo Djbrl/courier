@@ -109,6 +109,11 @@ briefly), so a call-back takes effect in seconds rather than at token expiry.
 
 **Pseudonyms are per shop.** The token's `sub` is an HMAC of the person and the shop, so two shops can't compare notes.
 
+**The errand room.** On Courier's own site, a person chats with a courier in one running conversation (`room.ts`). It takes
+as many errands as they ask for, each with its own budget, at any shop, and the same limits apply as through the connector.
+Code reads the budget from what the person types (`parseBudget`), or from their click on the budget in the window. The model
+has no tool that sets one.
+
 **One yes covers the errand.** An approval is keyed to its items, so a hold and the later purchase of the same record
 don't ask twice.
 

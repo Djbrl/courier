@@ -194,7 +194,15 @@ export async function deleteAccount(human: Human): Promise<boolean> {
     "auth_requests",
     (r) => requestIds.has(r.id) || r.ticket?.humanId === human.id || visaIds.has(r.visaId ?? ""),
   );
-  for (const collection of ["codes", "refresh_tokens", "connections", "stamps", "approvals", "errand_sessions"])
+  for (const collection of [
+    "codes",
+    "refresh_tokens",
+    "connections",
+    "stamps",
+    "approvals",
+    "errand_sessions",
+    "room_sessions",
+  ])
     db.deleteWhere(collection, theirs);
   for (const collection of ["holds", "reports", "visa_requests"]) db.deleteWhere(collection, ofTheirVisa);
   for (const courier of listCouriers(human.id)) db.delete("clients", demoClientId(courier.id));
@@ -269,7 +277,7 @@ export function parseCap(perErrand: unknown, perDay: unknown): Human["cap"] {
 
 /** One errand: one budget, any shop, side by side with the person's other errands, over in 24 hours at the latest. */
 export function issueErrand(opts: {
-  connection: Connection;
+  connection: Pick<Connection, "clientId" | "scopes">;
   human: Human;
   courierName: string;
   what: string;

@@ -66,7 +66,7 @@ export const config = {
     timeoutMs: Number(env("INTENT_TIMEOUT_MS", "1500")),
   },
   agent: {
-    model: env("AGENT_MODEL", "claude-opus-5-5"),
+    model: env("AGENT_MODEL", "claude-sonnet-5-5"),
   },
   anthropicConfigured: Boolean(env("ANTHROPIC_API_KEY") || env("ANTHROPIC_AUTH_TOKEN")),
 };

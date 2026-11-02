@@ -6,7 +6,7 @@ document.querySelectorAll("[data-autorefresh]").forEach((el) => {
   setInterval(() => {
     if (document.hidden) return;
     if (document.activeElement?.closest("form, details")) return;
-    if (document.querySelector("details[open]")) return;
+    if (document.querySelector("details[open], .tour-box")) return;
     location.reload();
   }, every);
 });

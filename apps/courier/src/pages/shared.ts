@@ -54,7 +54,11 @@ export function courierLook(human: Human | null, courier?: Courier | null): Cour
 
 /** A Claude connected through any connector. Through the Courier connector it can send every courier. */
 export const hasClaude = (human: Human) =>
-  db.list<Connection>("connections", (c) => c.humanId === human.id && c.status === "active", 1).length > 0;
+  db.list<Connection>(
+    "connections",
+    (c) => c.humanId === human.id && c.status === "active" && !c.clientId.startsWith(DEMO_CLIENT_PREFIX),
+    1,
+  ).length > 0;
 
 /** The courier an errand went out as: by the name on the errand, since one Claude can send any of them. */
 export function courierForErrand(humanId: string, clientId: string, agentName: string): Courier | undefined {

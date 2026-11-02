@@ -2609,62 +2609,68 @@ a {
 /* ---------- simulated PayPal (deliberately not PayPal's look) ---------- */
 .simf {
   min-height: 100svh;
-  background: repeating-linear-gradient(-45deg, #f4f1ea 0 22px, #efebe3 22px 44px);
-  padding: 0 16px 60px;
+  background: var(--paper);
+  padding: 0 var(--gut) 56px;
 }
 .sim-bar {
   display: flex;
   align-items: center;
-  justify-content: center;
-  gap: 10px;
+  justify-content: space-between;
+  gap: 8px 16px;
   flex-wrap: wrap;
-  padding: 12px 16px;
-  margin: 0 -16px;
-  background: var(--ink);
-  color: #fff;
-  font:
-    600 13px / 1.3 "JetBrains Mono",
-    monospace;
-  letter-spacing: 0.02em;
-  text-align: center;
+  padding: 22px 0;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--soft);
 }
-.sim-bar b {
-  color: var(--hivis);
+.sim-bar .logo {
+  font-size: 24px;
+  color: var(--ink);
+}
+.sim-bar > span:last-child {
+  padding: 5px 12px;
+  border-radius: 999px;
+  background: #fff;
+  box-shadow: inset 0 0 0 1px var(--line);
 }
 .sim-card {
-  width: min(100%, 500px);
-  margin: 44px auto 0;
+  width: min(100%, 480px);
+  margin: 6vh auto 0;
+  padding: 28px;
   background: #fff;
-  border-radius: 28px;
-  padding: 30px clamp(20px, 4vw, 34px) 30px;
-  box-shadow:
-    0 30px 50px -30px rgba(0, 0, 0, 0.3),
-    inset 0 0 0 1px rgba(20, 20, 20, 0.06);
-}
-.sim-card .sk {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  height: 30px;
-  padding: 0 12px;
-  border-radius: 999px;
-  background: var(--paper);
-  font-size: 13.5px;
-  font-weight: 700;
+  border: 1px solid var(--line);
+  border-radius: 16px;
 }
 .sim-card h1 {
-  margin-top: 18px;
   font-family: "Archivo", sans-serif;
   font-style: italic;
   font-weight: 900;
   font-stretch: 120%;
-  font-size: 36px;
+  font-size: 30px;
   letter-spacing: -0.04em;
-  line-height: 1;
+  line-height: 1.05;
 }
 .sim-card .lead {
   margin-top: 10px;
-  font-size: 17px;
+  font-size: 15.5px;
+}
+.simf .wiz-alt {
+  margin-top: 6px;
+}
+.simf .btn {
+  height: 44px;
+  padding: 0 18px;
+  border-radius: 10px;
+  font-family: "Instrument Sans", sans-serif;
+  font-style: normal;
+  font-stretch: 100%;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+.simf .btn.ghost {
+  background: #fff;
+  box-shadow: inset 0 0 0 1px var(--line);
 }
 .personas {
   display: grid;
@@ -2677,9 +2683,11 @@ a {
   gap: 14px;
   width: 100%;
   padding: 12px 14px;
-  border-radius: 18px;
-  background: var(--paper);
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: inset 0 0 0 1px var(--line);
   text-align: left;
+  cursor: pointer;
   transition:
     box-shadow 0.15s,
     background-color 0.15s;
@@ -2694,11 +2702,11 @@ a {
 }
 .persona b {
   display: block;
-  font-size: 17px;
+  font-size: 15.5px;
 }
 .persona small {
   display: block;
-  font-size: 14px;
+  font-size: 13px;
   color: var(--soft);
   font-weight: 500;
 }
@@ -2708,11 +2716,12 @@ a {
   font-weight: 700;
   padding: 5px 9px;
   border-radius: 999px;
-  background: #fff;
+  background: var(--paper);
   white-space: nowrap;
 }
 .persona.rec .tagx {
-  background: var(--hivis);
+  background: var(--ink);
+  color: #fff;
 }
 .sim-lines {
   list-style: none;
@@ -6218,4 +6227,479 @@ html:has(body.app-page) {
 }
 .shopl small {
   color: var(--mute);
+}
+
+/* ---------- first run: copy on the left, a courier's ID on the right ---------- */
+/* On rails: nothing in the header leads away from the next step. */
+.onb .cnav nav {
+  display: none;
+}
+.personas {
+  grid-template-columns: minmax(0, 1fr);
+}
+.persona > span:not(.av):not(.tagx) {
+  min-width: 0;
+}
+.wiz.wiz2 {
+  width: min(100%, 920px);
+  min-height: 500px;
+  padding: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr);
+  overflow: hidden;
+  border: 0;
+  box-shadow: 0 18px 44px -24px rgba(20, 20, 20, 0.28);
+}
+.wiz2-l {
+  display: flex;
+  flex-direction: column;
+  padding: 32px;
+  min-width: 0;
+}
+.wiz2-r {
+  position: relative;
+  display: grid;
+  place-items: center;
+  padding: 28px;
+  background: #e4e3ff;
+  color: var(--cobalt);
+  overflow: hidden;
+}
+.wiz2-r .wiz-id {
+  position: relative;
+  color: var(--ink);
+  width: 100%;
+  padding: 0;
+  font-size: clamp(8px, 1.06vw, 11px);
+}
+.wiz2 h1.big {
+  font-size: 36px;
+}
+.wiz2 .wiz-foot:has(.btn-pp) {
+  flex-direction: column;
+  align-items: stretch;
+}
+.wiz2 .wiz-foot .btn-pp {
+  width: 100%;
+  height: 52px;
+  font-size: 17px;
+}
+@media (max-width: 760px) {
+  .wiz.wiz2 {
+    grid-template-columns: minmax(0, 1fr);
+    width: min(100%, 480px);
+  }
+  .wiz2-r {
+    order: -1;
+    padding: 20px;
+  }
+  .wiz2-r .wiz-id {
+    font-size: min(10px, 2.3vw);
+  }
+  .wiz2-l {
+    padding: 24px;
+  }
+  .wiz2 h1.big {
+    font-size: clamp(26px, 7.4vw, 36px);
+    overflow-wrap: normal;
+  }
+}
+
+/* ---------- the sidebar: its own coloured column, apart from the content ---------- */
+.rail {
+  background: var(--cobalt);
+  color: #fff;
+}
+.rail-logo .logo {
+  color: #fff;
+}
+.rail nav a,
+.rail nav a:hover {
+  color: #fff;
+}
+.rail nav a:hover {
+  background: rgba(255, 255, 255, 0.14);
+}
+.rail nav a[aria-current] {
+  background: #fff;
+  color: var(--ink);
+}
+.rail nav .n {
+  background: var(--hivis);
+  color: var(--ink);
+}
+/* A white card, because the PayPal lockup's own blues don't read on cobalt. */
+.rail-who {
+  padding: 12px;
+  border: 0;
+  border-radius: 14px;
+  background: #fff;
+  color: var(--ink);
+}
+.pane {
+  padding: 14px;
+}
+@media (max-width: 900px) {
+  .rail {
+    background: var(--cobalt);
+  }
+  .pane {
+    padding: 12px 12px 16px;
+  }
+}
+
+/* ---------- the first look around ---------- */
+.tour-hole {
+  position: fixed;
+  z-index: 90;
+  border-radius: 18px;
+  box-shadow: 0 0 0 200vmax rgba(20, 20, 20, 0.58);
+  pointer-events: none;
+  transition:
+    top 0.28s var(--ease),
+    left 0.28s var(--ease),
+    width 0.28s var(--ease),
+    height 0.28s var(--ease);
+}
+.tour-box {
+  position: fixed;
+  z-index: 91;
+  width: min(360px, calc(100vw - 32px));
+  padding: 20px;
+  background: #fff;
+  border-radius: 16px;
+  box-shadow: 0 20px 50px rgba(20, 20, 20, 0.28);
+  transition:
+    top 0.28s var(--ease),
+    left 0.28s var(--ease);
+}
+.tour-box h2 {
+  font-family: "Archivo", sans-serif;
+  font-style: italic;
+  font-weight: 900;
+  font-stretch: 112%;
+  font-size: 23px;
+  letter-spacing: -0.03em;
+  line-height: 1.08;
+}
+.tour-box p {
+  margin-top: 8px;
+  font-size: 15.5px;
+  line-height: 1.4;
+  color: var(--soft);
+}
+.tour-foot {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 16px;
+}
+.tour-foot .link {
+  margin-left: auto;
+  border: 0;
+  background: none;
+  padding: 0;
+  cursor: pointer;
+}
+.tour-foot .btn {
+  flex: none;
+}
+.tour-dots {
+  display: flex;
+  gap: 5px;
+}
+.tour-dots i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--line);
+}
+.tour-dots i.on {
+  background: var(--cobalt);
+}
+@media (max-width: 639px) {
+  .tour-box {
+    left: 16px;
+    bottom: 16px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tour-hole,
+  .tour-box {
+    transition: none;
+  }
+}
+
+/* ---------- the errand room: the whole window is the chat ---------- */
+.rm {
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: #fff;
+  border-radius: 18px;
+  overflow: hidden;
+}
+.rm-h {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--line);
+}
+.rm-h > .pt {
+  --s: 42px;
+  flex: none;
+}
+.rm-who b {
+  display: block;
+  font-size: 17px;
+  line-height: 1.15;
+}
+.rm-who small {
+  font-size: 13px;
+  color: var(--mute);
+}
+.rm-shops {
+  display: flex;
+  gap: 6px;
+  margin-left: auto;
+}
+.rm-shops button {
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  border-radius: 10px;
+  transition: transform 0.15s var(--ease);
+}
+.rm-shops button:hover {
+  transform: translateY(-2px);
+}
+.rm-shops .slogo {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+}
+.rm-new {
+  flex: none;
+  margin-left: 8px;
+  border: 0;
+  background: none;
+  padding: 0;
+  cursor: pointer;
+}
+.rm-tickets {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 20px;
+  background: var(--paper);
+  border-bottom: 1px solid var(--line);
+}
+.rm-tickets[hidden] {
+  display: none;
+}
+.tk {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 100%;
+  height: 36px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: inset 0 0 0 1px var(--line);
+  font: inherit;
+  font-size: 14px;
+  cursor: pointer;
+}
+.tk:hover {
+  box-shadow: inset 0 0 0 1.5px var(--ink);
+}
+.tk b {
+  overflow: hidden;
+  max-width: 220px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tk span {
+  flex: none;
+  color: var(--soft);
+  font-weight: 600;
+}
+.tk i {
+  font-style: normal;
+  color: var(--mute);
+}
+.tk-edit {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  min-height: 36px;
+  padding: 3px 12px 3px 10px;
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: inset 0 0 0 1.5px var(--ink);
+  font-size: 14px;
+}
+.tk-edit label {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  font-weight: 700;
+}
+.tk-edit input {
+  width: 64px;
+  height: 28px;
+  padding: 0 6px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  font: inherit;
+}
+.tk-edit .link {
+  border: 0;
+  background: none;
+  padding: 0;
+  cursor: pointer;
+}
+.tk-err {
+  color: var(--red);
+  font-weight: 600;
+}
+.rm-log {
+  padding: 24px max(20px, calc(50% - 370px));
+}
+.rm-log .bub {
+  align-self: flex-start;
+  max-width: min(88%, 600px);
+  font-size: 16px;
+}
+.rm-log .bub.me {
+  align-self: flex-end;
+}
+.tk-mark {
+  align-self: center;
+}
+.tk-line {
+  display: inline-block;
+  padding: 5px 12px;
+  border-radius: 999px;
+  background: var(--paper);
+  font-size: 13.5px;
+  color: var(--soft);
+  overflow-wrap: anywhere;
+}
+.tk-line b {
+  margin-right: 4px;
+  color: var(--ink);
+}
+.typing-t {
+  margin-left: 6px;
+  font-size: 13.5px;
+  color: var(--soft);
+}
+.rm-log .typing:has(.typing-t:not(:empty)) {
+  width: auto;
+}
+.rm-log .ritem {
+  margin-top: 1.2em;
+  font-size: 1.6em;
+  font-weight: 600;
+  color: var(--soft);
+}
+.rm-log .ramt {
+  margin-top: 0.6em;
+}
+.items {
+  display: grid;
+  gap: 8px;
+  max-width: 600px;
+}
+.item-c {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+.item-c b {
+  display: block;
+  font-size: 15px;
+}
+.item-c small {
+  font-size: 13px;
+  color: var(--mute);
+}
+.item-c .pr {
+  font-weight: 700;
+}
+.rm-foot {
+  padding: 8px max(20px, calc(50% - 370px)) 14px;
+}
+.rm-foot .sugs {
+  padding: 0 0 10px;
+  flex-wrap: wrap;
+  overflow: visible;
+}
+.rm-foot .sugs[hidden] {
+  display: none;
+}
+.rm-foot .compose {
+  padding: 0;
+}
+.rm-foot .demo-tag {
+  margin: 8px 0 0;
+  padding: 0;
+  text-align: center;
+}
+.rm .paycard,
+.rm .rcpt {
+  max-width: 420px;
+}
+@media (max-width: 900px) {
+  .rm {
+    height: calc(100svh - 86px);
+  }
+}
+@media (max-width: 560px) {
+  .rm-h {
+    flex-wrap: wrap;
+    padding: 12px 14px;
+  }
+  .rm-new {
+    margin-left: auto;
+  }
+  .rm-shops {
+    order: 3;
+    width: 100%;
+    margin-left: 0;
+  }
+  .rm-log,
+  .rm-foot {
+    padding-left: 14px;
+    padding-right: 14px;
+  }
+  .rm-tickets {
+    padding: 8px 14px;
+  }
+  /* One swipeable row, so suggestions never push the chat off a phone. */
+  .rm-foot .sugs {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+  }
+  .rm-foot .sugs button {
+    flex: none;
+  }
+  .item-c {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  .item-c .btn {
+    grid-column: 1 / -1;
+  }
 }

@@ -42,7 +42,7 @@ class Browser {
       else this.jar.set(name, value);
     }
   }
-  async req(url: string, init: { method?: string; form?: Record<string, string | string[]> } = {}) {
+  async req(url: string, init: { method?: string; form?: Record<string, string | string[]>; json?: unknown } = {}) {
     let body: string | undefined;
     const headers: Record<string, string> = { cookie: this.cookieHeader() };
     if (init.form) {
@@ -52,8 +52,12 @@ class Browser {
       body = params.toString();
       headers["content-type"] = "application/x-www-form-urlencoded";
     }
+    if (init.json !== undefined) {
+      body = JSON.stringify(init.json);
+      headers["content-type"] = "application/json";
+    }
     const res = await fetch(url, {
-      method: init.method ?? (init.form ? "POST" : "GET"),
+      method: init.method ?? (body === undefined ? "GET" : "POST"),
       headers,
       body,
       redirect: "manual",
@@ -285,6 +289,89 @@ await step("Try with simulated PayPal: a new demo person, marked so in what shop
 
   const elsewhere = await browser.req(`${flow.courier}/auth/demo`, { form: { next: "//evil.example" } });
   assert.equal(elsewhere.headers.get("location"), "/app");
+});
+
+await step("The errand room: one chat, errands in a chain at any shop, and only the person sets a budget", async () => {
+  const person = new Browser();
+  await person.req(`${flow.courier}/auth/demo`, { form: { next: "/start/courier" } });
+  const made = await person.req(`${flow.courier}/start/courier`, {
+    form: { name: "Rail", human: "Jo", color: "cobalt" },
+  });
+  const courierId = new URL(made.headers.get("location")!, flow.courier).searchParams.get("c")!;
+
+  // The first look around runs once, and the Claude step's demo link goes straight to it.
+  const claude = await (await person.req(`${flow.courier}/start/claude?c=${courierId}&first=1`)).text();
+  assert.match(claude, /href="\/app\?c=[^"]*welcome=1">Try the demo instead/);
+  assert.match(await (await person.req(`${flow.courier}/app`)).text(), /id="tour"/);
+  assert.doesNotMatch(await (await person.req(`${flow.courier}/app`)).text(), /id="tour"/);
+
+  const room = await (await person.req(`${flow.courier}/errand?c=${courierId}`)).text();
+  assert.doesNotMatch(room, /Set the budget/);
+  for (const shop of ["Amazoo", "Floor Dash", "Mike"]) assert.match(room, new RegExp(`What does ${shop} have`));
+
+  const api = async (path: string, body: unknown) => {
+    const res = await person.req(`${flow.courier}/errand/api/${path}?c=${courierId}`, { json: body });
+    const lines = (await res.text())
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line));
+    return { status: res.status, ...lines.at(-1) };
+  };
+  const say = (message: string) => api("chat", { message });
+  const bought = (out: any) => out.steps.find((s: any) => s.tool === "buy");
+
+  // Nothing is bought until the person names a budget, and it's read in code.
+  const asked = await say("A burger");
+  assert.equal(asked.needsBudget, true, JSON.stringify(asked));
+  assert.deepEqual(asked.state.errands, []);
+
+  const first = await say("$15");
+  assert.equal(first.state.errands[0].limitCents, 1500);
+  const pay = bought(first);
+  assert.equal(pay.data.shop_slug, "floor-dash", JSON.stringify(first));
+  assert.ok(pay.data.approve_url.includes("/sim-paypal/checkout/"));
+  const orderId = pay.data.order_id;
+
+  // Paying finishes the first errand's spend; the shop and the window agree.
+  await person.follow(pay.data.approve_url, "http://none/", { form: { decision: "approve" } });
+  const status = await (
+    await person.req(`${flow.courier}/errand/api/order/${orderId}?c=${courierId}&shop=floor-dash`)
+  ).json();
+  assert.equal(status.status, "paid");
+  assert.ok(status.receipt_url);
+  assert.ok(status.state.errands[0].spentCents > 0);
+
+  // The next ask, in the same chat, at another shop, with a budget said in passing, is a new errand.
+  const second = await say("A good novel, under $20");
+  const novel = bought(second);
+  assert.equal(novel.data.shop_slug, "amazoo", JSON.stringify(second));
+  assert.deepEqual(
+    second.state.errands.map((e: any) => [e.what, e.limitCents]),
+    [["A good novel", 2000]],
+  );
+  const errand = second.state.errands[0].id;
+
+  // Changing the budget is the person's click. It can't go below what's used, or past the limits.
+  assert.equal((await api("budget", { errand, dollars: "5" })).status, 400);
+  assert.equal((await api("budget", { errand, dollars: "900" })).status, 400);
+  assert.equal((await api("budget", { errand, dollars: "30" })).state.errands[0].limitCents, 3000);
+
+  // What doesn't fit is refused in code.
+  const small = await say("Running shoes, budget 2");
+  assert.ok(!bought(small), JSON.stringify(small));
+
+  // Browsing needs no errand. A price isn't a budget.
+  const out = small.state.errands.length;
+  const browse = await say("What does Mike have?");
+  assert.ok(browse.steps.some((s: any) => s.tool === "search_shop" && s.data.results.length));
+  assert.equal(browse.state.errands.length, out);
+  const priced = await say("Buy the $149 turntable");
+  assert.equal(priced.needsBudget, true, JSON.stringify(priced));
+
+  // The room's own link to the shops isn't a Claude the person connected.
+  assert.match(await (await person.req(`${flow.courier}/app/settings`)).text(), /Not connected yet/);
+  // A stranger can't see this courier's chat.
+  assert.equal((await new Browser().req(`${flow.courier}/errand/api/state?c=${courierId}`)).status, 401);
 });
 
 await step("Under-18 PayPal account is refused", async () => {

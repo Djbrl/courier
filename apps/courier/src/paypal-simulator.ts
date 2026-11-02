@@ -3,6 +3,7 @@ import {
   type CreateOrderInput,
   courierLayout,
   html,
+  LOGO,
   money,
   newId,
   type OrderSummary,
@@ -106,7 +107,15 @@ function summary(order: SimOrder, base: string): OrderSummary {
 }
 
 function simBanner() {
-  return html`<div class="sim-bar"><b>SIMULATED</b> Not PayPal · no real money</div>`;
+  return html`<header class="sim-bar">${LOGO}<span>Simulated. Not PayPal, no real money.</span></header>`;
+}
+
+function personaButton(p: SimPersona, i: number) {
+  return html`<button class="persona ${i === 0 ? "rec" : ""}" name="persona" value="${p.key}" type="submit">
+    ${avatar(["#FFC629", "#D6FF2E", "#B7A3FF", "#FF8A3D", "#DEDDFF"][i % 5])}
+    <span><b>${p.name}</b><small>${p.note} · age ${p.ageRange}</small></span>
+    <span class="tagx">${i === 0 ? "Continue" : p.verified && p.ageRange !== "13-17" ? "Verified" : p.verified ? "Refused: under 18" : "Refused: unverified"}</span>
+  </button>`;
 }
 
 export function simPaypalRouter(courierUrl: string): Router {
@@ -126,22 +135,15 @@ export function simPaypalRouter(courierUrl: string): Router {
         body: html`
           ${simBanner()}
           <main class="sim-card">
-            <span class="sk">Sandbox simulator</span>
-            <h1>Sign in as a test buyer</h1>
-            <p class="lead">Stands in for Log in with ${PP}. Each account takes a different path.</p>
+            <h1>Sign in as a test buyer.</h1>
+            <p class="lead">This stands in for Log in with ${PP}.</p>
             <form method="post" action="/sim-paypal/login" class="personas">
               <input type="hidden" name="redirect_uri" value="${redirectUri}">
               <input type="hidden" name="state" value="${state}">
-              ${PERSONAS.map(
-                (
-                  p,
-                  i,
-                ) => html`<button class="persona ${i === 0 ? "rec" : ""}" name="persona" value="${p.key}" type="submit">
-                  ${avatar(["#FFC629", "#D6FF2E", "#B7A3FF", "#FF8A3D", "#DEDDFF"][i % 5])}
-                  <span><b>${p.name}</b><small>${p.note} · age ${p.ageRange}</small></span>
-                  <span class="tagx">${i === 0 ? "Start here" : p.verified && p.ageRange !== "13-17" ? "Verified" : p.verified ? "Refused: under 18" : "Refused: unverified"}</span>
-                </button>`,
-              )}
+              ${personaButton(PERSONAS[0]!, 0)}
+              <details class="wiz-alt"><summary>Other test accounts</summary>
+                <div class="personas">${PERSONAS.slice(1).map((p, i) => personaButton(p, i + 1))}</div>
+              </details>
             </form>
           </main>`,
       }),
@@ -179,7 +181,7 @@ export function simPaypalRouter(courierUrl: string): Router {
         body: html`
           ${simBanner()}
           <main class="sim-card">
-            <span class="sk">${order.brandName}</span>
+            <p class="wiz-n">${order.brandName}</p>
             <h1>${isBond ? "Approve a refundable hold" : "Approve this payment"}</h1>
             <p class="lead">${order.description}</p>
             ${
@@ -239,7 +241,7 @@ export function simPaypalRouter(courierUrl: string): Router {
         body: html`
           ${simBanner()}
           <main class="sim-card">
-            <span class="sk">${setup.brandName}</span>
+            <p class="wiz-n">${setup.brandName}</p>
             <h1>Save PayPal for ${setup.brandName}?</h1>
             <p class="lead">${setup.description}</p>
             <p class="fine" style="margin-top:8px">Nothing is charged now. You can remove it any time.</p>

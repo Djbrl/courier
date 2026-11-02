@@ -10,6 +10,9 @@ const STORE_URL = "http://localhost:4400";
 const env = {
   ...process.env,
   PAYPAL_MODE: "simulated",
+  // The scripted courier, whatever .env says: tests never call a model.
+  ANTHROPIC_API_KEY: "",
+  ANTHROPIC_AUTH_TOKEN: "",
   INTENT_CHECK: "on",
   INTENT_MODEL: "rules",
   COURIER_PORT: "4300",

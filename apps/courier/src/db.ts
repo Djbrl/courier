@@ -27,6 +27,8 @@ export interface Human {
   simulated?: boolean;
   /** The most Claude may start on its own. Above this, or with none set, the person confirms the errand. */
   cap?: { perErrandCents: number; perDayCents: number } | null;
+  /** When they were shown around the dashboard, so it only happens once. */
+  touredAt?: string;
   createdAt: string;
   lastLoginAt: string;
 }

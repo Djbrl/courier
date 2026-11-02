@@ -36,20 +36,44 @@ function wizardTop(step: number): RawHtml {
   return html`${progress(step)}<p class="wiz-n">Step ${step} of 4</p>`;
 }
 
-export function startPage(): string {
+/** Copy on the left, a courier's ID on the right. The shape of every step that has a card to show. */
+function wizardCard(left: RawHtml, card: RawHtml, opts: { attrs?: RawHtml } = {}): RawHtml {
+  return html`<main class="wiz-page"><div class="wiz wiz2" ${opts.attrs ?? ""}>
+    <div class="wiz2-l">${left}</div>
+    <div class="wiz2-r cstage">${dots()}<div class="wiz-id">${card}</div></div>
+  </div></main>`;
+}
+
+export function welcomePage(): string {
+  return cpage(
+    "Welcome",
+    null,
+    wizardCard(
+      html`<div class="wiz-body">
+          <h1 class="big">Welcome to Courier.</h1>
+          <p class="lead">Give your AI agent an idea and let it shop on your behalf. You set the budget, and it can’t go over.</p>
+        </div>
+        <div class="wiz-foot"><a class="btn" href="/start/sign-in">Get started</a></div>`,
+      idCard({ ...courierLook(null), idNo: "CR-0000-JU" }, null),
+    ),
+    { bodyClass: "onb" },
+  );
+}
+
+export function signInStepPage(): string {
   return cpage(
     "Get started",
     null,
-    html`<main class="wiz-page"><div class="wiz">
-      ${wizardTop(1)}
-      <div class="wiz-body">
-        <h1 class="big">Let’s get you a&nbsp;courier.</h1>
-        <p class="lead">PayPal checks you’re real. Shops never learn who you are.</p>
-        <div class="wiz-id">${blankCard()}</div>
-        <p class="fine">${paypal.mode === "sandbox" ? "PayPal sandbox. Use a sandbox buyer account, no real money." : "Simulated PayPal sandbox. No real money."}</p>
-      </div>
-      <div class="wiz-foot">${paypalButton("/auth/paypal/start?next=/start/courier")}${tryDemo({ next: "/start/courier" })}</div>
-    </div></main>`,
+    wizardCard(
+      html`${wizardTop(1)}
+        <div class="wiz-body">
+          <h1 class="big">Let’s get your courier.</h1>
+          <p class="lead">PayPal checks you’re real. Shops never learn who you are.</p>
+          <p class="fine">${paypal.mode === "sandbox" ? "PayPal sandbox. Use a sandbox buyer account, no real money." : "Simulated PayPal. No real money."}</p>
+        </div>
+        <div class="wiz-foot">${paypalButton("/auth/paypal/start?next=/start/courier")}${tryDemo({ next: "/start/courier" })}</div>`,
+      blankCard(),
+    ),
     { bodyClass: "onb" },
   );
 }
@@ -79,20 +103,16 @@ export function courierSetupPage(
   return cpage(
     courier ? `Edit ${courier.name}` : "Meet your courier",
     human,
-    html`<main class="wiz-page"><form class="wiz" method="post" action="/start/courier" id="setup">
+    html`<main class="wiz-page"><form class="wiz wiz2" method="post" action="/start/courier" id="setup">
+      <div class="wiz2-l">
       ${firstRun && !opts.reqId ? wizardTop(2) : ""}
       <div class="wiz-body">
         <h1 class="big">${courier ? html`Edit <span class="hfit" data-fit>${courier.name}.</span>` : opts.adding ? "Add a courier." : "Meet your courier."}</h1>
         ${opts.error ? html`<p class="err">${opts.error}</p>` : ""}
         ${opts.reqId ? html`<input type="hidden" name="req" value="${opts.reqId}">` : ""}
         ${courier ? html`<input type="hidden" name="c" value="${courier.id}">` : opts.adding ? html`<input type="hidden" name="new" value="1">` : ""}
-        <div class="wiz-id" id="preview"
-          data-vars="${JSON.stringify(Object.fromEntries(COLORS.map((c) => [c, courierVars(c)])))}"
-          data-pts="${JSON.stringify(Object.fromEntries(COLORS.map((c) => [c, portrait({ name: "?", color: c }).value])))}">${idCard({ ...look, name: look.name || "Name" }, you)}</div>
-        <div class="wiz-fields">
-          <label class="fld"><span>Courier name</span><input class="inp" name="name" value="${look.name}" placeholder="e.g. Otto" minlength="2" maxlength="${COURIER_NAME_MAX}" pattern="${COURIER_NAME_PATTERN}" title="${COURIER_NAME_HINT}" required autocomplete="off" autocapitalize="words" spellcheck="false" data-live="name"></label>
-          <label class="fld"><span>Your first name</span><input class="inp" name="human" value="${you ?? ""}" maxlength="24" required autocomplete="given-name" data-live="human"></label>
-        </div>
+        <label class="fld"><span>Your first name</span><input class="inp" name="human" value="${you ?? ""}" maxlength="24" required autocomplete="given-name" data-live="human" ${you ? "" : raw("autofocus")}></label>
+        <label class="fld"><span>Courier name</span><input class="inp" name="name" value="${look.name}" placeholder="e.g. Otto" minlength="2" maxlength="${COURIER_NAME_MAX}" pattern="${COURIER_NAME_PATTERN}" title="${COURIER_NAME_HINT}" required autocomplete="off" autocapitalize="words" spellcheck="false" data-live="name"></label>
         <small class="hint" id="name-hint">${COURIER_NAME_HINT}</small>
         <div class="fld wiz-sw"><span>Its colour</span><div class="sw">${swatch("cobalt", "Cobalt")}${swatch("tang", "Orange")}${swatch("ink", "Ink")}${swatch("hivis", "Hi-vis")}</div></div>
       </div>
@@ -100,6 +120,10 @@ export function courierSetupPage(
         ${firstRun || opts.reqId ? "" : html`<a class="btn ghost" href="${backTo}">Back</a>`}
         <button class="btn" type="submit">${courier ? "Save" : "Next"}</button>
       </div>
+      </div>
+      <div class="wiz2-r cstage">${dots()}<div class="wiz-id" id="preview"
+          data-vars="${JSON.stringify(Object.fromEntries(COLORS.map((c) => [c, courierVars(c)])))}"
+          data-pts="${JSON.stringify(Object.fromEntries(COLORS.map((c) => [c, portrait({ name: "?", color: c }).value])))}">${idCard({ ...look, name: look.name || "Name" }, you)}</div></div>
     </form></main>`,
     { bodyClass: "onb", scripts: ["/assets/onboard.js"] },
   );
@@ -147,7 +171,7 @@ export function claudeSetupPage(human: Human, courier: Courier, opts: { onboardi
       ${opts.onboarding ? wizardTop(step + 2) : html`<p class="wiz-n">Step ${step} of 2</p>`}
       <div class="wiz-body">${body}</div>
       <div class="wiz-foot">
-        ${step > 1 ? html`<a class="btn ghost" href="${stepUrl(step - 1)}">Back</a>` : opts.onboarding ? html`<a class="link fine" href="/errand/new?c=${courier.id}">Try the demo instead</a>` : html`<a class="btn ghost" href="/app/settings">Back</a>`}
+        ${step > 1 ? html`<a class="btn ghost" href="${stepUrl(step - 1)}">Back</a>` : opts.onboarding ? html`<a class="link fine" href="${done}">Try the demo instead</a>` : html`<a class="btn ghost" href="/app/settings">Back</a>`}
         ${foot}
       </div>
     </div></main>

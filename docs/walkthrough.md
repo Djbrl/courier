@@ -39,8 +39,9 @@ tests/                   Unit tests, the e2e, the MCP client check
 
 ## 1. The person sets up a courier
 
-`apps/courier/src/routes/app.ts` holds the first-run routes, `/start` to `/start/summon`. Each renders a function from
-`pages/onboarding.ts`.
+`apps/courier/src/routes/app.ts` holds the first-run routes: `/start` (welcome), `/start/sign-in`, `/start/courier` and
+`/start/claude`, each rendered by a function from `pages/onboarding.ts`. The first visit to `/app` runs a short tour
+(`assets/tour.js`), which ends in the errand room.
 
 Pages are plain functions that return strings. They use the `html` tag from `packages/shared/src/html.ts`, which escapes
 every value unless it's wrapped in `raw()`. There's no client framework. `packages/shared/assets/` holds small scripts
@@ -78,7 +79,7 @@ errand.
 
 Claude holds a connection token from `issueConnectionTokens` in `auth/oauth.ts`: who it acts for, with no limits, so it
 outlasts any errand. On each request, the shop asks `GET /internal/connections/:id` for the current ticket, which comes as
-a short-lived JWT from `mintAccessToken` with the visa's limits. The errand room holds that visa token directly.
+a short-lived JWT from `mintAccessToken` with the visa's limits. The errand room (`apps/courier/src/room.ts`) mints one per shop too, on each purchase.
 
 Both use a pairwise pseudonym as their subject. Decode one from the e2e to see what a shop sees: no name, no email, no
 PayPal ID.
