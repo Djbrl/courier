@@ -291,7 +291,7 @@ await step("Try with simulated PayPal: a new demo person, marked so in what shop
   assert.equal(elsewhere.headers.get("location"), "/app");
 });
 
-await step("The errand room: one chat, errands in a chain at any shop, and only the person sets a budget", async () => {
+await step("The errand room: chats side by side, at any shop, and only the person sets a budget", async () => {
   const person = new Browser();
   await person.req(`${flow.courier}/auth/demo`, { form: { next: "/start/courier" } });
   const made = await person.req(`${flow.courier}/start/courier`, {
@@ -309,69 +309,130 @@ await step("The errand room: one chat, errands in a chain at any shop, and only 
   assert.doesNotMatch(room, /Set the budget/);
   for (const shop of ["Amazoo", "Floor Dash", "Mike"]) assert.match(room, new RegExp(`What does ${shop} have`));
 
+  const url = (path: string) => `${flow.courier}/errand/api/${path}${path.includes("?") ? "&" : "?"}c=${courierId}`;
   const api = async (path: string, body: unknown) => {
-    const res = await person.req(`${flow.courier}/errand/api/${path}?c=${courierId}`, { json: body });
-    const lines = (await res.text())
-      .trim()
-      .split("\n")
-      .map((line) => JSON.parse(line));
-    return { status: res.status, ...lines.at(-1) };
+    const res = await person.req(url(path), { json: body });
+    return { status: res.status, ...(await res.json()) };
   };
-  const say = (message: string) => api("chat", { message });
-  const bought = (out: any) => out.steps.find((s: any) => s.tool === "buy");
+  const view = async (id: string) => (await person.req(url(`chats/${id}`))).json() as any;
+  const newChat = async () => (await api("chats", {})).chat.id as string;
+  const settled = async (id: string) => {
+    for (let i = 0; i < 200; i++) {
+      const out = await view(id);
+      if (!out.chat.working) return out;
+      await new Promise((r) => setTimeout(r, 25));
+    }
+    throw new Error("the courier never finished");
+  };
+  const say = async (id: string, message: string) => {
+    const before = (await view(id)).chat.events.length;
+    assert.equal((await api("chat", { chat: id, message })).status, 200);
+    const out = await settled(id);
+    return { ...out, fresh: out.chat.events.slice(before) };
+  };
+  const cards = (out: any) => out.fresh.filter((e: any) => e.t === "pay");
 
   // Nothing is bought until the person names a budget, and it's read in code.
-  const asked = await say("A burger");
-  assert.equal(asked.needsBudget, true, JSON.stringify(asked));
-  assert.deepEqual(asked.state.errands, []);
+  const burgers = await newChat();
+  const asked = await say(burgers, "A burger");
+  assert.equal(asked.chat.amounts, true, JSON.stringify(asked.fresh));
+  assert.equal(asked.chat.errand, null);
 
-  const first = await say("$15");
-  assert.equal(first.state.errands[0].limitCents, 1500);
-  const pay = bought(first);
-  assert.equal(pay.data.shop_slug, "floor-dash", JSON.stringify(first));
-  assert.ok(pay.data.approve_url.includes("/sim-paypal/checkout/"));
-  const orderId = pay.data.order_id;
+  // However they write it: "15$" counts as much as "$15".
+  const first = await say(burgers, "15$");
+  assert.equal(first.chat.errand.limitCents, 1500, JSON.stringify(first.fresh));
+  const pay = cards(first)[0];
+  assert.equal(pay.shop_slug, "floor-dash", JSON.stringify(first.fresh));
+  assert.ok(pay.approve_url.includes("/sim-paypal/checkout/"));
+  assert.ok(pay.callBackUntil > Date.now());
+  assert.ok(pay.items[0].category, "items carry what the window draws their picture from");
 
-  // Paying finishes the first errand's spend; the shop and the window agree.
-  await person.follow(pay.data.approve_url, "http://none/", { form: { decision: "approve" } });
-  const status = await (
-    await person.req(`${flow.courier}/errand/api/order/${orderId}?c=${courierId}&shop=floor-dash`)
-  ).json();
-  assert.equal(status.status, "paid");
-  assert.ok(status.receipt_url);
-  assert.ok(status.state.errands[0].spentCents > 0);
+  // Paying finishes the errand. Asking twice at once writes one receipt.
+  await person.follow(pay.approve_url, "http://none/", { form: { decision: "approve" } });
+  const orderUrl = url(`order/${pay.order_id}?chat=${burgers}`);
+  await Promise.all([person.req(orderUrl), person.req(orderUrl)]);
+  const paid = await view(burgers);
+  assert.equal(paid.chat.events.filter((e: any) => e.t === "receipt").length, 1);
+  assert.equal(paid.chat.events.at(-1).text, "All done. Let me know if you need anything else.");
+  assert.equal(paid.chat.errand.open, false);
+  assert.ok(paid.chat.errand.spentCents > 0);
 
-  // The next ask, in the same chat, at another shop, with a budget said in passing, is a new errand.
-  const second = await say("A good novel, under $20");
-  const novel = bought(second);
-  assert.equal(novel.data.shop_slug, "amazoo", JSON.stringify(second));
-  assert.deepEqual(
-    second.state.errands.map((e: any) => [e.what, e.limitCents]),
-    [["A good novel", 2000]],
-  );
-  const errand = second.state.errands[0].id;
+  // Another chat is another errand, and they can run side by side.
+  const novels = await newChat();
+  const shoes = await newChat();
+  assert.notEqual(novels, burgers);
+  assert.equal(shoes, novels, "an empty chat is reused");
+  const other = await newChat().then(async (id) => {
+    await api("chat", { chat: id, message: "A good novel, under $20" });
+    const second = await newChat();
+    assert.notEqual(second, id);
+    await api("chat", { chat: second, message: "Flowers for my mum, budget 25" });
+    return [await settled(id), await settled(second)];
+  });
+  const [novel, flowers] = other;
+  assert.equal(novel.chat.errand.what, "A good novel");
+  assert.equal(novel.chat.errand.limitCents, 2000);
+  assert.equal(flowers.chat.errand.limitCents, 2500);
+  assert.equal(flowers.list.filter((t: any) => t.errand).length, 3);
+
+  // Calling back undoes the purchase in time: nothing charged, budget free.
+  const held = novel.chat.events.find((e: any) => e.t === "pay");
+  assert.equal((await api("callback", { chat: novel.chat.id, order: held.order_id })).status, 200);
+  const back = await view(novel.chat.id);
+  assert.equal(back.chat.events.find((e: any) => e.t === "pay").status, "called_back");
+  assert.equal(back.chat.errand.remainingCents, 2000);
+
+  // Carrying on in the chat ends the time to call back, in code.
+  const flowerCard = flowers.chat.events.find((e: any) => e.t === "pay");
+  await say(flowers.chat.id, "What does Mike have?");
+  assert.equal((await api("callback", { chat: flowers.chat.id, order: flowerCard.order_id })).status, 409);
 
   // Changing the budget is the person's click. It can't go below what's used, or past the limits.
-  assert.equal((await api("budget", { errand, dollars: "5" })).status, 400);
-  assert.equal((await api("budget", { errand, dollars: "900" })).status, 400);
-  assert.equal((await api("budget", { errand, dollars: "30" })).state.errands[0].limitCents, 3000);
+  const errand = back.chat.errand.id;
+  const budget = (dollars: string) => api("budget", { chat: novel.chat.id, errand, dollars });
+  assert.equal((await budget("900")).status, 400);
+  assert.equal((await budget("30")).chat.errand.limitCents, 3000);
 
   // What doesn't fit is refused in code.
-  const small = await say("Running shoes, budget 2");
-  assert.ok(!bought(small), JSON.stringify(small));
+  const small = await say(await newChat(), "Running shoes, budget 2");
+  assert.equal(cards(small).length, 0, JSON.stringify(small.fresh));
+
+  // Several things are one errand, with a helper for each and a card for each.
+  const several = await say(await newChat(), "A burger, flowers and a good novel, budget $60");
+  assert.equal(several.chat.errand.limitCents, 6000);
+  assert.equal(cards(several).length, 3, JSON.stringify(several.fresh));
 
   // Browsing needs no errand. A price isn't a budget.
-  const out = small.state.errands.length;
-  const browse = await say("What does Mike have?");
-  assert.ok(browse.steps.some((s: any) => s.tool === "search_shop" && s.data.results.length));
-  assert.equal(browse.state.errands.length, out);
-  const priced = await say("Buy the $149 turntable");
-  assert.equal(priced.needsBudget, true, JSON.stringify(priced));
+  const browsing = await newChat();
+  const browse = await say(browsing, "What does Mike have?");
+  assert.ok(browse.fresh.some((e: any) => e.t === "items" && e.results.length));
+  assert.equal(browse.chat.errand, null);
+  const priced = await say(browsing, "Buy the $149 turntable");
+  assert.equal(priced.chat.amounts, true, JSON.stringify(priced.fresh));
+
+  // A saved cap holds for budgets typed in the room too, and says where to change it.
+  await person.req(`${flow.courier}/app/settings/cap`, { form: { cap_errand: "40", cap_day: "100" } });
+  const over = await say(browsing, "$80");
+  assert.match(over.fresh.at(-1).text, /over your \$40 cap per errand.*Settings/);
+  assert.equal(over.chat.errand, null);
+
+  // A past errand opens its chat. Deleting the chat ends its errand; the record stays.
+  assert.match(await (await person.req(`${flow.courier}/app/errands?tab=past`)).text(), new RegExp(`chat=${burgers}`));
+  const gone = await api("delete", { chat: several.chat.id });
+  assert.equal(gone.status, 200);
+  assert.equal((await person.req(url(`chats/${several.chat.id}`))).status, 404);
+
+  // A revoked courier ends its errands and starts no more, until it's restored.
+  await person.req(`${flow.courier}/app/couriers/${courierId}/revoke`, { form: {} });
+  const revoked = await say(await newChat(), "A burger, budget 20");
+  assert.match(revoked.fresh.at(-1).text, /revoked/);
+  assert.equal((await view(flowers.chat.id)).chat.errand.open, false);
+  await person.req(`${flow.courier}/app/couriers/${courierId}/restore`, { form: {} });
 
   // The room's own link to the shops isn't a Claude the person connected.
   assert.match(await (await person.req(`${flow.courier}/app/settings`)).text(), /Not connected yet/);
   // A stranger can't see this courier's chat.
-  assert.equal((await new Browser().req(`${flow.courier}/errand/api/state?c=${courierId}`)).status, 401);
+  assert.equal((await new Browser().req(url(`chats/${burgers}`))).status, 401);
 });
 
 await step("Under-18 PayPal account is refused", async () => {
@@ -435,6 +496,7 @@ await step("MCP: list tools and whoami over MCP", async () => {
   client = await mcpClient(tokens.access_token);
   const { tools } = await client.listTools();
   assert.deepEqual(tools.map((t) => t.name).sort(), [
+    "cancel_order",
     "get_item",
     "hold_item",
     "order_status",
@@ -581,10 +643,10 @@ await step("Courier home shows the errand; its detail shows every step", async (
 await step("A stranger can't cancel someone else's errand through the bond link", async () => {
   await fetch(`${flow.courier}/bond/cancel?visa=${visaId}`, { redirect: "manual" });
   const page = await (await browser.req(`${flow.courier}/app/errands?e=${visaId}`)).text();
-  assert.match(page, /Call back/);
+  assert.match(page, /End errand/);
 });
 
-await step("Calling back ends the errand within seconds; Claude stays connected but can't buy", async () => {
+await step("Ending the errand takes effect within seconds; Claude stays connected but can't buy", async () => {
   const res = await browser.req(`${flow.courier}/app/visas/${visaId}/revoke`, { form: {} });
   assert.equal(res.status, 303);
   await new Promise((r) => setTimeout(r, 3200));

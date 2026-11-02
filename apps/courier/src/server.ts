@@ -23,6 +23,7 @@ import {
   type Approval,
   type AuthRequest,
   type Connection,
+  type Courier,
   db,
   findCourier,
   findMerchant,
@@ -64,6 +65,7 @@ import {
   migrateSavedPayPal,
   parseCap,
   removeSavedPayPal,
+  revokeCourier,
   revokeVisa,
   savedPayPal,
   sweepExpiredVisas,
@@ -712,10 +714,27 @@ app.post("/app/visas/:id/revoke", async (req, res) => {
     res.status(404).send(errorPage(human, "Not found", "That visa doesn't exist."));
     return;
   }
-  await revokeVisa(visa.id, "Called back by the person");
+  await revokeVisa(visa.id, "Ended by the person");
   const next = typeof req.body.next === "string" && req.body.next.startsWith("/app") ? req.body.next : "/app";
   res.redirect(303, next);
 });
+
+for (const action of ["revoke", "restore"]) {
+  app.post(`/app/couriers/:id/${action}`, async (req, res) => {
+    const human = currentHuman(req);
+    const courier = human && findCourier(human.id, req.params.id);
+    if (!courier) {
+      res.status(404).send(errorPage(human, "Not found", "That courier doesn't exist."));
+      return;
+    }
+    if (action === "revoke") await revokeCourier(courier);
+    else {
+      const { revokedAt: _revokedAt, ...restored } = courier;
+      saveCourier(restored as Courier);
+    }
+    res.redirect(303, `/app/couriers?c=${encodeURIComponent(courier.id)}`);
+  });
+}
 
 app.post("/app/connections/:id/revoke", async (req, res) => {
   const human = currentHuman(req);

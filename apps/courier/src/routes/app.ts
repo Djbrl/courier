@@ -35,13 +35,18 @@ import {
   welcomePage,
 } from "../pages/index.ts";
 import {
+  answerApproval,
+  blankChat,
+  callBack,
   changeBudget,
-  endErrand,
-  orderStatus,
-  roomSession,
-  roomState,
-  roomTurn,
-  saveRoom,
+  chatsOfHuman,
+  chatTabs,
+  chatView,
+  chatWithOrder,
+  checkOrder,
+  deleteChat,
+  findChat,
+  sendMessage,
   setNextBudget,
 } from "../room.ts";
 import { decideApproval, parseCap, savedPayPal } from "../visas.ts";
@@ -200,7 +205,10 @@ function desk(human: Human): Desk {
     "connections",
     (c) => c.humanId === human.id && c.status === "active" && !c.clientId.startsWith(DEMO_CLIENT_PREFIX),
   );
-  return { human, couriers: listCouriers(human.id), visas, stamps, approvals, connections };
+  const chatByVisa = new Map<string, string>();
+  for (const chat of chatsOfHuman(human.id))
+    for (const id of chat.errandIds) chatByVisa.set(id, `/errand?c=${chat.courierId}&chat=${chat.id}`);
+  return { human, couriers: listCouriers(human.id), visas, stamps, approvals, connections, chatByVisa };
 }
 
 /** The app needs a courier; people who signed in without one finish onboarding first. */
@@ -293,15 +301,13 @@ appRouter.get("/errand/new", (req, res) => {
 });
 
 appRouter.get("/errand", (req, res) => {
-  // Coming back from paying at the shop (?order=…, no courier): find the courier that placed that order.
+  // Coming back from paying at the shop (?order=…, no courier): find the chat that placed that order.
   const human = currentHuman(req);
-  const order = req.query.order;
-  const owner =
-    human && !req.query.c && typeof order === "string"
-      ? listCouriers(human.id).find((c) => roomSession(c).lastOrderId === order)
-      : undefined;
-  const ctx = requireCourier(req, res, owner?.id);
-  if (ctx) res.send(errandRoom(desk(ctx.human), ctx.courier, roomState(roomSession(ctx.courier), ctx.courier)));
+  const back = human && typeof req.query.order === "string" ? chatWithOrder(human.id, req.query.order) : undefined;
+  const ctx = requireCourier(req, res, back?.courierId);
+  if (!ctx) return;
+  const chat = back ?? findChat(ctx.courier, req.query.chat) ?? blankChat(ctx.courier);
+  res.send(errandRoom(desk(ctx.human), ctx.courier, chatView(chat), chatTabs(ctx.courier)));
 });
 
 const api = Router();
@@ -319,34 +325,37 @@ function roomFor(req: express.Request, res: express.Response) {
     res.status(404).json({ error: "That courier doesn't exist." });
     return null;
   }
-  return { human, courier, s: roomSession(courier) };
+  return { human, courier };
 }
 
-api.get("/state", (req, res) => {
+/** As roomFor, for one of the courier's chats. */
+function chatFor(req: express.Request, res: express.Response, id: unknown) {
   const ctx = roomFor(req, res);
-  if (ctx) res.json({ state: roomState(ctx.s, ctx.courier) });
+  if (!ctx) return null;
+  const chat = findChat(ctx.courier, id);
+  if (!chat) {
+    res.status(404).json({ error: "That chat doesn't exist." });
+    return null;
+  }
+  return { ...ctx, chat };
+}
+
+const answer = (res: express.Response, ctx: NonNullable<ReturnType<typeof chatFor>>, extra = {}) =>
+  res.json({ ...extra, chat: chatView(ctx.chat), list: chatTabs(ctx.courier) });
+
+api.post("/chats", (req, res) => {
+  const ctx = roomFor(req, res);
+  if (ctx) res.json({ chat: chatView(blankChat(ctx.courier)) });
 });
 
-/** Answers line by line: each step as it happens, then the courier's reply. */
-async function streamTurn(
-  res: express.Response,
-  ctx: NonNullable<ReturnType<typeof roomFor>>,
-  message: string,
-): Promise<void> {
-  res.set("Content-Type", "application/x-ndjson").set("Cache-Control", "no-store");
-  const line = (value: unknown) => res.write(`${JSON.stringify(value)}\n`);
-  try {
-    const out = await roomTurn(ctx.human, ctx.courier, ctx.s, message, (step) => line({ step }));
-    line({ ...out, state: roomState(ctx.s, ctx.courier) });
-  } catch (error) {
-    console.error("[errand] turn failed", error);
-    line({ error: "That didn’t work. Try asking again.", state: roomState(ctx.s, ctx.courier) });
-  }
-  res.end();
-}
+api.get("/chats/:id", (req, res) => {
+  const ctx = chatFor(req, res, req.params.id);
+  if (ctx) answer(res, ctx);
+});
 
-api.post("/chat", async (req, res) => {
-  const ctx = roomFor(req, res);
+/** Takes the message and answers straight away. The turn runs on, and the window watches the chat. */
+api.post("/chat", (req, res) => {
+  const ctx = chatFor(req, res, req.body?.chat);
   if (!ctx) return;
   const message = String(req.body?.message ?? "")
     .trim()
@@ -355,42 +364,50 @@ api.post("/chat", async (req, res) => {
     res.status(400).json({ error: "Say something first." });
     return;
   }
-  await streamTurn(res, ctx, message);
+  sendMessage(ctx.human, ctx.courier, ctx.chat, message);
+  answer(res, ctx);
 });
 
 /** The budget element in the window: only the person's own click reaches this, never the courier. */
 api.post("/budget", (req, res) => {
-  const ctx = roomFor(req, res);
+  const ctx = chatFor(req, res, req.body?.chat);
   if (!ctx) return;
   const dollars = parseBudget(String(req.body?.dollars ?? ""), true)?.dollars ?? 0;
   const problem =
     typeof req.body?.errand === "string"
-      ? changeBudget(ctx.courier, req.body.errand, dollars)
-      : setNextBudget(ctx.s, dollars);
+      ? changeBudget(ctx.human, ctx.chat, req.body.errand, dollars)
+      : setNextBudget(ctx.human, ctx.chat, dollars);
   if (problem) {
     res.status(400).json({ error: problem });
     return;
   }
-  res.json({ state: roomState(ctx.s, ctx.courier) });
+  answer(res, ctx);
 });
 
-api.post("/end", async (req, res) => {
-  const ctx = roomFor(req, res);
+api.post("/callback", async (req, res) => {
+  const ctx = chatFor(req, res, req.body?.chat);
   if (!ctx) return;
-  await endErrand(ctx.courier, String(req.body?.errand ?? ""));
-  res.json({ state: roomState(ctx.s, ctx.courier) });
+  const problem = await callBack(ctx.human, ctx.courier, ctx.chat, String(req.body?.order ?? ""));
+  if (problem) {
+    res.status(409).json({ error: problem });
+    return;
+  }
+  answer(res, ctx);
 });
 
-/** A clean chat. Errands that are out stay out, and stay in the window. */
-api.post("/reset", (req, res) => {
-  const ctx = roomFor(req, res);
+api.post("/delete", async (req, res) => {
+  const ctx = chatFor(req, res, req.body?.chat);
   if (!ctx) return;
-  saveRoom({ courierId: ctx.courier.id, humanId: ctx.human.id, history: [] });
-  res.json({ ok: true });
+  const problem = await deleteChat(ctx.human, ctx.courier, ctx.chat);
+  if (problem) {
+    res.status(409).json({ error: problem });
+    return;
+  }
+  res.json({ list: chatTabs(ctx.courier), next: chatTabs(ctx.courier)[0]?.id ?? blankChat(ctx.courier).id });
 });
 
-api.post("/approve", async (req, res) => {
-  const ctx = roomFor(req, res);
+api.post("/approve", (req, res) => {
+  const ctx = chatFor(req, res, req.body?.chat);
   if (!ctx) return;
   const approval = db.get<Approval>("approvals", String(req.body?.approvalId ?? ""));
   if (!approval || approval.humanId !== ctx.human.id) {
@@ -398,26 +415,20 @@ api.post("/approve", async (req, res) => {
     return;
   }
   const decided = decideApproval(approval, req.body?.decision === "approved" ? "approved" : "denied");
-  if (decided.status !== "approved") {
-    ctx.s.pendingApproval = undefined;
-    saveRoom(ctx.s);
-    res.set("Content-Type", "application/x-ndjson");
-    res.end(`${JSON.stringify({ steps: [], reply: "OK, I'll leave it.", state: roomState(ctx.s, ctx.courier) })}\n`);
-    return;
-  }
-  await streamTurn(res, ctx, "go ahead");
+  answerApproval(ctx.human, ctx.courier, ctx.chat, approval.id, decided.status === "approved");
+  answer(res, ctx);
 });
 
 api.get("/order/:id", async (req, res) => {
-  const ctx = roomFor(req, res);
+  const ctx = chatFor(req, res, req.query.chat);
   if (!ctx) return;
   try {
-    const order = await orderStatus(ctx.human, ctx.courier, String(req.query.shop ?? ""), req.params.id);
-    if (!order) {
-      res.status(404).json({ error: "That shop doesn't exist." });
+    const status = await checkOrder(ctx.human, ctx.courier, ctx.chat, req.params.id);
+    if (!status) {
+      res.status(404).json({ error: "That order isn't in this chat." });
       return;
     }
-    res.json({ ...order.data, state: roomState(ctx.s, ctx.courier) });
+    answer(res, ctx, { status });
   } catch (error) {
     res.status(500).json({ error: (error as Error).message });
   }

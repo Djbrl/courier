@@ -80,7 +80,7 @@ These steps test code running on your machine, set up as in the
    - [ ] Courier: the errand shows "$5 bond authorized"; the steps show "Bond held".
    - [ ] Business account: a $5 authorization (pending, not captured).
 4. Then one of:
-   - **Call it back** (Errands → Call back): the hold should be **voided**. Errand says "bond voided"; the
+   - **End it** (Errands → End errand): the hold should be **voided**. Errand says "bond voided"; the
      Business account shows the authorization voided.
    - Or **report it** (What the shop sees → the order → Signed proof → Report this courier): the hold should be
      **captured**. Errand says "bond captured"; the Business account receives $5.
@@ -88,7 +88,7 @@ These steps test code running on your machine, set up as in the
 
 ## 4. Calling a courier back
 
-- [ ] Errands → Call back on an errand Claude is using. Claude stays connected, and its next purchase gets a new ticket
+- [ ] Errands → End errand on an errand Claude is using. Claude stays connected, and its next purchase gets a new ticket
   link. It should not ask you to reconnect.
 - [ ] Settings → Disconnect. Claude's next tool call should fail with 401 and it should ask you to connect again.
 - [ ] Settings → Delete my account. Claude's next tool call should fail, and signing in with the same PayPal should

@@ -42,6 +42,8 @@ export interface Desk {
   approvals: Approval[];
   /** Active only. */
   connections: Connection[];
+  /** Where an errand's chat is, for errands sent from the errand room. */
+  chatByVisa: Map<string, string>;
 }
 
 type View = "home" | "errands" | "shops" | "couriers" | "settings";
@@ -121,7 +123,7 @@ function shopGrid(): RawHtml {
 function errandRow(d: Desk, v: VisaView, selected = false): RawHtml {
   const look = lookForAgent(d.human, v.clientId, v.agentName);
   const step = lastStep(d, v.id);
-  return html`<a class="erow cc ${isOut(v) ? "" : "off"}" style="${courierVars(look.color)}" href="/app/errands?e=${v.id}" ${selected ? raw('aria-current="true"') : ""}>
+  return html`<a class="erow cc ${isOut(v) ? "" : "off"}" style="${courierVars(look.color)}" href="${d.chatByVisa.get(v.id) ?? `/app/errands?e=${v.id}`}" ${selected ? raw('aria-current="true"') : ""}>
     ${portrait(look)}
     <span class="et"><b>${v.intent || "Anything within the limits"}</b><small>${look.name} · ${whereTo(d, v)}${step ? html` · <span class="ls">${step.title}</span>` : ""}</small></span>
     <span class="em">${meter(v, "sm")}<small><b>${short(v.spentCents)}</b> of ${short(v.spendLimitCents)}</small></span>
@@ -299,8 +301,8 @@ function errandDetail(d: Desk, v: VisaView): RawHtml {
     <header class="dtl-h">
       ${portrait(look)}<div class="dtl-t"><b>${whereTo(d, v)}</b><small>${look.name} · ${isRoom ? "errand room" : "Claude"} · ${isOut(v) ? `back by ${backBy(v.expiresAt)}` : ended}${v.autopay?.status === "on" ? " · pays with saved PayPal" : ""}${v.bond ? ` · $${(v.bond.amountCents / 100).toFixed(0)} bond ${v.bond.status}` : ""}</small></div>
       <span class="dtl-a">
-        ${isOut(v) && isRoom ? html`<a class="btn sm" href="/errand?c=${courier!.id}">Open${ARROW}</a>` : ""}
-        ${isOut(v) ? html`<form method="post" action="/app/visas/${v.id}/revoke"><input type="hidden" name="next" value="/app/errands?e=${v.id}"><button class="btn danger sm" type="submit">Call back</button></form>` : ""}
+        ${isRoom && d.chatByVisa.has(v.id) ? html`<a class="btn sm" href="${d.chatByVisa.get(v.id)!}">Open the chat${ARROW}</a>` : ""}
+        ${isOut(v) ? html`<form method="post" action="/app/visas/${v.id}/revoke"><input type="hidden" name="next" value="/app/errands?e=${v.id}"><button class="btn danger sm" type="submit">End errand</button></form>` : ""}
       </span>
     </header>
     <div class="dtl-b">
@@ -369,6 +371,13 @@ export function couriersPage(d: Desk, opts: { courierId?: string }): string {
           <a class="btn ${inClaude ? "ghost" : ""} sm" href="${inClaude ? "/app/settings" : `/start/claude?c=${sel.id}`}">${inClaude ? "Manage" : "Connect"}</a></div>
         <div class="live-row on"><i aria-hidden="true"></i><div><b>Errand room</b><small>The demo, on this website</small></div>
           <a class="btn ghost sm" href="/errand?c=${sel.id}">Open</a></div>
+        ${
+          sel.revokedAt
+            ? html`<div class="live-row"><i aria-hidden="true"></i><div><b>Revoked</b><small>It can't start errands. Revoked ${timeAgo(sel.revokedAt)}.</small></div>
+              <form method="post" action="/app/couriers/${sel.id}/restore"><button class="btn sm" type="submit">Restore</button></form></div>`
+            : html`<div class="live-row"><i aria-hidden="true"></i><div><b>Revoke ${look.name}</b><small>Ends its open errands now, and stops it starting new ones.</small></div>
+              <form method="post" action="/app/couriers/${sel.id}/revoke"><button class="btn danger sm" type="submit">Revoke</button></form></div>`
+        }
       </div>
     </section>
   </div>`;
@@ -414,7 +423,7 @@ export function settingsPage(d: Desk, savedEmail?: string | null | false): strin
     <section><h2 class="sec-t">Claude can spend without asking, up to</h2><div class="panel slist">
       <form class="srow col capform" method="post" action="/app/settings/cap">
         ${capFields(d.human)}
-        <p class="fine">Above this, it asks you first. Put 0 to always be asked. Needs saved PayPal.${d.human.cap ? "" : " Off until you save."}</p>
+        <p class="fine">Above this, it asks you first. Put 0 to always be asked. Needs saved PayPal. Once saved, errand budgets can't go over the per-errand amount either.${d.human.cap ? "" : " Off until you save."}</p>
         <div><button class="btn sm" type="submit">Save</button></div>
       </form>
     </div></section>

@@ -1,6 +1,6 @@
-// The errand room: one running chat with your courier, and as many errands as you ask for. Each errand has its own budget,
-// shown above the chat, where you can change it. Payments open PayPal (or the simulator) in a popup, and the shop's return
-// page hands control back here.
+// The errand room: a window onto chats that run on the server. Each chat holds an errand with its own budget. Several can run
+// at once, so the page asks what's new and redraws, and nothing is lost by leaving. Payments open PayPal (or the simulator)
+// in a popup, and the shop's return page hands control back here.
 (() => {
   const boot = JSON.parse(document.getElementById("boot").textContent);
   const C = boot.courier;
@@ -8,7 +8,8 @@
   const log = $("#log");
   const input = $("#say");
   const sugs = $("#sugs");
-  const tickets = $("#tickets");
+  const tabs = $("#tickets");
+  const bar = $("#budget");
   const esc = (s) =>
     String(s ?? "").replace(
       /[&<>"']/g,
@@ -17,11 +18,11 @@
   const usd = (cents) => `$${(cents / 100).toFixed(2).replace(/\.00$/, "")}`;
   const AMOUNTS = ["$15", "$25", "$50", "$100"];
 
-  let busy = false;
-  let state = boot.state;
-  const polls = new Map();
-  /** Errands the chat has already announced. */
-  const known = new Set();
+  let chat = boot.chat;
+  let list = boot.list;
+  let drawn = -1;
+  /** Orders with their PayPal window open, and the chat each belongs to. */
+  const paying = new Map();
 
   /* ---------------- api ---------------- */
 
@@ -38,66 +39,43 @@
     return json;
   }
 
-  /** Reads an answer line by line: steps as they happen, then the reply. */
-  async function stream(path, body, onStep) {
-    const res = await fetch(url(path), {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
-    if (!res.ok || !res.body) {
-      const json = await res.json().catch(() => ({}));
-      throw new Error(json.error || `Something went wrong (${res.status})`);
-    }
-    const reader = res.body.pipeThrough(new TextDecoderStream()).getReader();
-    let held = "";
-    let last = null;
-    for (;;) {
-      const { value, done } = await reader.read();
-      if (done) break;
-      held += value;
-      const lines = held.split("\n");
-      held = lines.pop();
-      for (const line of lines) {
-        if (!line.trim()) continue;
-        const msg = JSON.parse(line);
-        if (msg.step) onStep(msg.step);
-        else last = msg;
-      }
-    }
-    if (!last) throw new Error("The answer got cut off. Try again?");
-    return last;
+  /* ---------------- pictures ---------------- */
+
+  // Mockups, one for each kind of thing. Nothing here is a real product photo.
+  const SHAPES = {
+    vinyl:
+      '<circle cx="24" cy="24" r="15" fill="#141414"/><circle cx="24" cy="24" r="10" fill="none" stroke="#fff" stroke-opacity=".25"/><circle cx="24" cy="24" r="5" fill="#fff"/><circle cx="24" cy="24" r="1.4" fill="#141414"/>',
+    cd: '<circle cx="24" cy="24" r="15" fill="#fff"/><path d="M24 9a15 15 0 0 1 13 7.500L24 24z" fill="#fff" fill-opacity=".5"/><circle cx="24" cy="24" r="4" fill="#141414"/>',
+    cassette:
+      '<rect x="9" y="14" width="30" height="20" rx="3" fill="#fff"/><circle cx="18" cy="24" r="3" fill="#141414"/><circle cx="30" cy="24" r="3" fill="#141414"/>',
+    turntable:
+      '<rect x="8" y="12" width="32" height="24" rx="3" fill="#fff"/><circle cx="21" cy="24" r="8" fill="#141414"/><path d="M35 15l-5 12" stroke="#141414" stroke-width="2" stroke-linecap="round"/>',
+    accessory:
+      '<rect x="12" y="12" width="24" height="24" rx="6" fill="#fff"/><circle cx="24" cy="24" r="5" fill="#141414"/>',
+    merch: '<path d="M16 11l-8 6 4 6 3-2v16h18V21l3 2 4-6-8-6c-1 3-3 4-8 4s-7-1-8-4z" fill="#fff"/>',
+    apparel: '<path d="M16 11l-8 6 4 6 3-2v16h18V21l3 2 4-6-8-6c-1 3-3 4-8 4s-7-1-8-4z" fill="#fff"/>',
+    book: '<path d="M13 10h20a2 2 0 0 1 2 2v26H15a2 2 0 0 1-2-2z" fill="#fff"/><path d="M13 34a2 2 0 0 1 2-2h20" fill="none" stroke="#141414" stroke-width="1.6"/><path d="M19 16h10M19 21h7" stroke="#141414" stroke-width="2" stroke-linecap="round"/>',
+    gadget:
+      '<rect x="15" y="8" width="18" height="32" rx="4" fill="#fff"/><rect x="18" y="12" width="12" height="20" rx="1" fill="#141414"/><circle cx="24" cy="36" r="1.600" fill="#141414"/>',
+    home: '<path d="M20 22h8l2 16H18z" fill="#fff"/><path d="M24 22V13M24 16c-5 0-7-3-7-6 4 0 7 2 7 6zM24 18c4 0 7-2 7-6-4 0-7 2-7 6z" stroke="#fff" stroke-width="1.600" fill="#fff"/>',
+    food: '<path d="M10 22c0-7 6-11 14-11s14 4 14 11z" fill="#fff"/><rect x="9" y="24" width="30" height="4" rx="2" fill="#141414"/><path d="M10 30h28v2a5 5 0 0 1-5 5H15a5 5 0 0 1-5-5z" fill="#fff"/>',
+    flowers:
+      '<path d="M24 26v14" stroke="#fff" stroke-width="2.500" stroke-linecap="round"/><g fill="#fff"><circle cx="24" cy="12" r="5"/><circle cx="16" cy="19" r="5"/><circle cx="32" cy="19" r="5"/><circle cx="19" cy="27" r="5"/><circle cx="29" cy="27" r="5"/></g><circle cx="24" cy="20" r="4" fill="#141414"/>',
+    shoes:
+      '<path d="M7 28c0-3 1-8 3-10 3 3 7 3 10 1l7 7c3 2 8 2 11 3 2 1 3 3 3 5H7z" fill="#fff"/><path d="M7 34h34" stroke="#141414" stroke-width="2"/>',
+    skin: '<rect x="17" y="17" width="14" height="22" rx="3" fill="#fff"/><rect x="20" y="9" width="8" height="8" rx="1" fill="#fff"/><circle cx="24" cy="28" r="3" fill="#141414"/>',
+    pass: '<rect x="8" y="14" width="32" height="20" rx="4" fill="#fff"/><path d="M14 21h12M14 27h8" stroke="#141414" stroke-width="2" stroke-linecap="round"/>',
+    currency:
+      '<circle cx="24" cy="24" r="14" fill="#fff"/><circle cx="24" cy="24" r="9" fill="none" stroke="#141414" stroke-width="1.600"/>',
+  };
+  const BOX =
+    '<path d="M24 9l14 7v16l-14 7-14-7V16z" fill="#fff"/><path d="M10 16l14 7 14-7M24 23v16" fill="none" stroke="#141414" stroke-width="1.600"/>';
+  function thumb(item) {
+    const hue = Number(item?.hue) || 0;
+    return `<span class="thumb" style="--h:${hue}" aria-hidden="true"><svg viewBox="0 0 48 48">${SHAPES[item?.category] || BOX}</svg></span>`;
   }
 
-  /* ---------------- chat log ---------------- */
-
-  function scroll() {
-    requestAnimationFrame(() => (log.scrollTop = log.scrollHeight));
-  }
-  function add(html, cls = "") {
-    const el = document.createElement("div");
-    if (cls) el.className = cls;
-    el.innerHTML = html;
-    log.appendChild(el);
-    scroll();
-    remember();
-    return el;
-  }
-
-  // The chat survives moving around the app, and a full-page trip to PayPal when popups are blocked.
-  const KEY = `courier:room:${C.id}`;
-  function remember() {
-    try {
-      sessionStorage.setItem(KEY, JSON.stringify({ log: log.innerHTML, known: [...known] }));
-    } catch {}
-  }
-  function recall() {
-    try {
-      return JSON.parse(sessionStorage.getItem(KEY) || "null");
-    } catch {
-      return null;
-    }
-  }
+  /* ---------------- drawing a chat ---------------- */
 
   /** Links only to Courier and the shops: this text comes from a model that reads what shops say. */
   function rich(text) {
@@ -108,330 +86,347 @@
         return false;
       }
     };
-    const link = (href, label) =>
-      safe(href) ? `<a class="link" href="${href}" target="_blank" rel="noopener">${label}</a>` : label;
+    const link = (href, label) => (safe(href) ? `<a class="link" href="${href}">${label}</a>` : label);
     return esc(text)
       .replace(/\*\*([^*]+)\*\*/g, "<b>$1</b>")
       .replace(/\*([^*\n]+)\*/g, "<i>$1</i>")
       .replace(/\[([^\]]+)\]\((https?:[^)\s]+)\)/g, (_, label, href) => link(href, label))
       .replace(/(^|[\s(])(https?:\/\/[^\s)<]+)/g, (_, lead, href) => `${lead}${link(href, href)}`);
   }
-  const say = (text) => add(rich(text), "bub");
-  const me = (text) => add(esc(text), "bub me");
-  const dim = (html) => add(html, "bub dim");
 
-  function typing() {
-    const el = add(`<i></i><i></i><i></i><span class="typing-t"></span>`, "typing");
-    return {
-      note: (text) => {
-        $(".typing-t", el).textContent = text;
-        scroll();
-      },
-      stop: () => el.remove(),
-    };
-  }
-
-  const nameOf = (step) => step.data?.shop_name || step.args?.shop || "the shop";
-  const NOTES = {
-    search_shop: (s) => `Looking at ${nameOf(s)}…`,
-    buy: (s) => `Checking out at ${nameOf(s)}…`,
-    start_errand: () => "Writing the errand…",
-  };
-
-  /* ---------------- budgets ---------------- */
-
-  function renderTickets(force = false) {
-    // A budget being typed stays put when the courier answers in the meantime.
-    if (!force && $(".tk-edit", tickets)) return;
-    const rows = state.errands.map(
-      (e) =>
-        `<button type="button" class="tk" data-errand="${esc(e.id)}" aria-label="Change the budget for ${esc(e.what)}">
-          <b>${esc(e.what)}</b><span>${e.spentCents ? `${usd(e.spentCents)} of ` : "up to "}${usd(e.limitCents)}</span><i aria-hidden="true">✎</i></button>`,
-    );
-    if (state.pendingBudgetCents)
-      rows.push(
-        `<button type="button" class="tk next" data-next="1" aria-label="Change your budget">
-          <b>Budget</b><span>${usd(state.pendingBudgetCents)}</span><i aria-hidden="true">✎</i></button>`,
-      );
-    tickets.innerHTML = rows.join("");
-    tickets.hidden = !rows.length;
-  }
-
-  function setState(next) {
-    if (!next) return;
-    state = next;
-    for (const e of state.errands) {
-      if (known.has(e.id)) continue;
-      known.add(e.id);
-      add(
-        `<span class="tk-line"><b>New errand</b> ${esc(e.what)} · up to ${usd(e.limitCents)}</span>`,
-        "tk-mark card-in",
-      );
-    }
-    renderTickets();
-  }
-
-  tickets.addEventListener("click", (e) => {
-    const chip = e.target.closest(".tk");
-    if (!chip) return;
-    const errand = chip.dataset.errand;
-    const current = errand ? state.errands.find((x) => x.id === errand)?.limitCents : state.pendingBudgetCents;
-    const form = document.createElement("form");
-    form.className = "tk-edit";
-    form.innerHTML = `<label>$<input type="number" min="1" max="500" step="1" required value="${Math.round(current / 100)}" aria-label="Budget in dollars"></label>
-      <button class="btn sm" type="submit">Set</button>
-      ${errand ? `<button class="link fine" type="button" data-call-back>Call back</button>` : ""}
-      <button class="link fine" type="button" data-close>Cancel</button>
-      <small class="tk-err" hidden></small>`;
-    chip.replaceWith(form);
-    const field = $("input", form);
-    field.focus();
-    field.select();
-    form.addEventListener("click", async (ev) => {
-      if (ev.target.closest("[data-close]")) renderTickets(true);
-      if (ev.target.closest("[data-call-back]")) {
-        form.remove();
-        setState((await api("end", { errand })).state);
-        say("I’m back. Nothing more can be spent on that errand.");
-      }
-    });
-    form.addEventListener("submit", async (ev) => {
-      ev.preventDefault();
-      try {
-        const { state: next } = await api("budget", { dollars: field.value, ...(errand ? { errand } : {}) });
-        form.remove();
-        setState(next);
-      } catch (err) {
-        const box = $(".tk-err", form);
-        box.textContent = err.message;
-        box.hidden = false;
-      }
-    });
-  });
-
-  /* ---------------- suggestions ---------------- */
-
-  function showIdeas() {
-    sugs.innerHTML = boot.ideas.map((i) => `<button type="button" data-say="${esc(i)}">${esc(i)}</button>`).join("");
-    sugs.hidden = false;
-  }
-  function showAmounts() {
-    sugs.innerHTML = AMOUNTS.map((a) => `<button type="button" class="amt" data-say="${a}">${a}</button>`).join("");
-    sugs.hidden = false;
-  }
-  const hideSugs = () => {
-    sugs.hidden = true;
-  };
-
-  /* ---------------- reading the courier's turn ---------------- */
-
-  /** The tools speak to the agent; strip the links and instructions meant for it. */
-  function clean(text) {
-    return String(text || "")
-      .replace(
-        /\s*(Approve the payment here|Send the user this link to approve or decline|Ask the user to approve the payment here):?\s*https?:\/\/\S+/gi,
-        "",
+  const lines = (items) =>
+    (items || [])
+      .map(
+        (i) =>
+          `<div class="li li-t">${thumb(i)}<span>${esc(i.title)}${i.artist ? `<small>${esc(i.artist)}</small>` : ""}</span><span>$${esc(i.price)}</span></div>`,
       )
-      .replace(/\s*After they decide[^\n]*/g, "")
-      .replace(/\s*Then call order_status[^\n]*/g, "")
-      .trim();
-  }
-
-  function handle(out) {
-    if (out.error) dim(esc(out.error));
-    setState(out.state);
-    const steps = out.steps || [];
-    const buy = [...steps].reverse().find((s) => s.tool === "buy");
-    if (out.reply) say(clean(out.reply));
-    if (buy) showBuy(buy);
-    else if (out.needsBudget) return showAmounts();
-    else {
-      const found = [...steps].reverse().find((s) => s.tool === "search_shop" && s.data?.results?.length);
-      if (found) itemCards(found);
-    }
-    if (!buy?.data?.approve_url) showIdeas();
-  }
-
-  function showBuy(step) {
-    const d = step.data || {};
-    if (d.approve_url) return payCard(d);
-    if (d.status === "paid") return receipt(d);
-    if (d.decision === "ask_human") return askCard(d, step);
-    if (d.decision === "deny")
-      return add(
-        `<b>That’s over your budget.</b>${esc(d.reason || "It's outside your limits.")} Tap the budget above to change it. It’s checked in code, so no one can talk me past it.`,
-        "nocard card-in",
-      );
-  }
-
-  /* ---------------- cards ---------------- */
-
-  const lines = (d) =>
-    (d.items || [])
-      .map((i) => `<div class="li"><span>${esc(i.title)}</span><span>$${esc(i.price)}</span></div>`)
       .join("");
 
-  function itemCards(step) {
-    const shop = step.data.shop_name;
-    add(
-      `<div class="items">${step.data.results
-        .slice(0, 4)
+  const clock = (until) => {
+    const left = Math.max(0, Math.ceil((until - Date.now()) / 1000));
+    return `${Math.floor(left / 60)}:${String(left % 60).padStart(2, "0")}`;
+  };
+
+  function payCard(e) {
+    const slot =
+      e.status === "paid"
+        ? `<p class="fine pay-st ok">Paid ✓</p>`
+        : e.status === "called_back"
+          ? `<p class="fine pay-st">Called back. Nothing was charged.</p>`
+          : e.status === "cancelled"
+            ? `<p class="fine pay-st">Cancelled. Nothing was charged.</p>`
+            : paying.has(e.order_id)
+              ? `<div class="wait"><i></i>Waiting for PayPal…</div><p class="fine" style="text-align:center"><a class="link" href="${esc(e.approve_url)}" target="courier-pay">Reopen the payment window</a></p>`
+              : `<button type="button" class="btn-pp" data-pay="${esc(e.approve_url)}" data-order="${esc(e.order_id)}">Pay with ${boot.receiptParts.pp}</button>`;
+    const canCallBack = e.status === "open" && e.callBackUntil > Date.now();
+    return `<div class="paycard" data-card="${esc(e.order_id)}">
+        ${lines(e.items)}
+        <div class="tot"><span>${esc(e.shop_name)}</span><b>$${esc(e.total)}</b></div>
+        <div class="slot">${slot}</div>
+        ${e.status === "open" ? `<p class="fine pay-foot">${canCallBack ? `<button type="button" class="link fine" data-callback="${esc(e.order_id)}" data-until="${e.callBackUntil}">Call back · <span>${clock(e.callBackUntil)}</span></button><br>` : ""}${boot.paypal === "sandbox" ? "PayPal sandbox: log in with a sandbox buyer account." : "Simulated PayPal: no real money."}</p>` : ""}
+      </div>`;
+  }
+
+  function receipt(e) {
+    const P = boot.receiptParts;
+    return `<div class="lift"><div class="rcpt zz" role="group" aria-label="${esc(e.shop || "Shop")} receipt">
+        <div class="rh"><b>${esc(e.shop)}</b><span class="mono">#${esc(String(e.order_id).slice(-6).toUpperCase())}</span></div>
+        <div class="ritems">${(e.items || []).map((i) => `<div class="ritem-t">${thumb(i)}<span class="ritem">${esc(i.title)}</span></div>`).join("")}</div>
+        <div class="ramt"><b>$${esc(e.total)}</b><span>paid</span></div>
+        <div class="ragent">${boot.portrait}<div><b>${esc(C.name)}</b><span class="mono">${esc(C.idNo)}</span></div></div>
+        <div class="rwho">${P.avatar}<div><b>Sent by ${esc(boot.human)}</b><br>${P.verified}</div></div>
+      </div></div>
+      <div class="after">${e.receipt_url ? `<a class="btn sm" href="${esc(e.receipt_url)}" target="_blank" rel="noopener">Open the receipt ↗</a>` : ""}
+        <a class="btn ghost sm" href="/app/errands">See your errands</a></div>`;
+  }
+
+  const DRAW = {
+    me: (e) => `<div class="bub me">${esc(e.text)}</div>`,
+    say: (e) => `<div class="bub">${rich(e.text)}</div>`,
+    dim: (e) => `<div class="bub dim">${esc(e.text)}</div>`,
+    new: (e) =>
+      `<div class="tk-mark"><span class="tk-line"><b>New errand</b> ${esc(e.what)} · up to ${usd(e.limitCents)}</span></div>`,
+    items: (e) =>
+      `<div class="items">${e.results
         .map(
           (r) =>
-            `<article class="item-c"><div><b>${esc(r.title)}</b><small>${esc(shop)}${r.artist && r.artist !== shop ? ` · ${esc(r.artist)}` : ""}</small></div>
+            `<article class="item-c">${thumb(r)}<div><b>${esc(r.title)}</b><small>${esc(e.shop)}${r.artist && r.artist !== e.shop ? ` · ${esc(r.artist)}` : ""}</small></div>
             <span class="pr">$${esc(r.price)}</span>
-            <button type="button" class="btn sm" data-say="Get ${esc(r.title)} from ${esc(shop)}">Get this</button></article>`,
+            <button type="button" class="btn sm" data-say="Get ${esc(r.title)} from ${esc(e.shop)}">Get this</button></article>`,
         )
         .join("")}</div>`,
-      "card-in",
-    );
-  }
-
-  function payCard(d) {
-    add(
-      `<div class="paycard" data-order="${esc(d.order_id)}" data-shop="${esc(d.shop_slug)}">
-        ${lines(d)}
-        <div class="tot"><span>${esc(d.shop_name)}</span><b>$${esc(d.total)}</b></div>
-        <div class="slot"><button type="button" class="btn-pp" data-pay="${esc(d.approve_url)}">Pay with ${boot.receiptParts.pp}</button></div>
-        <p class="fine" style="margin-top:10px;text-align:center">${boot.paypal === "sandbox" ? "PayPal sandbox: log in with a sandbox buyer account." : "Simulated PayPal: no real money."}</p>
+    pay: payCard,
+    receipt,
+    ask: (e) =>
+      `<div class="notif cc" style="${C.vars}" ${e.answered ? `data-v="${esc(e.answered)}"` : ""}>
+        <div class="nh">${boot.receiptParts.logo}</div>
+        <div class="nwho">${boot.portrait}${esc(C.name)} asks</div>
+        <div class="nq">${esc(e.items.join(", "))}?</div>
+        <div class="ns">${esc(e.reason || "It isn’t quite what you asked for.")}</div>
+        <div class="acts"><button type="button" class="ap" data-approval="${esc(e.approval_id)}" ${e.answered ? "disabled" : ""}>${e.answered === "ok" ? "Approved ✓" : "Approve"}</button><button type="button" class="dn" data-approval="${esc(e.approval_id)}" ${e.answered ? "disabled" : ""}>${e.answered === "no" ? "Denied" : "Deny"}</button></div>
       </div>`,
-      "card-in",
-    );
+    no: (e) =>
+      `<div class="nocard"><b>That’s over your budget.</b>${esc(e.reason)} Change the budget above, and I’ll try again. It’s checked in code, so no one can talk me past it.</div>`,
+  };
+
+  function typing() {
+    return `<div class="typing"><i></i><i></i><i></i><span class="typing-t">${esc(chat.note)}</span></div>`;
   }
 
-  log.addEventListener("click", (e) => {
+  function drawLog() {
+    const hello = chat.events.length
+      ? ""
+      : `<div class="bub">Hey ${esc(boot.human)}! I’m ${esc(C.name)}, your courier. What can I get for you?</div>`;
+    const atEnd = log.scrollHeight - log.scrollTop - log.clientHeight < 120;
+    const grew = drawn !== chat.id;
+    log.innerHTML = hello + chat.events.map((e) => DRAW[e.t]?.(e) ?? "").join("") + (chat.working ? typing() : "");
+    if (atEnd || grew) requestAnimationFrame(() => (log.scrollTop = log.scrollHeight));
+    drawn = chat.id;
+  }
+
+  /* ---------------- the row of chats, and this chat's budget ---------------- */
+
+  function tabLabel(t) {
+    const e = t.errand;
+    if (t.working) return `<span class="tk-busy"><i></i><i></i><i></i></span>`;
+    if (!e) return "";
+    if (t.toPay) return `<span>to pay</span>`;
+    return `<span>${e.spentCents ? `${usd(e.spentCents)} of ` : "up to "}${usd(e.limitCents)}${e.open ? "" : " ✓"}</span>`;
+  }
+
+  function drawTabs() {
+    // A delete being confirmed stays put when the row refreshes.
+    if ($(".tk-sure", tabs)) return;
+    tabs.innerHTML = list
+      .map(
+        (t) =>
+          `<span class="tk ${t.id === chat.id ? "on" : ""}"><button type="button" class="tk-go" data-chat="${esc(t.id)}" ${t.id === chat.id ? 'aria-current="true"' : ""}><b>${esc(t.title || "New chat")}</b>${tabLabel(t)}</button><button type="button" class="tk-x" data-delete="${esc(t.id)}" aria-label="Delete the chat ${esc(t.title)}">×</button></span>`,
+      )
+      .join("");
+    tabs.hidden = !list.length;
+  }
+
+  function drawBudget() {
+    if ($(".tk-edit", bar)) return;
+    const e = chat.errand;
+    if (e) {
+      bar.innerHTML = e.open
+        ? `<b>${esc(e.what)}</b><span>${e.spentCents ? `${usd(e.spentCents)} of ` : "up to "}${usd(e.limitCents)}</span><button type="button" class="link fine" data-edit="${esc(e.id)}">Change budget</button><a class="link fine" href="/app/errands?e=${esc(e.id)}">Steps</a>`
+        : `<b>${esc(e.what)}</b><span>${usd(e.spentCents)} of ${usd(e.limitCents)} · done</span><a class="link fine" href="/app/errands?e=${esc(e.id)}">Steps</a>`;
+    } else if (chat.pendingBudgetCents) {
+      bar.innerHTML = `<b>Budget</b><span>${usd(chat.pendingBudgetCents)}</span><button type="button" class="link fine" data-edit="">Change budget</button>`;
+    } else bar.innerHTML = "";
+    bar.hidden = !bar.innerHTML;
+  }
+
+  function drawSugs() {
+    if (chat.working) {
+      sugs.hidden = true;
+      return;
+    }
+    sugs.innerHTML = chat.amounts
+      ? AMOUNTS.map((a) => `<button type="button" class="amt" data-say="${a}">${a}</button>`).join("")
+      : boot.ideas.map((i) => `<button type="button" data-say="${esc(i)}">${esc(i)}</button>`).join("") +
+        `<button type="button" class="several" data-say="${esc(boot.several.say)}">${esc(boot.several.label)}</button>`;
+    sugs.hidden = false;
+  }
+
+  function draw() {
+    drawTabs();
+    drawBudget();
+    drawSugs();
+    drawLog();
+  }
+
+  function take(out) {
+    if (out.list) list = out.list;
+    if (out.chat && out.chat.id === chat.id) {
+      const changed = out.chat.rev !== chat.rev || out.chat.working !== chat.working;
+      chat = out.chat;
+      if (changed) {
+        drawLog();
+      }
+      drawSugs();
+    }
+    drawTabs();
+    drawBudget();
+  }
+
+  async function open(id) {
+    const out = await api(`chats/${encodeURIComponent(id)}`);
+    chat = out.chat;
+    list = out.list;
+    history.replaceState(null, "", `/errand?c=${encodeURIComponent(C.id)}&chat=${encodeURIComponent(id)}`);
+    draw();
+    checkCards();
+    input.focus();
+  }
+
+  /* ---------------- keeping up ---------------- */
+
+  let quiet = 0;
+  async function tick() {
+    try {
+      take(await api(`chats/${encodeURIComponent(chat.id)}`));
+    } catch {}
+    const busy = chat.working || list.some((t) => t.working);
+    quiet = busy ? 0 : quiet + 1;
+    setTimeout(tick, busy ? 700 : Math.min(5000, 1500 + quiet * 500));
+  }
+
+  /* ---------------- paying ---------------- */
+
+  async function check(orderId, chatId) {
+    try {
+      const out = await api(`order/${encodeURIComponent(orderId)}?chat=${encodeURIComponent(chatId)}`);
+      if (out.status !== "open") paying.delete(orderId);
+      take(out);
+      if (out.chat?.id === chat.id) drawLog();
+    } catch {}
+  }
+  setInterval(() => {
+    for (const [orderId, chatId] of paying) check(orderId, chatId);
+  }, 2500);
+  addEventListener("message", (e) => {
+    if (!boot.origins.includes(e.origin)) return;
+    const chatId = paying.get(e.data?.orderId);
+    if (e.data?.type === "courier:payment" && chatId) check(e.data.orderId, chatId);
+  });
+  /** Coming back to a chat, cards still open may have been paid in the meantime. */
+  function checkCards() {
+    for (const e of chat.events) if (e.t === "pay" && e.status === "open") check(e.order_id, chat.id);
+  }
+
+  // The time left to call back counts down on its own, and the option goes away with it.
+  setInterval(() => {
+    for (const b of log.querySelectorAll("[data-until]")) {
+      const until = Number(b.dataset.until);
+      if (until > Date.now()) $("span", b).textContent = clock(until);
+      else drawLog();
+    }
+  }, 1000);
+
+  /* ---------------- what the person does ---------------- */
+
+  async function send(text) {
+    if (!text.trim()) return;
+    // Shown straight away: it runs in the background, and queues behind anything this chat is already doing.
+    chat.events = [...chat.events, { t: "me", text }];
+    chat.working = true;
+    for (const e of chat.events) if (e.t === "pay") e.callBackUntil = 0;
+    drawLog();
+    drawSugs();
+    requestAnimationFrame(() => (log.scrollTop = log.scrollHeight));
+    try {
+      take(await api("chat", { chat: chat.id, message: text }));
+    } catch (e) {
+      chat.working = false;
+      chat.events = [...chat.events, { t: "dim", text: `Hmm, that didn’t work: ${e.message}` }];
+      drawLog();
+      drawSugs();
+    }
+  }
+
+  log.addEventListener("click", async (e) => {
     const pay = e.target.closest("[data-pay]");
     if (pay) {
-      const card = pay.closest(".paycard");
       const target = pay.dataset.pay;
+      paying.set(pay.dataset.order, chat.id);
       const w = window.open(target, "courier-pay", "popup,width=520,height=780");
-      $(".slot", card).innerHTML =
-        `<div class="wait"><i></i>Waiting for PayPal…</div><p class="fine" style="text-align:center"><a class="link" href="${esc(target)}" target="courier-pay">Reopen the payment window</a></p>`;
-      remember();
-      if (!w)
+      if (!w) {
         location.href = target; // popups blocked: pay in this tab; the shop sends you back here afterwards
-      else watchOrder(card);
+        return;
+      }
+      drawLog();
+      return;
+    }
+    const back = e.target.closest("[data-callback]");
+    if (back) {
+      back.disabled = true;
+      try {
+        take(await api("callback", { chat: chat.id, order: back.dataset.callback }));
+      } catch (err) {
+        chat.events = [...chat.events, { t: "dim", text: err.message }];
+      }
+      drawLog();
       return;
     }
     const answer = e.target.closest("[data-approval]");
     if (answer) {
-      if (busy) return;
-      const ok = answer.classList.contains("ap");
-      answer.closest(".notif").dataset.v = ok ? "ok" : "no";
-      answer.textContent = ok ? "Approved ✓" : "Denied";
-      answer.parentElement.querySelectorAll("button").forEach((b) => (b.disabled = true));
-      remember();
-      turn(() => "approve", { approvalId: answer.dataset.approval, decision: ok ? "approved" : "denied" });
+      take(
+        await api("approve", {
+          chat: chat.id,
+          approvalId: answer.dataset.approval,
+          decision: answer.classList.contains("ap") ? "approved" : "denied",
+        }),
+      );
+      drawLog();
       return;
     }
     const pick = e.target.closest("[data-say]");
     if (pick) send(pick.dataset.say);
   });
 
-  function askCard(d, step) {
-    const items = (step.args.item_ids || []).join(", ");
-    add(
-      `<div class="notif cc" style="${C.vars}">
-        <div class="nh">${boot.receiptParts.logo}</div>
-        <div class="nwho">${boot.portrait}${esc(C.name)} asks</div>
-        <div class="nq">${esc(items)}?</div>
-        <div class="ns">${esc(d.reason || "It isn’t quite what you asked for.")}</div>
-        <div class="acts"><button type="button" class="ap" data-approval="${esc(d.approval_id)}">Approve</button><button type="button" class="dn" data-approval="${esc(d.approval_id)}">Deny</button></div>
-      </div>`,
-      "card-in",
-    );
-  }
-
-  function watchOrder(card) {
-    const orderId = card.dataset.order;
-    if (polls.has(orderId)) return;
-    const started = Date.now();
-    const check = async () => {
+  tabs.addEventListener("click", async (e) => {
+    const go = e.target.closest("[data-chat]");
+    if (go && go.dataset.chat !== chat.id) return open(go.dataset.chat);
+    const del = e.target.closest("[data-delete]");
+    if (del) {
+      del.outerHTML = `<span class="tk-sure"><button type="button" class="link fine" data-really="${esc(del.dataset.delete)}">Delete chat?</button><button type="button" class="link fine" data-keep>Keep</button></span>`;
+      return;
+    }
+    if (e.target.closest("[data-keep]")) {
+      e.target.closest(".tk-sure").remove();
+      return drawTabs();
+    }
+    const really = e.target.closest("[data-really]");
+    if (really) {
+      const id = really.dataset.really;
       try {
-        const s = await api(`order/${encodeURIComponent(orderId)}?shop=${encodeURIComponent(card.dataset.shop)}`);
-        setState(s.state);
-        if (s.status === "paid") return settled(s);
-        if (s.status === "cancelled") return settled(null);
-      } catch {}
-      if (Date.now() - started > 15 * 60 * 1000) stop();
-    };
-    const timer = setInterval(check, 2500);
-    polls.set(orderId, { check });
-    function stop() {
-      clearInterval(timer);
-      polls.delete(orderId);
-    }
-    function settled(order) {
-      stop();
-      if (!order) {
-        $(".slot", card).innerHTML =
-          `<p class="fine" style="text-align:center;font-weight:700">Cancelled. Nothing was charged.</p>`;
-        remember();
-        say("No problem, I’ve put it back. Your budget is untouched.");
-        showIdeas();
-        return;
+        const out = await api("delete", { chat: id });
+        list = out.list;
+        $(".tk-sure", tabs)?.remove();
+        if (id === chat.id) await open(out.next);
+        else drawTabs();
+      } catch (err) {
+        $(".tk-sure", tabs)?.remove();
+        chat.events = [...chat.events, { t: "dim", text: err.message }];
+        draw();
       }
-      $(".slot", card).innerHTML =
-        `<p class="fine" style="text-align:center;font-weight:700;color:var(--green)">Paid ✓</p>`;
-      remember();
-      receipt(order);
-      showIdeas();
     }
-    return check;
-  }
-
-  window.addEventListener("message", (e) => {
-    if (!boot.origins.includes(e.origin)) return;
-    if (e.data?.type === "courier:payment") polls.get(e.data.orderId)?.check();
   });
 
-  function receipt(d) {
-    const P = boot.receiptParts;
-    add(
-      `<div class="lift"><div class="rcpt zz" role="group" aria-label="${esc(d.shop || "Shop")} receipt">
-        <div class="rh"><b>${esc(d.shop)}</b><span class="mono">#${esc(String(d.order_id).slice(-6).toUpperCase())}</span></div>
-        <div class="ritem">${esc((d.items || []).map((i) => i.title).join(", "))}</div>
-        <div class="ramt"><b>$${esc(d.total)}</b><span>paid</span></div>
-        <div class="ragent">${boot.portrait}<div><b>${esc(C.name)}</b><span class="mono">${esc(C.idNo)}</span></div></div>
-        <div class="rwho">${P.avatar}<div><b>Sent by ${esc(boot.human)}</b><br>${P.verified}</div></div>
-      </div></div>
-      <div class="after">${d.receipt_url ? `<a class="btn sm" href="${esc(d.receipt_url)}" target="_blank" rel="noopener">Open the receipt ↗</a>` : ""}
-        <a class="btn ghost sm" href="/app/errands">See your errands</a></div>`,
-      "card-in",
-    );
-    say("All done. What’s next? Each new ask is its own errand, with its own budget.");
-  }
-
-  /* ---------------- turns ---------------- */
-
-  async function turn(path, body) {
-    busy = true;
-    input.disabled = true;
-    hideSugs();
-    const dots = typing();
-    try {
-      const out = await stream(path(), body, (step) => {
-        const note = NOTES[step.tool]?.(step);
-        if (note) dots.note(note);
+  bar.addEventListener("click", (e) => {
+    const edit = e.target.closest("[data-edit]");
+    if (edit) {
+      const errand = edit.dataset.edit;
+      const current = errand ? chat.errand.limitCents : chat.pendingBudgetCents;
+      bar.innerHTML = `<form class="tk-edit"><label>$<input type="number" min="1" max="500" step="1" required value="${Math.round(current / 100)}" aria-label="Budget in dollars"></label>
+        <button class="btn sm" type="submit">Set</button>
+        <button class="link fine" type="button" data-close>Cancel</button>
+        <small class="tk-err" hidden></small></form>`;
+      const form = $("form", bar);
+      const field = $("input", form);
+      field.focus();
+      field.select();
+      form.addEventListener("submit", async (ev) => {
+        ev.preventDefault();
+        try {
+          const out = await api("budget", { chat: chat.id, dollars: field.value, ...(errand ? { errand } : {}) });
+          form.remove();
+          take(out);
+        } catch (err) {
+          const box = $(".tk-err", form);
+          box.innerHTML = rich(err.message);
+          box.hidden = false;
+        }
       });
-      dots.stop();
-      handle(out);
-    } catch (e) {
-      dots.stop();
-      dim(`Hmm, that didn’t work: ${esc(e.message)}`);
-      showIdeas();
-    } finally {
-      busy = false;
-      input.disabled = false;
-      input.focus();
     }
-  }
-
-  function send(text) {
-    if (busy || !text.trim()) return;
-    me(text);
-    turn(() => "chat", { message: text });
-  }
+    if (e.target.closest("[data-close]")) {
+      $("form", bar).remove();
+      drawBudget();
+    }
+  });
 
   $("#compose").addEventListener("submit", (e) => {
     e.preventDefault();
@@ -448,37 +443,15 @@
     if (b) send(b.dataset.say);
   });
   $("#new-chat").addEventListener("click", async () => {
-    if (busy) return;
-    await api("reset", {}).catch(() => {});
-    try {
-      sessionStorage.removeItem(KEY);
-    } catch {}
-    location.reload();
+    const out = await api("chats", {});
+    await open(out.chat.id);
   });
 
-  /* ---------------- hello (or welcome back) ---------------- */
+  /* ---------------- hello ---------------- */
 
-  const saved = recall();
-  const returning = new URLSearchParams(location.search).get("order");
-  if (saved?.log) {
-    log.innerHTML = saved.log;
-    for (const id of saved.known || []) known.add(id);
-    // A card still waiting on PayPal keeps waiting, wherever the person went in between.
-    log.querySelectorAll(".paycard[data-order]").forEach((card) => {
-      if ($(".wait", card)) watchOrder(card);
-    });
-    scroll();
-  } else {
-    say(`Hey ${boot.human}! I’m ${C.name}, your courier. What can I get for you?`);
-    for (const e of state.errands) known.add(e.id);
-  }
-  setState(state);
-  if (state.awaiting) showAmounts();
-  else showIdeas();
-  if (returning) {
-    history.replaceState(null, "", `${location.pathname}?c=${encodeURIComponent(C.id)}`);
-    const card = log.querySelector(`.paycard[data-order="${CSS.escape(returning)}"]`);
-    if (card) watchOrder(card)?.();
-  }
+  history.replaceState(null, "", `/errand?c=${encodeURIComponent(C.id)}&chat=${encodeURIComponent(chat.id)}`);
+  draw();
+  checkCards();
+  tick();
   input.focus();
 })();

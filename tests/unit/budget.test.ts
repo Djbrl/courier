@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { parseBudget } from "../../packages/shared/src/budget.ts";
+import { budgetFromCourier, parseBudget } from "../../packages/shared/src/budget.ts";
 
 test("a message that's only a budget", () => {
   for (const [said, dollars] of [
@@ -10,6 +10,8 @@ test("a message that's only a budget", () => {
     ["make it 35", 35],
     ["about $15.", 15],
     ["$12.50", 13],
+    ["500$", 500],
+    ["50 $", 50],
   ] as const)
     assert.deepEqual(parseBudget(said), { dollars, only: true }, said);
 });
@@ -24,6 +26,7 @@ test("a budget inside a request", () => {
     ["Get me a burger, I have about $15", 15],
     ["jazz records under $40", 40],
     ["socks, budget 25", 25],
+    ["socks under 20$", 20],
     ["flowers, $30 max", 30],
     ["a kettle for less than 50 dollars", 50],
   ] as const)
@@ -33,4 +36,28 @@ test("a budget inside a request", () => {
 test("a price or a count isn't a budget", () => {
   for (const said of ["Buy the $149 turntable", "about 3 records", "I have 2 cats", "a burger"])
     assert.equal(parseBudget(said), null, said);
+});
+
+test("a budget the courier proposes counts only if the person wrote that amount", () => {
+  for (const [proposed, said] of [
+    [500, "five hundred"],
+    [45, "forty-five, I guess"],
+    [250, "two hundred and fifty should do"],
+    [100, "a hundred is fine"],
+    [40, "let's go with 40 then"],
+    [1200, "1,200"],
+    [13, "12.50 tops"],
+  ] as const)
+    assert.equal(budgetFromCourier(proposed, said), proposed, said);
+  for (const [proposed, said] of [
+    [500, "a good novel"],
+    [500, "fifty"],
+    [50, "five hundred"],
+    [20, "whatever you think is best"],
+    ["40", "40"],
+    [-40, "40"],
+    [Number.NaN, "40"],
+    [undefined, "40"],
+  ] as const)
+    assert.equal(budgetFromCourier(proposed, said), null, `${proposed} from ${said}`);
 });

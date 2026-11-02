@@ -22,12 +22,13 @@ ul{list-style:none;margin:0;padding:0}li{display:flex;align-items:center;gap:12p
 .bud{display:flex;align-items:center;gap:8px;margin:0 0 10px}.bud span{font-weight:700}.bud input{width:96px;height:36px;padding:0 10px;border:1px solid var(--line);border-radius:8px;background:transparent;color:inherit;font:inherit;font-weight:700}
 .bud button{height:36px;padding:0 14px;border:0;border-radius:999px;background:var(--ink);color:var(--bg);font:inherit;font-weight:600;cursor:pointer}.bud button:disabled{opacity:.5}
 .alt{font-size:12px;color:var(--mute)}
+.cb{border:0;background:none;padding:8px 6px;color:var(--mute);font:inherit;font-weight:600;text-decoration:underline;cursor:pointer}
 .foot{font-size:12px;margin:6px 0 12px}.btn{display:inline-block;padding:8px 14px;border-radius:999px;background:var(--ink);color:var(--bg);font-weight:600;text-decoration:none}
 </style></head><body>
 <div class="card" id="card" hidden><p class="st" id="st"></p><ul id="items"></ul>
-<div class="tot"><span>Total</span><span id="total"></span></div><p class="foot" id="foot"></p><div class="bud" id="bud" hidden><span>$</span><input id="amt" type="number" min="1" max="500" step="1" aria-label="Budget in dollars"><button type="button" id="set">Set budget</button></div><a class="btn" id="go" target="_blank" rel="noopener"></a></div>
+<div class="tot"><span>Total</span><span id="total"></span></div><p class="foot" id="foot"></p><div class="bud" id="bud" hidden><span>$</span><input id="amt" type="number" min="1" max="500" step="1" aria-label="Budget in dollars"><button type="button" id="set">Set budget</button></div><a class="btn" id="go" target="_blank" rel="noopener"></a> <button type="button" class="cb" id="back" hidden>Call back</button></div>
 <script>
-var card=document.getElementById("card"),next=1,wait={},polling=0,agent="Your courier",request;
+var backTimer,card=document.getElementById("card"),next=1,wait={},polling=0,agent="Your courier",request;
 function send(m){parent.postMessage(Object.assign({jsonrpc:"2.0"},m),"*")}
 function resize(){send({method:"ui/notifications/size-changed",params:{height:document.documentElement.scrollHeight}})}
 function el(tag,cls,text){var e=document.createElement(tag);if(cls)e.className=cls;if(text)e.textContent=text;return e}
@@ -91,7 +92,29 @@ function show(r,meta){
     else if(needs){asLink(go,url);byId("foot").textContent=agent+" needs a budget from you first."}
     else{go.className="btn";go.textContent=paid?"See your receipt":"Pay with PayPal";go.onclick=function(e){e.preventDefault();rpc("ui/open-link",{url:url})}}}
   else go.hidden=true;
+  callBack(r,go);
   card.hidden=false;resize();
+}
+/* A few minutes to undo the purchase, for the person alone. The courier's shop and order come with the result. */
+function callBack(r,go){
+  var b=byId("back"),until=Date.parse(r.call_back_until||"");
+  clearInterval(backTimer);b.hidden=true;
+  if(r.status==="cancelled"){byId("st").textContent="Called back";byId("foot").textContent="Nothing was charged, and the budget is free again.";go.hidden=true;return}
+  if(!until||!r.shop||r.status!=="awaiting_approval")return;
+  function tick(){
+    var left=Math.ceil((until-Date.now())/1000);
+    if(left<=0){clearInterval(backTimer);b.hidden=true;resize();return}
+    b.hidden=false;b.textContent="Call back ("+Math.floor(left/60)+":"+String(left%60).padStart(2,"0")+")";
+  }
+  tick();backTimer=setInterval(tick,1000);
+  b.onclick=function(){
+    clearInterval(backTimer);b.disabled=true;b.textContent="Calling back\\u2026";
+    rpc("tools/call",{name:"call_back",arguments:{shop:r.shop,order_id:r.order_id}},function(res){
+      b.disabled=false;var out=res&&res.structuredContent;
+      if(out&&out.items)show(out);
+      else{b.hidden=true;byId("foot").textContent="Too late to call it back. You can still choose not to pay.";resize()}
+    });
+  };
 }
 addEventListener("message",function(e){
   if(e.source!==parent||!e.data)return;var m=e.data;

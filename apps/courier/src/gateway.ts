@@ -258,6 +258,11 @@ function createGateway(connection: Connection, human: Human): McpServer {
           `${wanted} isn't one of the user's couriers. They have: ${couriers.map((c) => c.name).join(", ")}. New couriers are added in Courier.`,
           "unknown_courier",
         );
+      if (courier.revokedAt)
+        return failed(
+          `The user has revoked ${courier.name}. They can restore it on Courier's Couriers page.`,
+          "revoked",
+        );
       const dollars = budget === undefined ? undefined : Math.ceil(budget);
       if (dollars !== undefined && withinCap(human, dollars * 100) && savedPayPal(human.id)) {
         const visa = issueErrand({ connection, human, courierName: courier.name, what, budget: dollars, auto: true });
@@ -343,10 +348,13 @@ function createGateway(connection: Connection, human: Human): McpServer {
           url: `${config.courier.url}/consent/${request.id}?pay=1`,
         });
       }
+      const sending = request.ticket.courierName ?? listCouriers(human.id)[0]!.name;
+      if (listCouriers(human.id).find((c) => c.name === sending)?.revokedAt)
+        return failed(`The user has revoked ${sending}. They can restore it on Courier's Couriers page.`, "revoked");
       const visa = issueErrand({
         connection,
         human,
-        courierName: request.ticket.courierName ?? listCouriers(human.id)[0]!.name,
+        courierName: sending,
         what: request.ticket.intent,
         budget,
         auto: false,
@@ -414,9 +422,30 @@ function createGateway(connection: Connection, human: Human): McpServer {
   );
 
   server.registerTool(
+    "call_back",
+    {
+      title: "Call a purchase back",
+      description:
+        "Undo a purchase the user hasn't paid for, when they ask to, in the few minutes after buy. Nothing is charged and the budget is freed.",
+      inputSchema: { shop: z.string().max(60), order_id: z.string().max(60) },
+      annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
+      _meta: { ui: { resourceUri: RECEIPT_CARD_URI } },
+    },
+    async ({ shop: name, order_id }) => {
+      const shop = pickShop(name);
+      if ("content" in shop) return shop;
+      const order = (await browse(shop, "order_status", { order_id })) as CallToolResult;
+      const until = (order.structuredContent as { call_back_until?: string | null } | undefined)?.call_back_until;
+      if (order.isError || !until || Date.now() > Date.parse(until))
+        return failed("It's too late to call that back. The user can still choose not to pay.", "too_late");
+      return browse(shop, "cancel_order", { order_id });
+    },
+  );
+
+  server.registerTool(
     "end_errand",
     {
-      title: "Call a courier back",
+      title: "End an errand",
       description: "End one open errand when the user asks to. What's left on its budget can't be spent after this.",
       inputSchema: { errand_id: z.string().max(60) },
       annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
@@ -425,7 +454,7 @@ function createGateway(connection: Connection, human: Human): McpServer {
       const visa = db.get<Visa>("visas", errand_id);
       if (visa?.humanId !== human.id || !anyShop(visa))
         return failed(`There's no errand ${errand_id}.`, "unknown_errand");
-      await revokeVisa(visa.id, "Called back from the chat");
+      await revokeVisa(visa.id, "Ended from the chat");
       return text(
         `${visa.agentName} is back. It spent ${money(visa.spentCents)} of ${money(visa.spendLimitCents)} on this errand.`,
         { ended: true },

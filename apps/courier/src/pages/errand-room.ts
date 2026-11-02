@@ -21,8 +21,10 @@ import { courierLook, firstName } from "./shared.ts";
 
 /** Ideas to start from. One for each kind of shop, so the first errand shows a courier isn't tied to one. */
 export const ERRAND_IDEAS = ["A burger", "Flowers for my mum", "A good novel", "Running shoes", "Jazz on vinyl"];
+/** One errand can cover several things: the courier sends a helper for each. */
+const SEVERAL = { label: "Several things at once", say: "A burger, flowers and a good novel, budget $60" };
 
-export function errandRoom(d: Desk, courier: Courier, state: unknown): string {
+export function errandRoom(d: Desk, courier: Courier, chat: unknown, list: unknown): string {
   const look = courierLook(d.human, courier);
   const boot = {
     courier: { ...look, id: courier.id, vars: courierVars(look.color) },
@@ -30,7 +32,9 @@ export function errandRoom(d: Desk, courier: Courier, state: unknown): string {
     origins: [new URL(config.courier.url).origin, new URL(config.store.url).origin],
     paypal: paypalFor(d.human).mode,
     ideas: ERRAND_IDEAS,
-    state,
+    several: SEVERAL,
+    chat,
+    list,
     portrait: portrait(look).value,
     receiptParts: {
       logo: LOGO.value,
@@ -45,9 +49,10 @@ export function errandRoom(d: Desk, courier: Courier, state: unknown): string {
         <div class="rm-shops" role="group" aria-label="Shops ${look.name} can reach">
           ${SHOPS.map((s) => html`<button type="button" title="${s.name}: ${s.sells}" aria-label="What does ${s.name} have?" data-say="What does ${s.name} have?">${shopLogo(s)}</button>`)}
         </div>
-        <button type="button" class="link fine rm-new" id="new-chat">New chat</button>
+        <button type="button" class="link fine rm-new" id="new-chat">New errand</button>
       </header>
-      <div class="rm-tickets" id="tickets" hidden></div>
+      <div class="rm-tickets" id="tickets" aria-label="Your errand chats" hidden></div>
+      <div class="rm-budget" id="budget" hidden></div>
       <div class="log rm-log" id="log" aria-live="polite"></div>
       <div class="rm-foot">
         <div class="sugs rm-sugs" id="sugs"></div>

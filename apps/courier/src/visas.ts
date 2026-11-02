@@ -144,8 +144,24 @@ export async function revokeVisa(visaId: string, reason: string): Promise<Visa |
   )) {
     db.put("refresh_tokens", rt.id, { ...rt, revoked: true });
   }
-  addStamp(visa, "revoked", "Called back", `${reason}.${bondNote}`);
+  addStamp(visa, "revoked", "Errand ended", `${reason}.${bondNote}`);
   return visa;
+}
+
+/** Revokes a courier: its open errands end now, and it can't start another until the person restores it. */
+export async function revokeCourier(courier: Courier): Promise<void> {
+  const name = courier.name;
+  const clients = new Set([demoClientId(courier.id), courier.clientId]);
+  for (const visa of db.list<Visa>(
+    "visas",
+    (v) =>
+      v.humanId === courier.humanId &&
+      (v.agentName === name || clients.has(v.clientId)) &&
+      effectiveStatus(v) === "active",
+    Infinity,
+  ))
+    await revokeVisa(visa.id, `${name} was revoked`);
+  saveCourier({ ...courier, revokedAt: new Date().toISOString() });
 }
 
 /** Removes a Claude from Courier: its tokens stop working, its errands end and its courier is free again. */
@@ -202,6 +218,7 @@ export async function deleteAccount(human: Human): Promise<boolean> {
     "approvals",
     "errand_sessions",
     "room_sessions",
+    "room_chats",
   ])
     db.deleteWhere(collection, theirs);
   for (const collection of ["holds", "reports", "visa_requests"]) db.deleteWhere(collection, ofTheirVisa);

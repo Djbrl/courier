@@ -53,6 +53,8 @@ export interface Courier {
   clientId?: string;
   clientName?: string;
   boundAt?: string;
+  /** Set while the person has revoked it: its errands are over and it can't start new ones. */
+  revokedAt?: string;
   createdAt: string;
 }
 

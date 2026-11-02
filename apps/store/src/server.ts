@@ -17,7 +17,7 @@ import {
 } from "./auth.ts";
 import { CATALOG, shelfOf } from "./catalog.ts";
 import { db, type Order } from "./db.ts";
-import { createMcpServer, settleOrder } from "./mcp.ts";
+import { cancelOrder, createMcpServer, settleOrder } from "./mcp.ts";
 import { merchantDashboard, paymentResult, receiptPage, shopGrid, storefront } from "./views.ts";
 
 const app = express();
@@ -238,12 +238,7 @@ app.get("/paypal/return", async (req, res) => {
 app.get("/paypal/cancel", async (req, res) => {
   const orderId = String(req.query.token ?? "");
   const order = db.get<Order>("orders", orderId);
-  if (order && order.status === "awaiting_approval") {
-    db.put("orders", order.id, { ...order, status: "cancelled" });
-    await internalFetch(`${config.courier.url}/internal/spend/release`, { body: { holdId: order.holdId } }).catch(
-      () => {},
-    );
-  }
+  if (order && order.status === "awaiting_approval") await cancelOrder(order);
   res.send(
     paymentResult(order, false, "You cancelled the payment. Nothing was charged, and your errand's budget is back."),
   );

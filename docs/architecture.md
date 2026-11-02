@@ -109,10 +109,16 @@ briefly), so a call-back takes effect in seconds rather than at token expiry.
 
 **Pseudonyms are per shop.** The token's `sub` is an HMAC of the person and the shop, so two shops can't compare notes.
 
-**The errand room.** On Courier's own site, a person chats with a courier in one running conversation (`room.ts`). It takes
-as many errands as they ask for, each with its own budget, at any shop, and the same limits apply as through the connector.
-Code reads the budget from what the person types (`parseBudget`), or from their click on the budget in the window. The model
-has no tool that sets one.
+**The errand room.** On Courier's own site, a person chats with a courier (`room.ts`). Each chat is kept on the server and holds
+its own errand and budget, at any shop, with the same limits as through the connector. Turns run in the background, so several
+chats can work at once, and messages sent to a busy chat wait their turn. A paid errand closes. Claude reads what the person
+wants. Code reads the budget from what they type (`parseBudget`) or from their click. For other wording Claude can propose an
+amount, which code takes only if the person wrote that amount in their latest message (`budgetFromCourier`).
+Budgets can't go over the per-errand cap once it's saved in Settings.
+
+**Calling back.** For three minutes after a purchase, or until the person pays or sends another message, they can undo it from the
+payment card, in the room or in Claude. The order is cancelled at the shop and its budget freed. Nothing has moved yet at that
+point, because a person approves each PayPal payment. Purchases paid with saved PayPal charge straight away and have no such window.
 
 **One yes covers the errand.** An approval is keyed to its items, so a hold and the later purchase of the same record
 don't ask twice.

@@ -1,4 +1,5 @@
 import {
+  CALL_BACK_MS,
   config,
   findShop,
   internalFetch,
@@ -53,6 +54,7 @@ function itemView(item: Item) {
     currency: "USD",
     in_stock: item.stock > 0,
     description: item.blurb,
+    hue: item.hue,
   };
 }
 
@@ -72,12 +74,16 @@ function receiptView(order: Order, shop: Shop, remaining: string | null = null) 
         id: line.id,
         title: line.title,
         artist: item?.artist ?? null,
+        category: item?.category ?? null,
         hue: item?.hue ?? 210,
         price: (line.priceCents / 100).toFixed(2),
       };
     }),
     receipt_url: order.receiptKey ? receiptUrl(order) : null,
     remaining_budget: remaining,
+    // Until then the person can call it back, in the window or the chat card.
+    call_back_until:
+      order.status === "awaiting_approval" ? new Date(Date.parse(order.createdAt) + CALL_BACK_MS).toISOString() : null,
   };
 }
 
@@ -860,7 +866,42 @@ export function createMcpServer(shop: Shop): McpServer {
     },
   );
 
+  server.registerTool(
+    "cancel_order",
+    {
+      title: "Cancel an unpaid order",
+      description:
+        "Cancel an order the user hasn't paid yet, when they ask to. Nothing is charged and the budget is freed.",
+      inputSchema: { order_id: z.string() },
+      annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
+      _meta: { ui: { resourceUri: RECEIPT_CARD_URI } },
+    },
+    async ({ order_id }, extra) => {
+      const claims = auth(extra);
+      const order = db.get<Order>("orders", order_id);
+      if (!order || order.sub !== claims.sub) return text(`No order ${order_id} for this courier.`, undefined, true);
+      // They may have just approved it on PayPal, so find out before calling it off.
+      const settled = order.status === "awaiting_approval" ? await settleOrder(order.id) : order;
+      const after = settled.status === "awaiting_approval" ? await cancelOrder(settled) : settled;
+      return text(
+        after.status === "cancelled"
+          ? "Called back. Nothing was charged, and the budget is free again."
+          : `Too late to call it back: the order is ${after.status}.`,
+        receiptView(after, shop),
+      );
+    },
+  );
+
   return server;
+}
+
+/** Calls off an order nobody has paid, and gives its budget back. */
+export async function cancelOrder(order: Order): Promise<Order> {
+  const cancelled = db.put<Order>("orders", order.id, { ...order, status: "cancelled" });
+  await internalFetch(`${config.courier.url}/internal/spend/release`, { body: { holdId: order.holdId } }).catch(
+    () => {},
+  );
+  return cancelled;
 }
 
 /**
