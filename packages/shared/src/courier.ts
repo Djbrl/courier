@@ -15,6 +15,9 @@ function versioned(file: string): string {
 }
 const CSS_URL = versioned("courier.css");
 const APP_JS_URL = versioned("app.js");
+/** A page's own script or stylesheet, at an address that changes with the file. Other addresses stay as they are. */
+const atVersion = (url: string) =>
+  url.startsWith("/assets/") && !url.includes("?") ? versioned(url.slice("/assets/".length)) : url;
 
 /* ---------------- colours ---------------- */
 
@@ -141,7 +144,7 @@ export function courierLayout(opts: CourierLayoutOptions): string {
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Archivo:ital,wdth,wght@0,62..125,100..900;1,62..125,100..900&family=Instrument+Sans:ital,wdth,wght@0,75..100,400..700;1,75..100,400..700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="${CSS_URL}">
-${(opts.styles ?? []).map((s) => `<link rel="stylesheet" href="${escapeHtml(s)}">`).join("\n")}
+${(opts.styles ?? []).map((s) => `<link rel="stylesheet" href="${escapeHtml(atVersion(s))}">`).join("\n")}
 <link rel="icon" href="/assets/courier-icon.svg" type="image/svg+xml">
 ${opts.head ? opts.head.value : ""}
 </head>
@@ -150,7 +153,7 @@ ${SPRITE}
 ${opts.nav ? opts.nav.value : ""}
 ${opts.body.value}
 <script src="${APP_JS_URL}" defer></script>
-${(opts.scripts ?? []).map((s) => `<script src="${escapeHtml(s)}" defer></script>`).join("\n")}
+${(opts.scripts ?? []).map((s) => `<script src="${escapeHtml(atVersion(s))}" defer></script>`).join("\n")}
 </body>
 </html>`;
 }

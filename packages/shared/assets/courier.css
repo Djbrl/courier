@@ -6658,6 +6658,23 @@ html:has(body.app-page) {
   padding: 0;
   text-align: center;
 }
+.rm-end {
+  padding: 14px 16px;
+  border: 1.5px solid var(--ink, #141414);
+  border-radius: 12px;
+}
+.rm-end[hidden],
+.rm-foot .compose[hidden],
+.rm.ended .rm-new {
+  display: none;
+}
+.rm-end p {
+  margin: 4px 0 12px;
+}
+.rm.ended [data-say] {
+  pointer-events: none;
+  opacity: 0.45;
+}
 .rm .paycard,
 .rm .rcpt {
   max-width: 420px;

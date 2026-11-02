@@ -307,6 +307,12 @@ await step("The errand room: chats side by side, at any shop, and only the perso
 
   const room = await (await person.req(`${flow.courier}/errand?c=${courierId}`)).text();
   assert.doesNotMatch(room, /Set the budget/);
+  // Every page's own files get a version once, including one that already has it.
+  const home = await new Browser().req(`${flow.courier}/`);
+  assert.equal(home.status, 200);
+  assert.match(await home.text(), /href="\/assets\/landing\.css\?v=[0-9a-f]+"/);
+  // A deploy never meets a browser's cached copy of the page's script.
+  assert.match(room, /src="\/assets\/errand\.js\?v=[0-9a-f]{8}"/);
   for (const shop of ["Amazoo", "Floor Dash", "Mike"]) assert.match(room, new RegExp(`What does ${shop} have`));
 
   const url = (path: string) => `${flow.courier}/errand/api/${path}${path.includes("?") ? "&" : "?"}c=${courierId}`;
@@ -433,6 +439,24 @@ await step("The errand room: chats side by side, at any shop, and only the perso
   assert.match(await (await person.req(`${flow.courier}/app/settings`)).text(), /Not connected yet/);
   // A stranger can't see this courier's chat.
   assert.equal((await new Browser().req(url(`chats/${burgers}`))).status, 401);
+
+  // The room is a demo with free messages. They're counted per person, so a new or deleted chat doesn't give any back.
+  const welcomed = await (await person.req(`${flow.courier}/errand?c=${courierId}`)).text();
+  assert.match(welcomed, /welcome to the Courier demo/);
+  assert.match(welcomed, /connecting Courier’s MCP server/);
+  const spending = await newChat();
+  let left = (await view(spending)).left as number;
+  assert.ok(left > 0 && left < 50, "earlier messages counted");
+  const sent = await api("chat", { chat: spending, message: "What does Mike have?" });
+  assert.equal(sent.left, left - 1);
+  while (left-- > 1) await api("chat", { chat: spending, message: "What does Mike have?" });
+  const done = await settled(spending);
+  assert.equal(done.left, 0);
+  const refused = await api("chat", { chat: spending, message: "One more?" });
+  assert.equal(refused.status, 429);
+  assert.notEqual((await view(spending)).chat.events.at(-1).text, "One more?");
+  assert.equal((await api("delete", { chat: spending })).status, 200);
+  assert.equal((await view(await newChat())).left, 0);
 });
 
 await step("Under-18 PayPal account is refused", async () => {

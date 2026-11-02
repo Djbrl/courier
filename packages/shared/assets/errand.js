@@ -20,6 +20,7 @@
 
   let chat = boot.chat;
   let list = boot.list;
+  let left = boot.left;
   let drawn = -1;
   /** Orders with their PayPal window open, and the chat each belongs to. */
   const paying = new Map();
@@ -174,9 +175,7 @@
   }
 
   function drawLog() {
-    const hello = chat.events.length
-      ? ""
-      : `<div class="bub">Hey ${esc(boot.human)}! I’m ${esc(C.name)}, your courier. What can I get for you?</div>`;
+    const hello = `<div class="bub">${rich(boot.welcome)}</div>`;
     const atEnd = log.scrollHeight - log.scrollTop - log.clientHeight < 120;
     const grew = drawn !== chat.id;
     log.innerHTML = hello + chat.events.map((e) => DRAW[e.t]?.(e) ?? "").join("") + (chat.working ? typing() : "");
@@ -219,8 +218,17 @@
     bar.hidden = !bar.innerHTML;
   }
 
+  /** The free messages left. With none, the demo is over: what's here can still be read and paid for. */
+  function drawFree() {
+    const over = left <= 0;
+    $("#left").textContent = over ? "" : `${left} of ${boot.free} free messages left.`;
+    $("#demo-end").hidden = !over;
+    $("#compose").hidden = over;
+    $(".rm").classList.toggle("ended", over);
+  }
+
   function drawSugs() {
-    if (chat.working) {
+    if (chat.working || left <= 0) {
       sugs.hidden = true;
       return;
     }
@@ -235,11 +243,13 @@
     drawTabs();
     drawBudget();
     drawSugs();
+    drawFree();
     drawLog();
   }
 
   function take(out) {
     if (out.list) list = out.list;
+    if (out.left !== undefined) left = out.left;
     if (out.chat && out.chat.id === chat.id) {
       const changed = out.chat.rev !== chat.rev || out.chat.working !== chat.working;
       chat = out.chat;
@@ -250,12 +260,14 @@
     }
     drawTabs();
     drawBudget();
+    drawFree();
   }
 
   async function open(id) {
     const out = await api(`chats/${encodeURIComponent(id)}`);
     chat = out.chat;
     list = out.list;
+    left = out.left;
     history.replaceState(null, "", `/errand?c=${encodeURIComponent(C.id)}&chat=${encodeURIComponent(id)}`);
     draw();
     checkCards();
@@ -309,7 +321,7 @@
   /* ---------------- what the person does ---------------- */
 
   async function send(text) {
-    if (!text.trim()) return;
+    if (!text.trim() || left <= 0) return;
     // Shown straight away: it runs in the background, and queues behind anything this chat is already doing.
     chat.events = [...chat.events, { t: "me", text }];
     chat.working = true;

@@ -304,7 +304,9 @@ export async function runClaudeAgent(
       output_config: { effort: "low" },
       system:
         `You are ${run.courierName}, ${run.humanName}'s courier. You shop for them at any of these shops: ${shops}.\n` +
-        "When they ask for something new, always call start_errand first with what they want, and never ask about a budget before " +
+        "This is the Courier demo, and they have a limited number of free messages to use on whatever they like. If they ask about " +
+        "something else, just answer it, briefly, without steering them back to shopping.\n" +
+        "When they ask to buy something new, always call start_errand first with what they want, and never ask about a budget before " +
         "you have. If it returns needs_budget, ask their budget in one short line and stop: only they can set it. Never tell them to " +
         "rephrase a budget. If a tool says a budget isn't allowed, tell them what it says, keeping any link. Once you have an errand_id, pick the right shop, search it, choose " +
         "the best match inside the budget and call buy, without asking them to confirm. Each new request is a new errand; 'add socks " +

@@ -114,7 +114,9 @@ its own errand and budget, at any shop, with the same limits as through the conn
 chats can work at once, and messages sent to a busy chat wait their turn. A paid errand closes. Claude reads what the person
 wants. Code reads the budget from what they type (`parseBudget`) or from their click. For other wording Claude can propose an
 amount, which code takes only if the person wrote that amount in their latest message (`budgetFromCourier`).
-Budgets can't go over the per-errand cap once it's saved in Settings.
+Budgets can't go over the per-errand cap once it's saved in Settings. The room is the demo: each person gets 50 free messages,
+counted in code on their record (`spendMessage`), to use on anything. After that it stops taking messages, while chats and open
+payments still work.
 
 **Calling back.** For three minutes after a purchase, or until the person pays or sends another message, they can undo it from the
 payment card, in the room or in Claude. The order is cancelled at the shop and its budget freed. Nothing has moved yet at that

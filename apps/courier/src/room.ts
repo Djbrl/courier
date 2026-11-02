@@ -26,6 +26,19 @@ import { addStamp, issueErrand, revokeVisa } from "./visas.ts";
  * here in code. The courier can't set or change one.
  */
 
+/** What each person gets in this window. The full experience is Courier connected to their own agent. */
+export const FREE_MESSAGES = 50;
+
+export const messagesLeft = (human: Human) => Math.max(0, FREE_MESSAGES - (human.messagesSent ?? 0));
+
+/** Counts a message, or says there are none left. Checked here in code, so nothing typed in a chat can change it. */
+export function spendMessage(human: Human): boolean {
+  if (!messagesLeft(human)) return false;
+  human.messagesSent = (human.messagesSent ?? 0) + 1;
+  db.put("humans", human.id, human);
+  return true;
+}
+
 /** What the window draws. Written once, so a chat reads the same every time it's opened. */
 export type ChatEvent =
   | { t: "me" | "say" | "dim"; text: string }

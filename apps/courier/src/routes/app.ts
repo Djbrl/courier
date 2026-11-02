@@ -46,8 +46,10 @@ import {
   checkOrder,
   deleteChat,
   findChat,
+  messagesLeft,
   sendMessage,
   setNextBudget,
+  spendMessage,
 } from "../room.ts";
 import { decideApproval, parseCap, savedPayPal } from "../visas.ts";
 
@@ -341,7 +343,7 @@ function chatFor(req: express.Request, res: express.Response, id: unknown) {
 }
 
 const answer = (res: express.Response, ctx: NonNullable<ReturnType<typeof chatFor>>, extra = {}) =>
-  res.json({ ...extra, chat: chatView(ctx.chat), list: chatTabs(ctx.courier) });
+  res.json({ ...extra, chat: chatView(ctx.chat), list: chatTabs(ctx.courier), left: messagesLeft(ctx.human) });
 
 api.post("/chats", (req, res) => {
   const ctx = roomFor(req, res);
@@ -362,6 +364,10 @@ api.post("/chat", (req, res) => {
     .slice(0, 500);
   if (!message) {
     res.status(400).json({ error: "Say something first." });
+    return;
+  }
+  if (!spendMessage(ctx.human)) {
+    res.status(429).json({ error: "Your free messages are used up.", left: 0 });
     return;
   }
   sendMessage(ctx.human, ctx.courier, ctx.chat, message);
