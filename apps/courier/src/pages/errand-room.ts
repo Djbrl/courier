@@ -1,19 +1,4 @@
-import {
-  ARROW,
-  avatar,
-  config,
-  courierVars,
-  html,
-  LOGO,
-  PP,
-  paypalFor,
-  portrait,
-  raw,
-  SHOPS,
-  SIMULATED,
-  shopLogo,
-  VERIFIED,
-} from "@courier/shared";
+import { ARROW, config, courierVars, html, LOGO, PP, paypalFor, portrait, raw, SHOPS, shopLogo } from "@courier/shared";
 import type { Courier } from "../db.ts";
 import { FREE_MESSAGES, messagesLeft } from "../room.ts";
 import { type Desk, shell } from "./app.ts";
@@ -45,8 +30,6 @@ export function errandRoom(d: Desk, courier: Courier, chat: unknown, list: unkno
     portrait: portrait(look).value,
     receiptParts: {
       logo: LOGO.value,
-      verified: (d.human.simulated ? SIMULATED : VERIFIED).value,
-      avatar: avatar().value,
       pp: PP.value,
     },
   };

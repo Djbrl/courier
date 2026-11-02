@@ -416,6 +416,25 @@ await step("The errand room: chats side by side, at any shop, and only the perso
   const priced = await say(browsing, "Buy the $149 turntable");
   assert.equal(priced.chat.amounts, true, JSON.stringify(priced.fresh));
 
+  // Picking an item with a fixed price is enough: its price sets the budget, read from the shop.
+  const picked = await say(await newChat(), "Get Double Smash Burger from Floor Dash");
+  assert.equal(picked.chat.amounts, false, JSON.stringify(picked.fresh));
+  assert.equal(picked.chat.errand.limitCents, 1200);
+  assert.equal(cards(picked)[0].total, "11.50");
+  await person.follow(cards(picked)[0].approve_url, "http://none/", { form: { decision: "approve" } });
+  const ticket = (await (
+    await person.req(url(`order/${cards(picked)[0].order_id}?chat=${picked.chat.id}`))
+  ).json()) as any;
+  assert.equal(ticket.chat.events.filter((e: any) => e.t === "receipt").length, 1);
+  assert.equal(ticket.chat.amounts, false);
+
+  // Asking in words calls back what's unpaid, though carrying on in the chat ended the button's time.
+  const changed = await say(await newChat(), "Get Double Smash Burger from Floor Dash");
+  const off = await say(changed.chat.id, "actually, call that off");
+  const offCard = off.chat.events.find((e: any) => e.t === "pay");
+  assert.equal(offCard.status, "called_back", JSON.stringify(off.fresh));
+  assert.equal(off.chat.errand.remainingCents, off.chat.errand.limitCents);
+
   // A saved cap holds for budgets typed in the room too, and says where to change it.
   await person.req(`${flow.courier}/app/settings/cap`, { form: { cap_errand: "40", cap_day: "100" } });
   const over = await say(browsing, "$80");
@@ -995,6 +1014,19 @@ await step("Five shops through one connector, each browsable with no errand and 
 
 let flowers = "";
 await step("Without saved PayPal even a small errand asks first; the person saves it once", async () => {
+  // Items the person picked come with their price: code reads it, and the card starts from it.
+  const found = structured(await tool("search_shop", { shop: "Floor Dash", query: "Double Smash Burger" }));
+  const quoted = structured(
+    await tool("start_errand", {
+      what: "A burger",
+      items: [{ shop: "Floor Dash", item_id: found.results[0].id }],
+    }),
+  );
+  assert.equal(quoted.decision, "needs_ticket", JSON.stringify(quoted));
+  assert.equal(quoted.suggested_budget, 12);
+  const noItem = await tool("start_errand", { what: "A burger", items: [{ shop: "Floor Dash", item_id: "nope" }] });
+  assert.equal(noItem.isError, true);
+
   const asked = await tool("start_errand", { what: "Market Bouquet flowers", budget: 20 });
   const sc = structured(asked);
   assert.equal(sc.decision, "needs_ticket", JSON.stringify(asked));

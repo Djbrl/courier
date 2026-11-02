@@ -6782,18 +6782,6 @@ html:has(body.app-page) {
 .tk .tk-x:hover {
   color: var(--red);
 }
-.tk-sure {
-  display: inline-flex;
-  gap: 8px;
-  padding: 0 10px;
-  white-space: nowrap;
-}
-.tk-sure button {
-  border: 0;
-  background: none;
-  padding: 0;
-  cursor: pointer;
-}
 .tk-busy {
   display: inline-flex;
   gap: 3px;
@@ -6903,4 +6891,116 @@ html:has(body.app-page) {
   margin-bottom: 4px;
   cursor: pointer;
   font-weight: 700;
+}
+
+/* a paid purchase in the room: small, and made to stack */
+.tick {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  max-width: 520px;
+  padding: 8px 0 8px 12px;
+  background: var(--paper);
+  border-radius: 10px;
+}
+.rm-log .tick + .tick {
+  margin-top: -2px;
+}
+.tick.off {
+  grid-template-columns: minmax(0, 1fr);
+  padding: 8px 12px;
+  opacity: 0.65;
+}
+.tick-th {
+  display: flex;
+}
+.tick-th .thumb {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  outline: 2px solid var(--paper);
+}
+.tick-th .thumb + .thumb {
+  margin-left: -12px;
+}
+.tick-b {
+  min-width: 0;
+  line-height: 1.25;
+}
+.tick-b b {
+  display: block;
+  font-size: 14px;
+}
+.tick-b small {
+  display: block;
+  overflow: hidden;
+  font-size: 12.5px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  opacity: 0.7;
+}
+.tick-r {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  align-self: stretch;
+  justify-content: center;
+  margin: -8px 0;
+  padding: 8px 12px 8px 14px;
+  border-left: 1.5px dashed rgba(20, 20, 20, 0.25);
+  white-space: nowrap;
+}
+.tick-r b {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 14px;
+}
+.tick-r small {
+  color: var(--green);
+  font-size: 12px;
+  font-weight: 600;
+}
+.tick-r::before,
+.tick-r::after {
+  content: "";
+  position: absolute;
+  left: -6px;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: #fff;
+}
+.tick-r::before {
+  top: -6px;
+}
+.tick-r::after {
+  bottom: -6px;
+}
+
+/* asking before something that can't be undone */
+.sure {
+  width: min(400px, calc(100vw - 32px));
+  margin: auto;
+  padding: 22px;
+  border: 0;
+  border-radius: 16px;
+  box-shadow: 0 20px 50px rgba(20, 20, 20, 0.28);
+}
+.sure::backdrop {
+  background: rgba(20, 20, 20, 0.45);
+  backdrop-filter: blur(2px);
+}
+.sure h2 {
+  margin: 0 0 6px;
+  font-size: 20px;
+}
+.sure p {
+  margin: 0 0 18px;
+}
+.sure-acts {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
 }

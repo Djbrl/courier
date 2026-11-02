@@ -113,13 +113,15 @@ briefly), so a call-back takes effect in seconds rather than at token expiry.
 its own errand and budget, at any shop, with the same limits as through the connector. Turns run in the background, so several
 chats can work at once, and messages sent to a busy chat wait their turn. A paid errand closes. Claude reads what the person
 wants. Code reads the budget from what they type (`parseBudget`) or from their click. For other wording Claude can propose an
-amount, which code takes only if the person wrote that amount in their latest message (`budgetFromCourier`).
+amount, which code takes only if the person wrote that amount in their latest message (`budgetFromCourier`). When a person picks
+items, the courier names them and code reads their listed prices from the shops (`quoteItems`), so the total becomes the budget,
+here and through the connector. In the room, an item the person didn't name needs their OK first (`itemNamedIn`).
 Budgets can't go over the per-errand cap once it's saved in Settings. The room is the demo: each person gets 50 free messages,
 counted in code on their record (`spendMessage`), to use on anything. After that it stops taking messages, while chats and open
 payments still work.
 
 **Calling back.** For three minutes after a purchase, or until the person pays or sends another message, they can undo it from the
-payment card, in the room or in Claude. The order is cancelled at the shop and its budget freed. Nothing has moved yet at that
+payment card, in the room or in Claude. In the room they can also ask for it in words for as long as it's unpaid. The order is cancelled at the shop and its budget freed. Nothing has moved yet at that
 point, because a person approves each PayPal payment. Purchases paid with saved PayPal charge straight away and have no such window.
 
 **One yes covers the errand.** An approval is keyed to its items, so a hold and the later purchase of the same record

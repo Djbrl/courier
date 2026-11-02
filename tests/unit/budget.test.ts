@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { budgetFromCourier, parseBudget } from "../../packages/shared/src/budget.ts";
+import { budgetFromCourier, itemNamedIn, parseBudget } from "../../packages/shared/src/budget.ts";
 
 test("a message that's only a budget", () => {
   for (const [said, dollars] of [
@@ -60,4 +60,20 @@ test("a budget the courier proposes counts only if the person wrote that amount"
     [undefined, "40"],
   ] as const)
     assert.equal(budgetFromCourier(proposed, said), null, `${proposed} from ${said}`);
+});
+
+test("an item counts as named by any telling word of its title", () => {
+  for (const [title, said] of [
+    ["Skin-on Fries", "grab me fries and a crispy"],
+    ["Crispy Chicken Burger", "grab me fries and a crispy"],
+    ["The Lighthouse Ledger", "the lighthouse ledger for my mom"],
+    ["Double Smash Burger", "Get Double Smash Burger from Floor Dash"],
+  ])
+    assert.equal(itemNamedIn(title as string, said as string), true, `${title} in ${said}`);
+  for (const [title, said] of [
+    ["Trail Runner Shoes", "grab me fries and a crispy"],
+    ["Turntable", "yes"],
+    ["The Lighthouse Ledger", "the one with the blue cover"],
+  ])
+    assert.equal(itemNamedIn(title as string, said as string), false, `${title} in ${said}`);
 });

@@ -6,6 +6,7 @@ import {
   CALL_BACK_MS,
   COURIER_RESOURCE,
   config,
+  itemNamedIn,
   newId,
   parseBudget,
   SHOPS,
@@ -14,7 +15,16 @@ import {
   type Visa,
 } from "@courier/shared";
 import type { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { type AgentMemory, type CallTool, runAgent, type Step, type ToolResult, withStore } from "./agent.ts";
+import {
+  type AgentMemory,
+  type CallTool,
+  type PickedItem,
+  quoteItems,
+  runAgent,
+  type Step,
+  type ToolResult,
+  withStore,
+} from "./agent.ts";
 import { mintAccessToken, mintShopConnectionToken } from "./auth/oauth.ts";
 import { anyShop, type Connection, type Courier, db, effectiveStatus, type Human, remainingBudget } from "./db.ts";
 import { demoClientId, firstName } from "./pages/shared.ts";
@@ -23,7 +33,7 @@ import { addStamp, issueErrand, revokeVisa } from "./visas.ts";
 /**
  * The errand room: chats with a courier, side by side. Turns run here in the background and write to the chat, so a person
  * can leave one running, start another, or come back later and read it. A budget comes from what the person types, read
- * here in code. The courier can't set or change one.
+ * here in code, or from the listed prices of what they picked. The courier can't make one up.
  */
 
 /** What each person gets in this window. The full experience is Courier connected to their own agent. */
@@ -53,6 +63,7 @@ export type ChatEvent =
       total: string;
       items: Record<string, unknown>[];
       status: "open" | "paid" | "cancelled" | "called_back";
+      errand_id?: string;
       callBackUntil: number;
     }
   | {
@@ -77,6 +88,10 @@ export interface RoomChat extends AgentMemory {
   queue: string[];
   note?: string;
   amounts?: boolean;
+  /** The courier told the person what it would get, and is waiting for their word. */
+  confirm?: boolean;
+  /** The items in that offer, so their answer can start the errand. */
+  offered?: string;
   /** Goes up with every change to the events, so a window only redraws when it must. */
   rev: number;
   createdAt: string;
@@ -200,6 +215,7 @@ export function chatView(chat: RoomChat) {
     rev: chat.rev,
     note: chat.note ?? "",
     amounts: Boolean(chat.amounts),
+    confirm: Boolean(chat.confirm),
     events: chat.events,
     pendingBudgetCents: chat.pendingBudget ? chat.pendingBudget * 100 : null,
   };
@@ -315,13 +331,13 @@ function settled(chat: RoomChat, card: Extract<ChatEvent, { t: "pay" }>, order: 
       items: order.items ?? card.items,
       receipt_url: order.receipt_url ?? null,
     });
+    chat.amounts = false;
     finishErrands(chat);
-    push(chat, {
-      t: "say",
-      text: unpaid(chat) ? "That one’s paid." : "All done. Let me know if you need anything else.",
-    });
+    if (unpaid(chat)) touch(chat);
+    else push(chat, { t: "say", text: "All done. Let me know if you need anything else." });
   } else if (order.status === "cancelled") {
     card.status = "cancelled";
+    chat.amounts = false;
     finishErrands(chat);
     push(chat, { t: "say", text: "No problem, I’ve put it back. Your budget is untouched." });
   }
@@ -345,6 +361,18 @@ async function cancelCard(human: Human, courier: Courier, card: Extract<ChatEven
   return askShop(shop, token, courier, "cancel_order", { order_id: card.order_id });
 }
 
+/** Cancels an order at the shop, unless it turns out to be paid already. */
+async function callOff(human: Human, courier: Courier, chat: RoomChat, card: Extract<ChatEvent, { t: "pay" }>) {
+  const order = await cancelCard(human, courier, card);
+  if (order.data.status !== "cancelled") {
+    settled(chat, card, order.data);
+    return false;
+  }
+  card.status = "called_back";
+  touch(chat);
+  return true;
+}
+
 /** The person changed their mind in time: the order is off and the budget is back. Moving on ends the window. */
 export async function callBack(
   human: Human,
@@ -354,12 +382,7 @@ export async function callBack(
 ): Promise<string | null> {
   const card = pending(chat, orderId);
   if (card?.status !== "open" || Date.now() > card.callBackUntil) return "It’s too late to call that back.";
-  const order = await cancelCard(human, courier, card);
-  if (order.data.status !== "cancelled") {
-    settled(chat, card, order.data);
-    return "Too late, that’s already paid.";
-  }
-  card.status = "called_back";
+  if (!(await callOff(human, courier, chat, card))) return "Too late, that’s already paid.";
   if (!running.has(chat.id))
     chat.history.push({ role: "user", content: `(The person called back order ${orderId}. Nothing was charged.)` });
   push(chat, { t: "say", text: "Called back. Nothing was charged, and your budget is back. Want something else?" });
@@ -393,6 +416,8 @@ function roomTools(human: Human, courier: Courier, chat: RoomChat, message: stri
     isError: true,
   });
   const errand = (id: unknown) => openErrands(chat).find((v) => v.id === id);
+  // Only an offer made before this message counts as agreed to. The courier can't offer and accept in one go.
+  const offeredBefore = chat.offered;
 
   return async (name, args) => {
     const shop = typeof args.shop === "string" ? shopNamed(args.shop) : undefined;
@@ -418,6 +443,32 @@ function roomTools(human: Human, courier: Courier, chat: RoomChat, message: stri
           return { text: problem, isError: true };
         }
         if (proposed) chat.pendingBudget = proposed;
+        const picked: PickedItem[] = Array.isArray(args.items) ? args.items.slice(0, 10) : [];
+        if (!chat.pendingBudget && picked.length) {
+          const quote = await quoteItems(picked, async (at, item_id) => {
+            const found = await browse(at, "get_item", { item_id });
+            return found.isError ? null : found.data;
+          });
+          if ("problem" in quote) return { text: quote.problem, isError: true };
+          const key = picked
+            .map((p) => `${p.shop}/${p.item_id}`)
+            .sort()
+            .join();
+          const sure = key === offeredBefore || quote.lines.every((l) => itemNamedIn(l.title, message));
+          if (!sure) {
+            chat.offered = key;
+            chat.confirm = true;
+            const list = quote.lines.map((l) => `${l.title} $${l.price}`).join(", ");
+            return {
+              text: `You chose some of this, so they hear the price first: ${list}. Tell them that and the total, then stop.`,
+              data: { needs_ok: true },
+            };
+          }
+          const over = budgetProblem(human, quote.dollars);
+          if (over) return { text: over, isError: true };
+          chat.pendingBudget = quote.dollars;
+          chat.offered = undefined;
+        }
         if (!chat.pendingBudget) {
           chat.awaiting = { what };
           return {
@@ -471,11 +522,27 @@ function roomTools(human: Human, courier: Courier, chat: RoomChat, message: stri
       case "order_status":
         if (!shop) return noShop(args.shop);
         return browse(shop, "order_status", { order_id: String(args.order_id ?? "") });
+      // Asking in words works for as long as nothing is paid. Only the button's time runs out when they carry on chatting.
+      case "call_back": {
+        const cards = chat.events.filter(
+          (e): e is Extract<ChatEvent, { t: "pay" }> =>
+            e.t === "pay" && e.status === "open" && (!args.order_id || e.order_id === args.order_id),
+        );
+        if (!cards.length) return { text: "There's nothing unpaid to call back." };
+        const done = await Promise.all(cards.map((card) => callOff(human, courier, chat, card)));
+        return {
+          text: done.every(Boolean)
+            ? "Called back. Nothing was charged, and the budget is free again."
+            : "Some of it was already paid, so it can't be called back. The rest is called back, and nothing was charged for it.",
+        };
+      }
       case "end_errand": {
         const visa = errand(args.errand_id);
         if (!visa) return { text: "That errand isn't open.", isError: true };
+        for (const e of chat.events)
+          if (e.t === "pay" && e.status === "open" && e.errand_id === visa.id) await callOff(human, courier, chat, e);
         await revokeVisa(visa.id, "Ended from the errand room");
-        return { text: "The errand has ended.", data: { ended: true } };
+        return { text: "The errand has ended, and anything unpaid on it is called back.", data: { ended: true } };
       }
       default:
         return { text: `Unknown tool ${name}.`, isError: true };
@@ -506,6 +573,7 @@ const clean = (text: string) =>
 function report(chat: RoomChat, steps: Step[], reply: string): void {
   if (reply) chat.events.push({ t: "say", text: clean(reply) });
   const buys = steps.filter((s) => s.tool === "buy" && s.ok !== undefined);
+  const paid = buys.some((s) => s.data?.status === "paid");
   for (const step of buys) {
     const d = step.data ?? {};
     if (d.approve_url && !pending(chat, d.order_id))
@@ -519,19 +587,17 @@ function report(chat: RoomChat, steps: Step[], reply: string): void {
         items: d.items ?? [],
         status: "open",
         callBackUntil: d.call_back_until ? Date.parse(d.call_back_until) : Date.now() + CALL_BACK_MS,
+        errand_id: step.args.errand_id as string,
       });
     else if (d.status === "paid")
-      chat.events.push(
-        {
-          t: "receipt",
-          order_id: d.order_id,
-          shop: d.shop_name,
-          total: d.total,
-          items: d.items ?? [],
-          receipt_url: d.receipt_url ?? null,
-        },
-        { t: "say", text: "All done. Let me know if you need anything else." },
-      );
+      chat.events.push({
+        t: "receipt",
+        order_id: d.order_id,
+        shop: d.shop_name,
+        total: d.total,
+        items: d.items ?? [],
+        receipt_url: d.receipt_url ?? null,
+      });
     else if (d.decision === "ask_human")
       chat.events.push({
         t: "ask",
@@ -541,9 +607,16 @@ function report(chat: RoomChat, steps: Step[], reply: string): void {
       });
     else if (d.decision === "deny") chat.events.push({ t: "no", reason: d.reason ?? "It’s outside your limits." });
   }
-  if (buys.length) return;
-  const found = [...steps].reverse().find((s) => s.tool === "search_shop" && s.data?.results?.length);
-  if (found) chat.events.push({ t: "items", shop: found.data.shop_name, results: found.data.results.slice(0, 4) });
+  if (paid && !unpaid(chat)) chat.events.push({ t: "say", text: "All done. Let me know if you need anything else." });
+  if (chat.confirm) return;
+  // What it looked at and didn't buy from: one shelf per shop, shorter when there are several.
+  const boughtAt = new Set(buys.map((s) => s.data?.shop_name));
+  const shelves = new Map<string, Record<string, unknown>[]>();
+  for (const s of steps)
+    if (s.tool === "search_shop" && s.data?.results?.length && !boughtAt.has(s.data.shop_name))
+      shelves.set(s.data.shop_name, s.data.results);
+  for (const [shop, results] of shelves)
+    chat.events.push({ t: "items", shop, results: results.slice(0, shelves.size > 1 ? 3 : 4) });
 }
 
 /** One message from the person. Their budget is dealt with here, first; the rest goes to the courier. */
@@ -584,18 +657,24 @@ async function roomTurn(human: Human, courier: Courier, chat: RoomChat, message:
   }
 
   chat.amounts = false;
+  chat.confirm = false;
   const out = await runAgent(
     {
       memory: chat,
       callTool: roomTools(human, courier, chat, message),
       courierName: courier.name,
       humanName: firstName(human) ?? "the person",
-      errands: openErrands(chat)
-        .map(
+      errands: [
+        ...openErrands(chat).map(
           (v) =>
             `${v.id}: "${v.intent}", $${(remainingBudget(v) / 100).toFixed(2)} left of $${v.spendLimitCents / 100}`,
-        )
-        .join("; "),
+        ),
+        ...chat.events.flatMap((e) =>
+          e.t === "pay" && e.status === "open"
+            ? [`unpaid order ${e.order_id}: ${e.items.map((i) => i.title).join(", ")}, $${e.total}`]
+            : [],
+        ),
+      ].join("; "),
       resume,
       onStep: (step) => {
         const note = NOTES[step.tool]?.(step);
@@ -611,7 +690,11 @@ async function roomTurn(human: Human, courier: Courier, chat: RoomChat, message:
   );
 
   // A courier can ask for a budget without using the tool. Hold on to the request, so the answer is read as a budget.
-  const asked = /\bbudget\b/i.test(out.reply) && !out.steps.some((s) => s.tool === "buy" || s.data?.errand_id);
+  const asked =
+    /\bbudget\b/i.test(out.reply) &&
+    !chat.pendingBudget &&
+    !chat.confirm &&
+    !out.steps.some((s) => s.tool === "buy" || s.data?.errand_id);
   if (asked && !openErrands(chat).length) chat.awaiting ??= { what: message };
   chat.amounts = Boolean(out.needsBudget || (asked && chat.awaiting));
   report(chat, out.steps, out.reply);

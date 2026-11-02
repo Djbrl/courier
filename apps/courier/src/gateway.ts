@@ -20,7 +20,7 @@ import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import express, { Router } from "express";
 import { importJWK, jwtVerify } from "jose";
 import * as z from "zod";
-import { withStore } from "./agent.ts";
+import { quoteItems, withStore } from "./agent.ts";
 import { signingKey } from "./auth/keys.ts";
 import { mintAccessToken, mintShopConnectionToken } from "./auth/oauth.ts";
 import {
@@ -124,8 +124,11 @@ function createGateway(connection: Connection, human: Human): McpServer {
     {
       instructions:
         "Courier is one connector to many shops. The user's couriers shop for them, each errand with its own budget. " +
-        "When the user wants something: call start_errand once with what they want, the budget they named and the courier they named, " +
-        "then list_shops if you don't know the shop, search_shop, and buy with the errand_id. Several errands can be open at once, at " +
+        "When the user picked specific items, search_shop for their ids (that needs no errand) and call start_errand with those items: " +
+        "Courier reads the listed prices and sets the budget to the total, so don't ask for one. Otherwise call start_errand once with " +
+        "what they want, the budget they named and the courier they named, then list_shops if you don't know the shop, search_shop, and " +
+        "buy with the errand_id. A message can hold several purchases and questions: act on all of it, and answer every question. " +
+        "Several errands can be open at once, at " +
         "any shop, and one errand can use several shops. Start a new errand for each new request with its own budget; use the same " +
         "errand for follow-ups like 'add a vase'. Courier, not you, enforces budgets: don't refuse or warn on your own, and don't ask " +
         "the user to confirm before buying. If a purchase doesn't fit, tell them why and stop. If start_errand returns needs_ticket, " +
@@ -239,18 +242,24 @@ function createGateway(connection: Connection, human: Human): McpServer {
     {
       title: "Send a courier on an errand",
       description:
-        "Start one errand: one thing the user wants, with its own budget, at any shop. Pass the amount the user named and " +
-        "the courier they named. Under the cap they set in Courier it starts straight away. Otherwise it returns needs_ticket " +
-        "and they confirm the budget themselves.",
+        "Start one errand, with its own budget, at any shop. If the user picked specific items, pass them as items and Courier " +
+        "reads their prices to set the budget. Otherwise pass the amount the user named. Pass the courier they named. Under the " +
+        "cap they set in Courier it starts straight away. Otherwise it returns needs_ticket and they confirm the budget themselves.",
       inputSchema: {
         what: z.string().min(1).max(160).describe("What it's for, in the user's words, e.g. 'flowers for mum'."),
         budget: z.number().positive().max(500).optional().describe("The budget the user named, in USD."),
+        items: z
+          .array(z.object({ shop: z.string().max(60), item_id: z.string().max(60) }))
+          .min(1)
+          .max(10)
+          .optional()
+          .describe("The items the user picked, with ids from search_shop. Their total becomes the budget."),
         courier: z.string().max(40).optional().describe("The courier the user named. Omit for their first courier."),
       },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
       _meta: { ui: { resourceUri: RECEIPT_CARD_URI } },
     },
-    async ({ what, budget, courier: wanted }) => {
+    async ({ what, budget, items, courier: wanted }) => {
       const couriers = listCouriers(human.id);
       const courier = wanted ? couriers.find((c) => c.name.toLowerCase() === wanted.trim().toLowerCase()) : couriers[0];
       if (!courier)
@@ -263,7 +272,15 @@ function createGateway(connection: Connection, human: Human): McpServer {
           `The user has revoked ${courier.name}. They can restore it on Courier's Couriers page.`,
           "revoked",
         );
-      const dollars = budget === undefined ? undefined : Math.ceil(budget);
+      const quote =
+        budget === undefined && items
+          ? await quoteItems(items, async (at, item_id) => {
+              const found = await browse(at, "get_item", { item_id });
+              return found.isError ? null : ((found.structuredContent as Record<string, any>) ?? null);
+            })
+          : undefined;
+      if (quote && "problem" in quote) return failed(quote.problem, "unknown_item");
+      const dollars = quote?.dollars ?? (budget === undefined ? undefined : Math.ceil(budget));
       if (dollars !== undefined && withinCap(human, dollars * 100) && savedPayPal(human.id)) {
         const visa = issueErrand({ connection, human, courierName: courier.name, what, budget: dollars, auto: true });
         return text(

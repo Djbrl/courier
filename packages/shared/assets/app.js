@@ -50,3 +50,31 @@ window.fitText = fitText;
 fitText();
 document.fonts?.ready.then(() => fitText());
 addEventListener("resize", () => fitText());
+
+// Asks before something that can't be undone, in a dialog that holds the focus. Keeping things as they are is the default.
+window.courierConfirm = ({ title, body, yes }) =>
+  new Promise((resolve) => {
+    const dialog = document.createElement("dialog");
+    dialog.className = "sure";
+    dialog.innerHTML = `<form method="dialog"><h2></h2><p></p><div class="sure-acts"><button class="btn ghost sm" value="no" autofocus>Cancel</button><button class="btn sm" value="yes"></button></div></form>`;
+    dialog.querySelector("h2").textContent = title;
+    dialog.querySelector("p").textContent = body;
+    dialog.querySelector('[value="yes"]').textContent = yes;
+    dialog.addEventListener("click", (e) => {
+      if (e.target === dialog) dialog.close();
+    });
+    dialog.addEventListener("close", () => {
+      resolve(dialog.returnValue === "yes");
+      dialog.remove();
+    });
+    document.body.append(dialog);
+    dialog.showModal();
+  });
+
+document.addEventListener("click", async (e) => {
+  const link = e.target.closest("a[data-sure]");
+  if (!link) return;
+  e.preventDefault();
+  const { sure: title, sureBody: body, sureYes: yes } = link.dataset;
+  if (await window.courierConfirm({ title, body, yes })) location.href = link.href;
+});

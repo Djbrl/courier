@@ -28,6 +28,16 @@ import { backBy, courierForErrand, courierLook, demoClientId, dots, firstName, l
 
 /* ---------------- the app: shell ---------------- */
 
+/** A sign-out link, which asks first. A demo person can't be signed back into. */
+const signOut = (d: Pick<Desk, "human">) =>
+  raw(
+    `href="/logout" data-sure="Sign out?" data-sure-yes="Sign out" data-sure-body="${
+      d.human.simulated
+        ? "This demo person and their chats go with it. Trying the demo again starts a new one."
+        : "You can sign back in with PayPal any time."
+    }"`,
+  );
+
 export type VisaView = Visa & { remainingCents: number; effective: string };
 
 /** Everything the signed-in views draw from. */
@@ -86,7 +96,7 @@ export function shell(
           ${item("couriers", "Couriers", "/app/couriers")}
           ${item("settings", "Settings", "/app/settings")}
         </nav>
-        <div class="rail-who">${avatar()}<span><b>${firstName(d.human) ?? "You"}</b>${d.human.simulated ? SIMULATED : VERIFIED}</span><a class="fine" href="/logout">Sign out</a></div>
+        <div class="rail-who">${avatar()}<span><b>${firstName(d.human) ?? "You"}</b>${d.human.simulated ? SIMULATED : VERIFIED}</span><a class="fine" ${signOut(d)}>Sign out</a></div>
       </aside>
       <main class="pane">${main}</main>
     </div>`,
@@ -428,7 +438,7 @@ export function settingsPage(d: Desk, savedEmail?: string | null | false): strin
       </form>
     </div></section>
     <section><h2 class="sec-t">Account</h2><div class="panel slist">
-      ${row(firstName(d.human) ?? "You", "Your name is never shared with shops.", html`<a class="btn ghost sm" href="/logout">Sign out</a>`)}
+      ${row(firstName(d.human) ?? "You", "Your name is never shared with shops.", html`<a class="btn ghost sm" ${signOut(d)}>Sign out</a>`)}
       ${row("Delete account", "Erase everything and start again from scratch.", html`<a class="btn ghost sm" href="/app/account/delete">Delete my account</a>`)}
     </div></section>
   </div>`;

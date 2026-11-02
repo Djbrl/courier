@@ -99,3 +99,17 @@ export function budgetFromCourier(proposed: unknown, message: string): number | 
   const dollars = Math.ceil(proposed);
   return amountsIn(message).has(dollars) ? dollars : null;
 }
+
+const PLAIN_WORDS = new Set(["with", "from", "the", "and", "for", "set"]);
+
+/**
+ * Whether a person's message names an item, by any telling word of its title ("the crispy one", "fries"). When it doesn't,
+ * the courier chose it, so the person hears the price before an errand starts for it.
+ */
+export function itemNamedIn(title: string, message: string): boolean {
+  const said = new Set(message.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? []);
+  const words = title.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? [];
+  return words.some(
+    (w) => w.length > 2 && !PLAIN_WORDS.has(w) && (said.has(w) || said.has(`${w}s`) || said.has(w.replace(/s$/, ""))),
+  );
+}

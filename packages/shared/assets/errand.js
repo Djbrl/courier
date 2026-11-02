@@ -109,36 +109,30 @@
   };
 
   function payCard(e) {
-    const slot =
-      e.status === "paid"
-        ? `<p class="fine pay-st ok">Paid ✓</p>`
-        : e.status === "called_back"
-          ? `<p class="fine pay-st">Called back. Nothing was charged.</p>`
-          : e.status === "cancelled"
-            ? `<p class="fine pay-st">Cancelled. Nothing was charged.</p>`
-            : paying.has(e.order_id)
-              ? `<div class="wait"><i></i>Waiting for PayPal…</div><p class="fine" style="text-align:center"><a class="link" href="${esc(e.approve_url)}" target="courier-pay">Reopen the payment window</a></p>`
-              : `<button type="button" class="btn-pp" data-pay="${esc(e.approve_url)}" data-order="${esc(e.order_id)}">Pay with ${boot.receiptParts.pp}</button>`;
-    const canCallBack = e.status === "open" && e.callBackUntil > Date.now();
+    // Once it's settled, the card has done its job: a paid one gives way to its ticket.
+    if (e.status === "paid") return "";
+    if (e.status !== "open")
+      return `<div class="tick off"><span class="tick-b"><b>${esc(e.shop_name)}</b><small>${e.status === "called_back" ? "Called back" : "Cancelled"}. Nothing was charged.</small></span></div>`;
+    const slot = paying.has(e.order_id)
+      ? `<div class="wait"><i></i>Waiting for PayPal…</div><p class="fine" style="text-align:center"><a class="link" href="${esc(e.approve_url)}" target="courier-pay">Reopen the payment window</a></p>`
+      : `<button type="button" class="btn-pp" data-pay="${esc(e.approve_url)}" data-order="${esc(e.order_id)}">Pay with ${boot.receiptParts.pp}</button>`;
+    const canCallBack = e.callBackUntil > Date.now();
     return `<div class="paycard" data-card="${esc(e.order_id)}">
         ${lines(e.items)}
         <div class="tot"><span>${esc(e.shop_name)}</span><b>$${esc(e.total)}</b></div>
         <div class="slot">${slot}</div>
-        ${e.status === "open" ? `<p class="fine pay-foot">${canCallBack ? `<button type="button" class="link fine" data-callback="${esc(e.order_id)}" data-until="${e.callBackUntil}">Call back · <span>${clock(e.callBackUntil)}</span></button><br>` : ""}${boot.paypal === "sandbox" ? "PayPal sandbox: log in with a sandbox buyer account." : "Simulated PayPal: no real money."}</p>` : ""}
+        ${`<p class="fine pay-foot">${canCallBack ? `<button type="button" class="link fine" data-callback="${esc(e.order_id)}" data-until="${e.callBackUntil}">Call back · <span>${clock(e.callBackUntil)}</span></button><br>` : ""}${boot.paypal === "sandbox" ? "PayPal sandbox: log in with a sandbox buyer account." : "Simulated PayPal: no real money."}</p>`}
       </div>`;
   }
 
+  /** A paid purchase: small enough to stack, with the full receipt a click away. */
   function receipt(e) {
-    const P = boot.receiptParts;
-    return `<div class="lift"><div class="rcpt zz" role="group" aria-label="${esc(e.shop || "Shop")} receipt">
-        <div class="rh"><b>${esc(e.shop)}</b><span class="mono">#${esc(String(e.order_id).slice(-6).toUpperCase())}</span></div>
-        <div class="ritems">${(e.items || []).map((i) => `<div class="ritem-t">${thumb(i)}<span class="ritem">${esc(i.title)}</span></div>`).join("")}</div>
-        <div class="ramt"><b>$${esc(e.total)}</b><span>paid</span></div>
-        <div class="ragent">${boot.portrait}<div><b>${esc(C.name)}</b><span class="mono">${esc(C.idNo)}</span></div></div>
-        <div class="rwho">${P.avatar}<div><b>Sent by ${esc(boot.human)}</b><br>${P.verified}</div></div>
-      </div></div>
-      <div class="after">${e.receipt_url ? `<a class="btn sm" href="${esc(e.receipt_url)}" target="_blank" rel="noopener">Open the receipt ↗</a>` : ""}
-        <a class="btn ghost sm" href="/app/errands">See your errands</a></div>`;
+    const items = e.items || [];
+    return `<div class="tick" role="group" aria-label="${esc(e.shop)} receipt, $${esc(e.total)} paid">
+        <span class="tick-th">${items.slice(0, 3).map(thumb).join("")}</span>
+        <span class="tick-b"><b>${esc(e.shop)}</b><small>${esc(items.map((i) => i.title).join(", "))}</small></span>
+        <span class="tick-r"><b>$${esc(e.total)}</b>${e.receipt_url ? `<a class="link fine" href="${esc(e.receipt_url)}" target="_blank" rel="noopener">Receipt ↗</a>` : "<small>Paid</small>"}</span>
+      </div>`;
   }
 
   const DRAW = {
@@ -194,15 +188,15 @@
   }
 
   function drawTabs() {
-    // A delete being confirmed stays put when the row refreshes.
-    if ($(".tk-sure", tabs)) return;
-    tabs.innerHTML = list
+    // A chat with nothing in it yet isn't in the list. It still gets a chip, so a new errand looks like its own place.
+    const shown = list.some((t) => t.id === chat.id) ? list : [{ id: chat.id, title: "", fresh: true }, ...list];
+    tabs.innerHTML = shown
       .map(
         (t) =>
-          `<span class="tk ${t.id === chat.id ? "on" : ""}"><button type="button" class="tk-go" data-chat="${esc(t.id)}" ${t.id === chat.id ? 'aria-current="true"' : ""}><b>${esc(t.title || "New chat")}</b>${tabLabel(t)}</button><button type="button" class="tk-x" data-delete="${esc(t.id)}" aria-label="Delete the chat ${esc(t.title)}">×</button></span>`,
+          `<span class="tk ${t.id === chat.id ? "on" : ""}"><button type="button" class="tk-go" data-chat="${esc(t.id)}" ${t.id === chat.id ? 'aria-current="true"' : ""}><b>${esc(t.title || "New errand")}</b>${t.fresh ? "" : tabLabel(t)}</button>${t.fresh ? "" : `<button type="button" class="tk-x" data-delete="${esc(t.id)}" aria-label="Delete the chat ${esc(t.title)}">×</button>`}</span>`,
       )
       .join("");
-    tabs.hidden = !list.length;
+    tabs.hidden = false;
   }
 
   function drawBudget() {
@@ -232,10 +226,12 @@
       sugs.hidden = true;
       return;
     }
-    sugs.innerHTML = chat.amounts
-      ? AMOUNTS.map((a) => `<button type="button" class="amt" data-say="${a}">${a}</button>`).join("")
-      : boot.ideas.map((i) => `<button type="button" data-say="${esc(i)}">${esc(i)}</button>`).join("") +
-        `<button type="button" class="several" data-say="${esc(boot.several.say)}">${esc(boot.several.label)}</button>`;
+    sugs.innerHTML = chat.confirm
+      ? `<button type="button" class="several" data-say="Go ahead">Go ahead</button><button type="button" data-say="No thanks">No thanks</button>`
+      : chat.amounts
+        ? AMOUNTS.map((a) => `<button type="button" class="amt" data-say="${a}">${a}</button>`).join("")
+        : boot.ideas.map((i) => `<button type="button" data-say="${esc(i)}">${esc(i)}</button>`).join("") +
+          `<button type="button" class="several" data-say="${esc(boot.several.say)}">${esc(boot.several.label)}</button>`;
     sugs.hidden = false;
   }
 
@@ -384,24 +380,19 @@
     if (go && go.dataset.chat !== chat.id) return open(go.dataset.chat);
     const del = e.target.closest("[data-delete]");
     if (del) {
-      del.outerHTML = `<span class="tk-sure"><button type="button" class="link fine" data-really="${esc(del.dataset.delete)}">Delete chat?</button><button type="button" class="link fine" data-keep>Keep</button></span>`;
-      return;
-    }
-    if (e.target.closest("[data-keep]")) {
-      e.target.closest(".tk-sure").remove();
-      return drawTabs();
-    }
-    const really = e.target.closest("[data-really]");
-    if (really) {
-      const id = really.dataset.really;
+      const id = del.dataset.delete;
+      const yes = await window.courierConfirm({
+        title: "Delete this chat?",
+        body: "Anything unpaid in it is called back. The errand stays in your records.",
+        yes: "Delete chat",
+      });
+      if (!yes) return;
       try {
         const out = await api("delete", { chat: id });
         list = out.list;
-        $(".tk-sure", tabs)?.remove();
         if (id === chat.id) await open(out.next);
         else drawTabs();
       } catch (err) {
-        $(".tk-sure", tabs)?.remove();
         chat.events = [...chat.events, { t: "dim", text: err.message }];
         draw();
       }
