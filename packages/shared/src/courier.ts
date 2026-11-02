@@ -110,12 +110,38 @@ export function paypalButton(href: string, label = "Continue with"): RawHtml {
 
 /* ---------------- the ID card ---------------- */
 
+const CROPPED_MARK = raw(
+  '<svg class="mark" viewBox="-2 0 42 20" aria-hidden="true"><path d="M15 0h25l-7 20H8z"/><path d="M5 0h6L4 20h-6z"/></svg>',
+);
+
+/** The badge: who sent the courier on a tear-off tab, its name up the side. Limits belong on the back, never here. */
 export function idCard(c: CourierLook, sentBy: string | null, opts: { id?: string } = {}): RawHtml {
   return html`<div class="idc cc" style="${courierVars(c.color)}" ${opts.id ? raw(`id="${escapeHtml(opts.id)}"`) : ""}
       role="img" aria-label="Courier ID: ${c.name}, runs on ${c.model}, ${c.idNo}${sentBy ? `, sent by ${sentBy}` : ""}, ${c.simulated ? "demo, simulated PayPal" : "verified by PayPal"}">
-    <div class="band">${LOGO}</div>
-    <div class="bd">${portrait(c)}<div class="dt"><div class="nm" data-f="name" data-fit>${c.name}</div><div class="on">runs on <b>${c.model}</b></div><div class="idn">${c.idNo}</div></div></div>
-    <div class="ft"><span class="chip">${avatar()}Sent by <b data-f="human">${sentBy ?? "you"}</b></span>${c.simulated ? SIMULATED : VERIFIED}</div>
+    <div class="idf">
+      <div class="tab"><div class="tr">${LOGO}<span class="idn">${c.idNo}</span></div><span class="sb">${avatar()}<span>Sent by <b data-f="human">${sentBy ?? "you"}</b></span></span></div>
+      <div class="bd">${CROPPED_MARK}<div class="sn"><div class="nm" data-f="name" data-fit>${c.name}</div></div>${c.simulated ? SIMULATED : VERIFIED}</div>
+      <i class="pf"></i><i class="slot"></i>
+    </div>
+  </div>`;
+}
+
+export interface CardBack {
+  title: string;
+  line: string;
+  intro: string;
+  rows: [big: string, detail: string][];
+}
+
+/** The badge's other side, in plain text: the tab keeps the one thing you'd act on, the body lists the rest. */
+export function idCardBack(c: Pick<CourierLook, "color">, back: CardBack): RawHtml {
+  const rows = back.rows.map(([big, detail]) => html`<div class="rw"><b>${big}</b><span>${detail}</span></div>`);
+  return html`<div class="idc cc idb" style="${courierVars(c.color)}">
+    <div class="idf">
+      <div class="tab"><b class="tt">${back.title}</b><span class="tl">${back.line}</span></div>
+      <div class="bd"><p class="ii">${back.intro}</p>${rows}</div>
+      <i class="pf"></i><i class="slot"></i>
+    </div>
   </div>`;
 }
 

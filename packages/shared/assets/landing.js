@@ -1,4 +1,4 @@
-// Courier landing page: hero deck, dotted globe, section reveals.
+// Courier landing page: one sticky stage. Scrolling moves the badges through the story; the globe runs on chapter 1.
 (() => {
   const D = document.documentElement;
   const qs = new URLSearchParams(location.search);
@@ -8,109 +8,30 @@
   const $ = (s) => document.querySelector(s),
     $$ = (s) => [...document.querySelectorAll(s)];
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+  const smooth = (t) => t * t * (3 - 2 * t);
   const opt = { cards: "own" };
 
-  /* ---------- parts ---------- */
+  /* ---------- parts for the globe's little IDs ---------- */
   const PP = '<span class="pp"><span class="a">Pay</span><span class="b">Pal</span></span>';
   const LOGO = '<span class="logo"><svg><use href="#mk"/></svg>Courier</span>';
   const CK =
     '<span class="ck"><svg viewBox="0 0 12 12"><path d="M2.5 6.2 5 8.6l4.6-5" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>';
-  const MAYA =
-    '<span class="av" aria-hidden="true"><svg viewBox="0 0 20 20"><rect width="20" height="20" fill="#FFC629"/><circle cx="10" cy="8" r="3.6" fill="#141414"/><path d="M3.2 20c.6-4.4 3.3-6.6 6.8-6.6s6.2 2.2 6.8 6.6z" fill="#141414"/></svg></span>';
-  const VT = `<span class="vt">${CK}Verified by ${PP}</span>`;
   /* each courier's own colour: ac band, at text on band, as slash, ad deep (lines/dots), al light tint */
   const COL = {
-    green: { ac: "#0A7A4A", at: "#FFFFFF", as: "#D6FF2E", ad: "#0A7A4A", al: "#D5EEDF" },
     cobalt: { ac: "#3D3AF5", at: "#FFFFFF", as: "#D6FF2E", ad: "#3D3AF5", al: "#DEDDFF" },
-    lilac: { ac: "#B7A3FF", at: "#141414", as: "#FFFFFF", ad: "#6A4FE0", al: "#ECE6FF" },
     tang: { ac: "#FF6B2C", at: "#141414", as: "#FFFFFF", ad: "#E85A1C", al: "#FFE2D2" },
     ink: { ac: "#141414", at: "#FFFFFF", as: "#D6FF2E", ad: "#141414", al: "#E8E6E1" },
     hivis: { ac: "#D6FF2E", at: "#141414", as: "#141414", ad: "#7FA300", al: "#EFFFC0" },
     cab: { ac: "#FFC629", at: "#141414", as: "#FFFFFF", ad: "#D69C00", al: "#FFF1C4" },
   };
-  const cv = (k) => {
+  const colourVars = (k) => {
     const c = COL[k];
     return `--ac:${c.ac};--at:${c.at};--as:${c.as};--ad:${c.ad};--al:${c.al}`;
   };
-  const AG = {
-    juno: {
-      n: "Juno",
-      L: "J",
-      c: "cobalt",
-      id: "CR-7Q3F-JR",
-      on: "runs on <b>Claude</b>",
-      pc: "#141414",
-      lc: "#FFFFFF",
-      sh: '<circle cx="68" cy="34" r="24" fill="#D6FF2E"/>',
-    },
-    otto: {
-      n: "Otto",
-      L: "O",
-      c: "tang",
-      id: "CR-2M8K-OT",
-      on: "runs on <b>ChatGPT</b>",
-      pc: "#FFC629",
-      lc: "#141414",
-      sh: '<rect x="48" y="12" width="40" height="20" rx="10" fill="#141414"/><rect x="48" y="38" width="40" height="20" rx="10" fill="#141414"/>',
-    },
-    mika: {
-      n: "Mika",
-      L: "M",
-      c: "ink",
-      id: "CR-9X4D-MK",
-      on: "runs on <b>Llama</b>",
-      pc: "#3D3AF5",
-      lc: "#F2EFE9",
-      sh: '<path d="M90 10 90 56 48 10z" fill="#D6FF2E"/>',
-    },
-    remy: {
-      n: "Rémy",
-      L: "R",
-      c: "hivis",
-      id: "CR-5H1V-RM",
-      on: "runs on <b>Mistral</b>",
-      pc: "#E8352A",
-      lc: "#141414",
-      sh: '<path d="M46 12a22 22 0 0 0 44 0z" fill="#FFFFFF"/><circle cx="82" cy="58" r="7" fill="#FFC629"/>',
-    },
-  };
-  const HELP = [
-    { n: "Price Scout", id: "JR/1", can: "Compares prices", cant: "can’t buy" },
-    { n: "Stock Checker", id: "JR/2", can: "Checks stock", cant: "can’t buy" },
-  ];
   const pt = (a) =>
     `<span class="pt" style="--pc:${a.pc};--lc:${a.lc}" aria-hidden="true"><svg viewBox="0 0 100 100">${a.sh}</svg><b>${a.L}</b></span>`;
-  function card(a) {
-    return `<div class="idc cc" style="${cv(a.c)}" role="img" aria-label="Courier ID: ${a.n}, ${a.on.replace(/<[^>]+>/g, "")}, ${a.id}, sent by Maya Chen, verified by PayPal">
-      <div class="band">${LOGO}</div>
-      <div class="bd">${pt(a)}<div class="dt"><div class="nm">${a.n}</div><div class="on">${a.on}</div><div class="idn">${a.id}</div></div></div>
-      <div class="ft"><span class="chip">${MAYA}Sent by <b>Maya Chen</b></span>${VT}</div>
-    </div>`;
-  }
-  /* Juno + two helper tags, tethered. Units: 1em = 10 svg units. */
-  const RVP = '<span class="rvp"><i></i>Revoked</span>';
-  function fam(revoke) {
-    const helper = (
-      h,
-      i,
-    ) => `<div class="hlp h${i + 1}" role="img" aria-label="Juno's helper: ${h.n}, ${h.can.toLowerCase()}, ${h.cant}">
-        <div class="hb">${pt(AG.juno)}Juno’s helper</div>
-        <b class="hn">${h.n}</b>
-        <div class="hs"><span><b>${h.can}</b> · <s>${h.cant}</s></span><span class="mono">${h.id}</span></div>
-        ${revoke ? RVP : ""}
-      </div>`;
-    return `<div class="fam cc" style="${cv(AG.juno.c)}">
-      <svg class="tether" viewBox="0 0 620 270" aria-hidden="true">
-        <path pathLength="1" d="M272 133 C 322 133 322 64 372 64"/>
-        <path pathLength="1" d="M272 133 C 322 133 322 208 372 208"/>
-        <rect class="clip" x="263" y="121" width="16" height="24" rx="6"/>
-      </svg>
-      <div class="pj">${card(AG.juno)}${revoke ? RVP : ""}</div>
-      ${HELP.map(helper).join("")}
-    </div>`;
-  }
   const mini = (a) =>
-    `<span class="gci"><span class="mini cc" style="${cv(a.c)}"><span class="mb">${LOGO}</span><span class="mr">${pt(a)}<span><span class="mn">${a.n}</span><span class="mv">${CK}${PP}</span></span></span></span></span>`;
+    `<span class="gci"><span class="mini cc" style="${colourVars(a.c)}"><span class="mb">${LOGO}</span><span class="mr">${pt(a)}<span><span class="mn">${a.n}</span><span class="mv">${CK}${PP}</span></span></span></span></span>`;
 
   /* ---------- halftone (from v4) ---------- */
   function halftone(flip) {
@@ -129,230 +50,6 @@
       }
     return `${s}</g></svg>`;
   }
-  $$(".tex").forEach((t, i) => (t.innerHTML = halftone(i === 1)));
-  // light dot field inside panels (corner fade)
-  {
-    let s = '<svg viewBox="0 0 400 500" preserveAspectRatio="xMaxYMin slice"><g fill="currentColor">';
-    for (let y = 0; y <= 500; y += 16)
-      for (let x = 0; x <= 400; x += 16) {
-        const f = Math.max(0, 1 - Math.hypot(400 - x, y) / 330);
-        const r = 3.6 * f * f;
-        if (r > 0.4) s += `<circle cx="${x}" cy="${y}" r="${r.toFixed(2)}"/>`;
-      }
-    s += "</g></svg>";
-    $$(".dots").forEach((d) => (d.innerHTML = s));
-  }
-
-  /* ---------- build ---------- */
-  const DECK = ["juno", "otto", "mika", "remy"];
-  $("#deck").innerHTML =
-    `<span class="disc" aria-hidden="true"></span>${DECK.map((k) => `<div class="dc">${card(AG[k])}</div>`).join("")}`;
-
-  $("#note").innerHTML =
-    `<div class="note" role="img" aria-label="Errand for Juno: Juniper Records, jazz records for my dad, 60 dollars max, back by tomorrow, Continue with PayPal">
-    <span class="tape"></span>
-    <div class="nhd">${pt(AG.juno)}Errand for Juno</div>
-    <div class="nshop">Juniper Records</div>
-    <div class="nask">Jazz records for my dad</div>
-    <div class="nrow"><div class="nchip"><small>Max</small><b>$60</b></div><div class="nchip"><small>Back by</small><b>Tomorrow</b></div></div>
-    <div class="ppb" aria-hidden="true">Continue with ${PP}</div>
-  </div>`;
-
-  $("#phone").innerHTML = `<div class="phone" role="group" aria-label="Approval text from Courier">
-    <div class="scr"><span class="island"></span>
-      <div class="sbar"><span>16:19</span><span class="ic"><i style="height:.45em"></i><i style="height:.65em"></i><i style="height:.85em"></i><i style="height:1.05em"></i></span></div>
-      <div class="clk">16:19</div><div class="dte">Sunday, 25 October</div>
-      <div class="notif">
-        <div class="nh">${LOGO}</div>
-        <div class="nwho">${pt(AG.juno)}Juno asks</div>
-        <div class="nq">Studio headphones, $89?</div>
-        <div class="ns">Over your $60.</div>
-        <div class="acts"><button type="button" class="ap">Approve</button><button type="button" class="dn">Deny</button></div>
-      </div>
-    </div></div>`;
-
-  $("#rcpt").innerHTML = `<div class="lift"><div class="rcpt zz" role="group" aria-label="Juniper Records receipt">
-    <div class="rh"><b>Juniper Records</b><span class="mono">#4471</span></div>
-    <div class="ramt"><b>$28.00</b><span>paid</span></div>
-    <div class="ragent">${pt(AG.juno)}<div><b>Juno</b><span class="mono">${AG.juno.id}</span></div></div>
-    <div class="rwho">${MAYA}<div><b>Sent by a real person</b><br>${VT}</div></div>
-  </div></div>`;
-
-  $("#crew").innerHTML = fam(false);
-  $("#rvk").innerHTML = `<div class="tog" aria-hidden="true">${pt(AG.juno)}<span>Juno</span><i></i></div>${fam(true)}`;
-
-  /* ---------- the gift (slides 4–6) ---------- */
-  {
-    const LEO = MAYA.replace("#FFC629", "#D6FF2E");
-    const OK =
-      '<span class="okc" aria-hidden="true"><svg viewBox="0 0 12 12"><path d="M2.5 6.2 5 8.6l4.6-5" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>';
-    const J = AG.juno,
-      O = AG.otto;
-
-    /* 4 · the gift, two couriers joining it */
-    const gid = (
-      a,
-      who,
-    ) => `<div class="gid cc" style="${cv(a.c)}" role="img" aria-label="Courier ID: ${a.n}, for ${who}, ${a.id}, verified by PayPal">
-        <div class="mb">${LOGO}</div>
-        <div class="mr">${pt(a)}<div class="mt"><b>${a.n}</b><span>for <b>${who}</b></span></div></div>
-        <div class="mf"><span class="mono">${a.id}</span><span class="vt">${CK}${PP}</span></div>
-      </div>`;
-    /* box set art: two sleeves behind, one record sliding out */
-    const ART = `<svg viewBox="0 0 360 150" preserveAspectRatio="xMidYMid meet" aria-hidden="true">
-        <rect x="114" y="10" width="112" height="112" rx="5" fill="#FF6B2C"/>
-        <rect x="104" y="18" width="112" height="112" rx="5" fill="#3D3AF5"/>
-        <g transform="rotate(-18 238 74)"><circle cx="238" cy="74" r="54" fill="#141414"/>
-          <circle cx="238" cy="74" r="40" fill="none" stroke="#2E2E2E" stroke-width="1.4"/>
-          <circle cx="238" cy="74" r="17" fill="#FFC629"/><circle cx="238" cy="74" r="2.6" fill="#F2EFE9"/></g>
-        <rect x="94" y="26" width="112" height="112" rx="5" fill="#141414"/>
-        <circle cx="150" cy="82" r="32" fill="#D6FF2E"/>
-        <rect x="106" y="118" width="44" height="7" rx="3.5" fill="#F2EFE9"/>
-      </svg>`;
-    $("#gbuy").innerHTML = `<div class="duo">
-        <div class="prod" role="group" aria-label="Late Night Jazz, 5-LP box set from Juniper Records, 120 dollars, a gift for Dad">
-          <div class="art">${ART}</div>
-          <div class="ph"><div><b>Late Night Jazz</b><span>5-LP box set · Juniper Records</span></div><span class="pr">$120</span></div>
-          <span class="gtag"><span>For Dad</span></span>
-        </div>
-        <div class="pair">${gid(J, "Maya")}${gid(O, "Leo")}</div>
-      </div>`;
-
-    /* 5 · the Run chat, then Maya's approval */
-    const msg = (a, t) =>
-      `<div class="msg cc" style="${cv(a.c)}">${pt(a)}<div><small>${a.n}</small><p>${t}</p></div></div>`;
-    $("#grun").innerHTML = `<div class="run">
-        <div class="thr" role="group" aria-label="Couriers' chat for Dad's gift">
-          <div class="thd">Dad’s gift</div>
-          ${msg(O, "Leo is $10 short.")}
-          ${msg(J, "Asking Maya.")}
-        </div>
-        <div class="gnote" role="group" aria-label="Approval request on Maya's phone">
-          <div class="nh">${LOGO}</div>
-          <div class="nwho">${pt(J)}Juno asks</div>
-          <div class="nq">Cover $10 more for Dad’s gift?</div>
-          <div class="nsub">Still within your $70.</div>
-          <div class="acts"><button type="button" class="ap">Approve</button><button type="button" class="dn">Deny</button></div>
-        </div>
-      </div>`;
-
-    /* 6 · one receipt, two people */
-    const row = (av, who, amt, d) =>
-      `<div class="rrow" style="--d:${d}s">${av}<div><b>${who}</b><span class="vt">${CK}Paid with ${PP}</span></div><span class="amt">${amt}</span></div>`;
-    $("#grcpt").innerHTML =
-      `<div class="lift"><div class="rcpt zz" role="group" aria-label="Juniper Records receipt: Late Night Jazz box set, 120 dollars paid; Maya 70 dollars and Leo 50 dollars, both paid with PayPal; 1 order, 2 verified people">
-        <div class="rh"><b>Juniper Records</b><span class="mono">#4502</span></div>
-        <div class="ritem">Late Night Jazz box set</div>
-        <div class="ramt"><b>$120.00</b><span>paid</span></div>
-        ${row(MAYA, "Maya", "$70", 0.7)}
-        ${row(LEO, "Leo", "$50", 1)}
-        <div class="rfoot">${OK}<span><b>1 order</b> · 2 verified people</span></div>
-      </div></div>`;
-  }
-
-  {
-    const F = [
-      ["otto", "6%", "16%", "-8deg", "0s"],
-      ["mika", "80%", "13%", "7deg", "-1.5s"],
-      ["remy", "10%", "58%", "6deg", "-3s"],
-      ["juno", "78%", "56%", "-6deg", "-2.2s"],
-    ];
-    $("#floaters").innerHTML = F.map(
-      ([k, x, y, r, ad]) => `<span class="gc" style="left:${x};top:${y};rotate:${r};--ad:${ad}">${mini(AG[k])}</span>`,
-    ).join("");
-  }
-
-  /* ---------- phone buttons ---------- */
-  document.addEventListener("click", (e) => {
-    const b = e.target.closest(".acts button");
-    if (!b) return;
-    const v = b.classList.contains("ap") ? "ok" : "no",
-      p = b.closest(".phone, .gnote");
-    const same = p.dataset.v === v;
-    if (same) delete p.dataset.v;
-    else p.dataset.v = v;
-    p.querySelector(".ap").textContent = !same && v === "ok" ? "Approved ✓" : "Approve";
-    p.querySelector(".dn").textContent = !same && v === "no" ? "Denied" : "Deny";
-  });
-
-  /* ---------- hero deck shuffle ---------- */
-  const deck = (() => {
-    const els = $$("#deck .dc");
-    const POS = [
-      { x: 0, y: 0, r: -4, s: 1, o: 1 },
-      { x: 3.4, y: -3.4, r: 3, s: 0.95, o: 1 },
-      { x: 6.6, y: -6.6, r: 9, s: 0.9, o: 1 },
-      { x: 9.2, y: -9.4, r: 15, s: 0.85, o: 0 },
-    ];
-    const OUT = "translate(-1.2em,1.6em) rotate(-6deg) scale(.97)"; // fade out where it sits
-    const tf = (p) => `translate(${p.x}em,${p.y}em) rotate(${p.r}deg) scale(${p.s})`;
-    let order = els.map((_, i) => i),
-      timer = null,
-      hover = false,
-      busy = false;
-    function place() {
-      order.forEach((ci, pos) => {
-        const el = els[ci],
-          p = POS[pos];
-        el.style.zIndex = 10 - pos;
-        el.style.transform = tf(p);
-        el.style.opacity = p.o;
-        el.classList.toggle("bk", pos > 0);
-      });
-    }
-    function step() {
-      if (hover || busy || document.hidden) return;
-      busy = true;
-      const front = order.shift(),
-        el = els[front];
-      el.classList.add("out");
-      el.style.zIndex = 20;
-      el.style.transform = OUT;
-      el.style.opacity = 0;
-      order.forEach((ci, pos) => {
-        const e = els[ci],
-          p = POS[pos];
-        e.style.zIndex = 10 - pos;
-        e.style.transform = tf(p);
-        e.style.opacity = p.o;
-        e.classList.toggle("bk", pos > 0);
-      });
-      setTimeout(() => {
-        // jump, invisible, to the back slot; it fades in there on a later step
-        order.push(front);
-        el.classList.remove("out");
-        el.classList.add("tuck", "bk");
-        el.style.zIndex = 5;
-        el.style.transform = tf(POS[3]);
-        el.style.opacity = 0;
-        requestAnimationFrame(() =>
-          requestAnimationFrame(() => {
-            el.classList.remove("tuck");
-            busy = false;
-          }),
-        );
-      }, 260);
-    }
-    const box = $("#deck");
-    box.addEventListener("mouseenter", () => (hover = true));
-    box.addEventListener("mouseleave", () => (hover = false));
-    function set(mode) {
-      clearTimeout(timer);
-      clearInterval(timer);
-      timer = null;
-      if (mode === "shuffle" && !reduce) {
-        timer = setTimeout(() => {
-          step();
-          timer = setInterval(step, 2200);
-        }, 2000);
-      } else {
-        order = els.map((_, i) => i);
-        place();
-      }
-    }
-    place();
-    return { set };
-  })();
 
   /* ---------- dotted globe ---------- */
   const globe = (() => {
@@ -606,79 +303,236 @@
     return { start, stop, still, redraw };
   })();
 
-  /* ---------- play sections on view ---------- */
-  const secs = $$(".sec");
-  function play(sec) {
-    if (!sec.classList.contains("play")) sec.classList.add("play");
-  }
-  if (reduce || !("IntersectionObserver" in window)) secs.forEach(play);
-  else {
-    const io = new IntersectionObserver(
-      (es) =>
-        es.forEach((e) => {
-          if (e.isIntersecting) {
-            play(e.target);
-            io.unobserve(e.target);
-          }
-        }),
-      { rootMargin: "0px 0px -18% 0px", threshold: 0 },
-    );
-    secs.forEach((s) => io.observe(s));
-  }
-  /* Cards arrive one at a time, whether they're on screen together or stacked on a phone. */
-  const cards = $$(".pcol");
-  if (reduce || !("IntersectionObserver" in window)) cards.forEach((c) => c.classList.add("in"));
-  else {
-    const queue = [];
-    let busy = false;
-    const next = () => {
-      const c = queue.shift();
-      busy = !!c;
-      if (!c) return;
-      c.classList.add("in");
-      setTimeout(next, 1000);
-    };
-    const io = new IntersectionObserver(
-      (es) => {
-        for (const e of es) {
-          if (!e.isIntersecting) continue;
-          queue.push(e.target);
-          io.unobserve(e.target);
-        }
-        if (!busy) next();
-      },
-      { rootMargin: "0px 0px -18% 0px", threshold: 0 },
-    );
-    cards.forEach((c) => io.observe(c));
-  }
-  if (reduce) globe.still();
-  else if ("IntersectionObserver" in window) {
-    new IntersectionObserver((es) => es.forEach((e) => (e.isIntersecting ? globe.start() : globe.stop())), {
-      threshold: 0.02,
-    }).observe(secs[1]);
-  } else globe.start();
+  /* ---------- the story ---------- */
+  const narrow = () => innerWidth <= 760;
+  /* Tracks are [progress, value] pairs. y: 0 hanging in frame, 1 above it. turn: degrees. x: % of stage width.
+     Phones hold one extra stop, because two readable backs don't fit side by side there. */
+  const WIDE = {
+    stops: [0, 1, 2, 3, 4],
+    juno: {
+      y: [
+        [0, 0],
+        [0.7, 1],
+        [1.2, 1],
+        [1.7, 0],
+        [2.2, 0],
+        [2.7, 1],
+      ],
+      turn: [
+        [1.65, 0],
+        [2, 180],
+      ],
+      x: [[0, 69]],
+      s: [[0, 1.4]],
+    },
+    "juno-gift": {
+      y: [
+        [2.3, 1],
+        [3, 0],
+      ],
+      turn: [
+        [3.45, 180],
+        [3.95, 0],
+      ],
+      x: [[0, 57]],
+      s: [
+        [3.45, 1.2],
+        [3.95, 1],
+      ],
+    },
+    otto: {
+      y: [
+        [2.4, 1],
+        [3, 0],
+      ],
+      turn: [
+        [3.45, 180],
+        [3.95, 0],
+      ],
+      x: [
+        [3.45, 81],
+        [3.95, 90],
+      ],
+      s: [
+        [3.45, 1.2],
+        [3.95, 1],
+      ],
+    },
+    mika: {
+      y: [
+        [3.35, 1],
+        [3.95, 0],
+      ],
+      turn: [[0, 0]],
+      x: [[0, 73.5]],
+      s: [[0, 1]],
+    },
+  };
+  const NARROW = {
+    stops: [0, 1, 2, 3, 3.5, 4],
+    juno: {
+      y: [
+        [0, 0],
+        [0.7, 1],
+        [1.2, 1],
+        [1.7, 0],
+        [2.2, 0],
+        [2.7, 1],
+      ],
+      turn: [
+        [1.65, 0],
+        [2, 180],
+      ],
+      x: [[0, 50]],
+      s: [[0, 1.42]],
+    },
+    "juno-gift": {
+      y: [
+        [2.3, 1],
+        [3, 0],
+        [3.1, 0],
+        [3.4, 1],
+        [3.6, 1],
+        [3.95, 0],
+      ],
+      turn: [
+        [3.5, 180],
+        [3.6, 0],
+      ],
+      x: [
+        [3.5, 50],
+        [3.6, 18],
+      ],
+      s: [
+        [3.5, 1.42],
+        [3.6, 0.74],
+      ],
+    },
+    otto: {
+      y: [
+        [3.1, 1],
+        [3.5, 0],
+      ],
+      turn: [
+        [3.65, 180],
+        [3.95, 0],
+      ],
+      x: [
+        [3.65, 50],
+        [3.95, 82],
+      ],
+      s: [
+        [3.65, 1.42],
+        [3.95, 0.74],
+      ],
+    },
+    mika: {
+      y: [
+        [3.6, 1],
+        [3.95, 0],
+      ],
+      turn: [[0, 0]],
+      x: [[0, 50]],
+      s: [[0, 0.74]],
+    },
+  };
+  const track = (t, p) => {
+    if (p <= t[0][0]) return t[0][1];
+    for (let i = 1; i < t.length; i++)
+      if (p <= t[i][0])
+        return t[i - 1][1] + (t[i][1] - t[i - 1][1]) * smooth((p - t[i - 1][0]) / (t[i][0] - t[i - 1][0]));
+    return t[t.length - 1][1];
+  };
 
-  /* ---------- boot ---------- */
-  /* ?beat=N renders the page starting at section N (earlier ones hidden) for headless screenshots.
-     The first wheel/touch/key restores the full page there. */
-  const forced = qs.has("beat") ? clamp(parseInt(qs.get("beat"), 10) || 0, 0, secs.length - 1) : 0;
-  let pinned = forced > 0;
-  function unpin() {
-    if (!pinned) return;
-    pinned = false;
-    ["wheel", "touchstart", "keydown"].forEach((t) => removeEventListener(t, unpin, true));
-    secs.forEach((s) => s.classList.remove("pin-hide"));
-    scrollTo({ top: secs[forced].getBoundingClientRect().top + scrollY, behavior: "auto" });
+  const stage = $("#stage"),
+    story = $("#story");
+  const parts = $$(".tx, #globe").map((el) => ({ el, k: +el.dataset.k }));
+  const bgs = $$(".bg").map((el) => ({ el, k: +el.dataset.k }));
+  const hangs = $$(".hg").map((el, i) => ({
+    el,
+    key: el.dataset.b,
+    turn: el.querySelector(".turn"),
+    drops: el.dataset.b === "juno",
+    lean: i % 2 ? 1 : -1,
+    angle: 0,
+    speed: 0,
+    lastY: null,
+  }));
+  $$(".tex").forEach((t, i) => (t.innerHTML = halftone(i === 1)));
+
+  /* Each chapter holds still for its first stretch of scrolling, then eases into the next, so the words can be read. */
+  function progress(stops) {
+    const max = story.offsetHeight - stage.offsetHeight;
+    const x = clamp(max > 0 ? scrollY / max : 0, 0, 1) * (stops.length - 1);
+    const i = Math.min(Math.floor(x), stops.length - 2);
+    const t = Math.max(0, (x - i - 0.3) / 0.7);
+    return stops[i] + (stops[i + 1] - stops[i]) * smooth(t);
   }
-  if (pinned) {
-    secs.forEach((s, k) => s.classList.toggle("pin-hide", k < forced));
-    ["wheel", "touchstart", "keydown"].forEach((t) => addEventListener(t, unpin, { capture: true, passive: true }));
+
+  const forced = qs.has("beat") ? clamp(parseInt(qs.get("beat"), 10) || 0, 0, 4) : 0;
+  let born = reduce || forced ? -1e5 : performance.now(),
+    lastScroll = scrollY,
+    globeOn = false;
+
+  function frame(now) {
+    const plan = narrow() ? NARROW : WIDE;
+    const p = progress(plan.stops);
+    const H = stage.offsetHeight,
+      W = stage.offsetWidth;
+    const scrolled = clamp(scrollY - lastScroll, -90, 90);
+    lastScroll = scrollY;
+
+    for (const { el, k } of parts) {
+      /* Narrow screens keep chapter 3 on through their extra stop. */
+      const hi = k === 3 && narrow() ? 3.5 : k;
+      const off = Math.max(0, k - p, p - hi);
+      const o = clamp(1 - off * 3, 0, 1);
+      el.style.opacity = o;
+      el.style.visibility = o ? "visible" : "hidden";
+      el.style.transform = `translateY(${((p < k ? 1 : p > hi ? -1 : 0) * off * H * 0.14).toFixed(1)}px)`;
+    }
+    for (const { el, k } of bgs) el.style.opacity = clamp((p - k + 1) * 2, 0, 1);
+
+    for (const h of hangs) {
+      const plan1 = plan[h.key];
+      const t = (now - born) / 1000;
+      /* The fall on load: a damped drop, so it lands with a little bounce. Only the first badge makes it. */
+      const drop = !h.drops || t > 3 ? 0 : Math.exp(-4.5 * t) * Math.cos(7 * t);
+      const y = clamp(track(plan1.y, p), 0, 1) + drop;
+      const top = -y * H * 1.2;
+      if (h.lastY === null) h.lastY = top;
+      const fell = clamp(top - h.lastY, -120, 120);
+      h.lastY = top;
+      if (reduce) h.angle = 0;
+      else {
+        /* Swings on how fast it actually moved, then settles. */
+        h.speed = (h.speed + (fell + scrolled * 0.5) * 0.006 * h.lean - h.angle * 0.04) * 0.93;
+        h.angle += h.speed;
+      }
+      const turn = track(plan1.turn, p);
+      const s = track(plan1.s, p);
+      const x = (track(plan1.x, p) / 100) * W;
+      h.el.style.visibility = y >= 0.99 ? "hidden" : "visible";
+      h.el.style.transform = `translate3d(${x.toFixed(1)}px,${top.toFixed(1)}px,0) translateX(-50%) rotate(${h.angle.toFixed(2)}deg) scale(${s.toFixed(3)})`;
+      h.turn.style.transform = `rotateY(${turn.toFixed(1)}deg)`;
+      h.el.classList.toggle("on", turn > 150 && y < 0.1);
+    }
+
+    const showGlobe = p > 0.4 && p < 1.6;
+    if (showGlobe !== globeOn) {
+      globeOn = showGlobe;
+      if (reduce) showGlobe && globe.still();
+      else showGlobe ? globe.start() : globe.stop();
+    }
+    requestAnimationFrame(frame);
   }
-  deck.set("shuffle");
-  requestAnimationFrame(() =>
-    requestAnimationFrame(() => {
-      play(secs[forced]);
-      if (!pinned) play(secs[0]);
-    }),
-  );
+
+  /* ?beat=N opens the page on chapter N, for screenshots. */
+  if (forced) {
+    const stops = (narrow() ? NARROW : WIDE).stops;
+    const i = stops.indexOf(forced);
+    scrollTo(0, (story.offsetHeight - stage.offsetHeight) * (i / (stops.length - 1)));
+  }
+  lastScroll = scrollY;
+  requestAnimationFrame(frame);
 })();
