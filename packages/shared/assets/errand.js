@@ -16,7 +16,6 @@
       (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c],
     );
   const usd = (cents) => `$${(cents / 100).toFixed(2).replace(/\.00$/, "")}`;
-  const AMOUNTS = ["$15", "$25", "$50", "$100"];
 
   let chat = boot.chat;
   let list = boot.list;
@@ -222,17 +221,14 @@
   }
 
   function drawSugs() {
-    if (chat.working || left <= 0) {
-      sugs.hidden = true;
-      return;
-    }
+    // Ideas are for an empty chat. After that the only suggestions are answers to what the courier just asked.
+    const fresh = !chat.events.length;
+    sugs.hidden = chat.working || left <= 0 || !(fresh || chat.confirm);
+    if (sugs.hidden) return;
     sugs.innerHTML = chat.confirm
       ? `<button type="button" class="several" data-say="Go ahead">Go ahead</button><button type="button" data-say="No thanks">No thanks</button>`
-      : chat.amounts
-        ? AMOUNTS.map((a) => `<button type="button" class="amt" data-say="${a}">${a}</button>`).join("")
-        : boot.ideas.map((i) => `<button type="button" data-say="${esc(i)}">${esc(i)}</button>`).join("") +
-          `<button type="button" class="several" data-say="${esc(boot.several.say)}">${esc(boot.several.label)}</button>`;
-    sugs.hidden = false;
+      : boot.ideas.map((i) => `<button type="button" data-say="${esc(i)}">${esc(i)}</button>`).join("") +
+        `<button type="button" class="several" data-say="${esc(boot.several.say)}">${esc(boot.several.label)}</button>`;
   }
 
   function draw() {

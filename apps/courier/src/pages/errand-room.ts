@@ -6,10 +6,10 @@ import { courierLook, firstName } from "./shared.ts";
 
 /* ---------------- the errand room ---------------- */
 
-/** Ideas to start from. One for each kind of shop, so the first errand shows a courier isn't tied to one. */
-export const ERRAND_IDEAS = ["A burger", "Flowers for my mum", "A good novel", "Running shoes", "Jazz on vinyl"];
+/** Ideas to start from, each at a different kind of shop and asked a different way, so a first errand shows the range. */
+export const ERRAND_IDEAS = ["A burger and fries", "Flowers for my mum, under $30", "Surprise me with a good novel"];
 /** One errand can cover several things: the courier sends a helper for each. */
-const SEVERAL = { label: "Several things at once", say: "A burger, flowers and a good novel, budget $60" };
+const SEVERAL = { label: "Several things at once", say: "A burger, flowers and a good novel, you choose, budget $60" };
 
 export function errandRoom(d: Desk, courier: Courier, chat: unknown, list: unknown): string {
   const look = courierLook(d.human, courier);
