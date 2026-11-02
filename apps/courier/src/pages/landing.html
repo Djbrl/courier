@@ -5,10 +5,54 @@
   </defs>
 </svg>
 
-<main>
-  <!-- 0 · hero -->
-  <section class="sec hero" data-k="0">
+<main class="story" id="story">
+  <div class="anchor" id="how"></div>
+  <div class="stage" id="stage">
     <div class="tex"></div>
+    <div class="bg" data-k="1" style="background:var(--cab)"></div>
+    <div class="bg" data-k="2" style="background:#b7a3ff"></div>
+    <div class="bg" data-k="3" style="background:#ff6b2c"></div>
+    <div class="bg" data-k="4" style="background:#fff"><div class="tex"></div></div>
+
+    <div class="globe" id="globe" data-k="1" role="img" aria-label="A rotating dotted globe; agents light up and show their Courier ID">
+      <canvas aria-hidden="true"></canvas><div class="gchips"></div>
+    </div>
+
+    <section class="tx" data-k="0">
+      <h1 class="big">Give your agent an&nbsp;ID.</h1>
+      <p class="lead">PayPal verifies you. Your agent gets its own&nbsp;ID.</p>
+      <div class="ctas">
+        <a href="/start" class="btn acc">Try the demo<span class="go"><svg><use href="#arr"/></svg></span></a>
+        <span class="ppl">Powered by <span class="pp"><span class="a">Pay</span><span class="b">Pal</span></span></span>
+      </div>
+    </section>
+
+    <section class="tx" data-k="1">
+      <h2 class="big">Agents can buy now, so we’re turning them into&nbsp;couriers.</h2>
+      <p class="lead">A courier works for someone and carries proof of it. Yours carries an ID tied to you, so shops know a real person sent it without seeing your name, and it only spends what you&nbsp;allow.</p>
+      <div class="stat"><b>51%</b><span>of web traffic is now automated<small>Imperva Bad Bot Report 2025</small></span></div>
+    </section>
+
+    <section class="tx" data-k="2">
+      <h2 class="big">Your limits are written on the&nbsp;back.</h2>
+      <p class="lead">Cap the budget, cap each purchase and set a time limit, and your courier asks you before anything off the errand. You can call it back any&nbsp;time.</p>
+    </section>
+
+    <section class="tx" data-k="3">
+      <h2 class="big">Some gifts are easier to buy&nbsp;together.</h2>
+      <p class="lead">Couriers can team up on one order and work out who pays what, while each one still answers only to the person who sent&nbsp;it.</p>
+    </section>
+
+    <section class="tx" data-k="4">
+      <h2 class="big end">Now give yours an&nbsp;ID.</h2>
+      <div class="ctas">
+        <a href="/start" class="btn acc">Try the demo<span class="go"><svg><use href="#arr"/></svg></span></a>
+        <a href="/developers" class="btn ghost">Add to Claude</a>
+      </div>
+    </section>
+
+    <div class="rig" id="rig">{{badges}}</div>
+
     <nav class="nav">
       <a href="/" class="logo" aria-label="Courier"><svg><use href="#mk"/></svg>Courier</a>
       <div class="nlinks">
@@ -17,124 +61,12 @@
         {{navAccount}}
       </div>
     </nav>
-    <div class="wrap">
-      <div class="txt">
-        <h1 class="big rv">Give your agent an&nbsp;ID.</h1>
-        <p class="lead rv" style="--d:.1s">PayPal verifies you. Your agent gets its own&nbsp;ID.</p>
-        <div class="ctas rv" style="--d:.2s">
-          <a href="/start" class="btn acc">Try the demo<span class="go"><svg><use href="#arr"/></svg></span></a>
-          <span class="ppl">Powered by <span class="pp"><span class="a">Pay</span><span class="b">Pal</span></span></span>
-        </div>
-      </div>
-      <div class="deck" id="deck" role="img" aria-label="Courier IDs for four agents, all sent by Maya Chen"></div>
-    </div>
-  </section>
-
-  <!-- 1 · why trust -->
-  <section class="sec s1" data-k="1">
-    <div class="wrap">
-      <div class="txt">
-        <h2 class="big rv" style="--d:.05s">Agents can buy now, so we’re turning them into&nbsp;couriers.</h2>
-        <p class="lead rv" style="--d:.12s">A courier works for someone and carries proof of it. Yours carries an ID tied to you, so shops know a real person sent it without seeing your name, and it only spends what you&nbsp;allow.</p>
-        <div class="stat rv" style="--d:.22s"><b>51%</b><span>of web traffic is now automated<small>Imperva Bad Bot Report 2025</small></span></div>
-      </div>
-      <div class="globe" id="globe" role="img" aria-label="A rotating dotted globe; agents light up and show their Courier ID">
-        <canvas aria-hidden="true"></canvas><div class="gchips"></div>
-      </div>
-    </div>
-  </section>
-
-  <!-- 2 · the first errand -->
-  <section class="sec s2" data-k="2" id="demo">
-    <div class="wrap">
-      <div class="shead">
-        <div><h2 class="big rv" style="--d:.05s">Say you need a record for your&nbsp;dad.</h2></div>
-      </div>
-      <div class="grid3">
-        <div class="pcol">
-          <div class="panel g"><div class="dots"></div><span class="num">1</span><div class="pm n" id="note"></div></div>
-          <div class="cap"><p>You tell Juno what you’re after and how much it can spend, and it heads off to the shop with that in&nbsp;writing.</p></div>
-        </div>
-        <div class="pcol">
-          <div class="panel o"><div class="dots"></div><span class="num">2</span><div class="pm p" id="phone"></div></div>
-          <div class="cap"><p>If Juno finds something over your limit, like $89 headphones on a $60 budget, it texts you and waits for your&nbsp;answer.</p></div>
-        </div>
-        <div class="pcol">
-          <div class="panel h"><div class="dots"></div><span class="num">3</span><div class="pm rc" id="rcpt"></div></div>
-          <div class="cap"><p>When Juno buys that $28 record, the shop can see a PayPal-verified person sent it, and you get the&nbsp;receipt.</p></div>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- 3 · control -->
-  <section class="sec s3" data-k="3">
-    <div class="wrap">
-      <div class="shead">
-        <div><h2 class="big rv" style="--d:.05s">You’re still in charge once it’s out the&nbsp;door.</h2></div>
-      </div>
-      <div class="grid2">
-        <div class="pcol">
-          <div class="panel c"><div class="dots"></div><div class="pm cw" id="crew"></div></div>
-          <div class="cap"><p>Your courier can bring helpers to compare prices and check stock, but each one carries its own ID and none of them can buy&nbsp;anything.</p></div>
-        </div>
-        <div class="pcol">
-          <div class="panel pa"><div class="dots"></div><div class="pm rk"><div class="rvbox" id="rvk"></div></div></div>
-          <div class="cap"><p>If you change your mind, one tap calls your courier back, and any helpers it brought stop with&nbsp;it.</p></div>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- 4 · the gift -->
-  <section class="sec sl st-gift" data-k="4" id="together">
-    <div class="wrap">
-      <div class="txt">
-        <h2 class="big rv" style="--d:.05s">Some gifts are easier to buy together.</h2>
-        <p class="lead rv" style="--d:.15s">The box set your dad would love costs $120, and your brother Leo has a courier too, so Juno and Otto can team up on&nbsp;it.</p>
-      </div>
-      <div class="stg rv" style="--d:.1s"><div class="dots"></div><div class="sm" id="gbuy"></div></div>
-    </div>
-  </section>
-
-  <!-- 5 · the split (Run chat) -->
-  <section class="sec sl flip st-split" data-k="5">
-    <div class="wrap">
-      <div class="txt">
-        <h2 class="big rv" style="--d:.05s">Your couriers handle the awkward part.</h2>
-        <p class="lead rv" style="--d:.15s">Leo can only put in $50, so Otto tells Juno, and Juno asks you before covering the other&nbsp;$10.</p>
-      </div>
-      <div class="stg co rv" style="--d:.1s"><div class="dots"></div><div class="sm" id="grun"></div></div>
-    </div>
-  </section>
-
-  <!-- 6 · one order -->
-  <section class="sec sl st-paid" data-k="6">
-    <div class="wrap">
-      <div class="txt">
-        <h2 class="big rv" style="--d:.05s">Your dad opens one gift, from both of&nbsp;you.</h2>
-        <p class="lead rv" style="--d:.15s">You each pay your own share with PayPal, and the shop gets one $120 order from two verified&nbsp;people.</p>
-      </div>
-      <div class="stg gr rv" style="--d:.1s"><div class="dots"></div><div class="sm grc" id="grcpt"></div></div>
-    </div>
-  </section>
-
-  <!-- 7 · closing -->
-  <section class="sec s4" data-k="7" id="add">
-    <div class="tex"></div>
-    <div class="floaters" id="floaters" aria-hidden="true"></div>
-    <div class="wrap">
-      <h2 class="big rv">Now give yours an&nbsp;ID.</h2>
-      <div class="ctas rv" style="--d:.12s">
-        <a href="/start" class="btn acc">Try the demo<span class="go"><svg><use href="#arr"/></svg></span></a>
-        <a href="/developers" class="btn ghost">Add to Claude</a>
-        <span class="ppl">Powered by <span class="pp"><span class="a">Pay</span><span class="b">Pal</span></span></span>
-      </div>
-    </div>
-    <footer><div class="w">
-      <span class="logo"><svg><use href="#mk"/></svg>Courier</span>
-      <nav aria-label="Footer"><a href="#demo">How it works</a><a href="{{storeUrl}}/merchant">For shops</a><a href="/developers">Developers</a></nav>
-      <small>Sandbox demo.</small>
-    </div></footer>
-  </section>
+  </div>
 </main>
+
+<footer><div class="w">
+  <span class="logo"><svg><use href="#mk"/></svg>Courier</span>
+  <nav aria-label="Footer"><a href="#how">How it works</a><a href="{{storeUrl}}/merchant">For shops</a><a href="/developers">Developers</a></nav>
+  <span class="ppl">Powered by <span class="pp"><span class="a">Pay</span><span class="b">Pal</span></span></span>
+  <small>Sandbox demo.</small>
+</div></footer>

@@ -13,7 +13,6 @@ import {
   PP,
   paypal,
   paypalButton,
-  portrait,
   type RawHtml,
   raw,
 } from "@courier/shared";
@@ -122,8 +121,7 @@ export function courierSetupPage(
       </div>
       </div>
       <div class="wiz2-r cstage">${dots()}<div class="wiz-id" id="preview"
-          data-vars="${JSON.stringify(Object.fromEntries(COLORS.map((c) => [c, courierVars(c)])))}"
-          data-pts="${JSON.stringify(Object.fromEntries(COLORS.map((c) => [c, portrait({ name: "?", color: c }).value])))}">${idCard({ ...look, name: look.name || "Name" }, you)}</div></div>
+          data-vars="${JSON.stringify(Object.fromEntries(COLORS.map((c) => [c, courierVars(c)])))}">${idCard({ ...look, name: look.name || "Name" }, you)}</div></div>
     </form></main>`,
     { bodyClass: "onb", scripts: ["/assets/onboard.js"] },
   );
