@@ -129,6 +129,13 @@ does, and says nothing more (`planSplit`). Covering for someone, or an item the 
 share is bought with `request_purchase`'s `share`, which starts a group at the shop. Once it's paid, each contact's courier opens
 its own errand and pays its share with that contact's saved PayPal, joining the group. The shop refuses shares that would add up to
 more than the price, and takes stock once, when the last share is paid. The chat ends with one ticket showing who paid what.
+The room and the connector share this (`chip-in.ts`). Through the connector, `list_contacts` gives names, relations and
+couriers, never limits, and `chip_in` always asks first: the first call buys nothing and returns the split with a confirm
+code bound to that exact split (shop, item, price, each share) and this connection, good once for ten minutes. If the price
+or a share has changed, the code doesn't work and the split is offered again. The person's share has to be paid on the spot,
+so `chip_in` needs their saved PayPal and a cap that covers it; otherwise it says so and asks nobody. Contacts are simulated
+people, so they always pay on the simulator, whether the person is on the sandbox or not. No names go into tokens: the
+errands are "A share of …" and "Chip in on …".
 
 **Calling back.** For three minutes after a purchase, or until the person pays or sends another message, they can undo it from the
 payment card, in the room or in Claude. In the room they can also ask for it in words for as long as it's unpaid. The order is cancelled at the shop and its budget freed. Nothing has moved yet at that
