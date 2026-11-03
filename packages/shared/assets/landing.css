@@ -336,6 +336,7 @@ body {
   color: var(--bt);
 }
 .s-revb h3 {
+  position: relative;
   font:
     italic 900 1.7em / 1 "Archivo",
     sans-serif;
@@ -353,9 +354,6 @@ body {
   width: 13em;
   height: 6.5em;
   fill: color-mix(in srgb, var(--bb) 82%, #fff);
-}
-.s-revb h3 {
-  position: relative;
 }
 
 /* the problem */
