@@ -54,6 +54,12 @@ const GLYPHS = {
     `<rect x="16" y="24" width="68" height="52" rx="6" fill="${c.P}"/><circle cx="44" cy="50" r="20" fill="${INK}"/><circle cx="44" cy="50" r="6" fill="${c.L}"/><path d="M74 30v22l-12 9" stroke="${INK}" stroke-width="4" fill="none" stroke-linecap="round"/>`,
   headphones: (c) =>
     `<path d="M27 60v-9a23 23 0 0 1 46 0v9" stroke="${INK}" stroke-width="6" fill="none"/><rect x="20" y="54" width="16" height="24" rx="7" fill="${c.P}"/><rect x="64" y="54" width="16" height="24" rx="7" fill="${c.P}"/><rect x="24" y="60" width="6" height="12" rx="3" fill="${c.L}"/><rect x="70" y="60" width="6" height="12" rx="3" fill="${c.L}"/>`,
+  slipmat: (c) =>
+    `<circle cx="50" cy="50" r="30" fill="${c.D}"/><circle cx="50" cy="50" r="22" fill="none" stroke="${c.L}" stroke-width="2" stroke-dasharray="3 4"/><path d="M50 36c6 4 6 10 0 14-6-4-6-10 0-14z" fill="${c.L}"/><circle cx="50" cy="50" r="3" fill="${PAPER}"/>`,
+  sleeve: (c) =>
+    `<rect x="30" y="20" width="48" height="58" rx="3" fill="${c.L}"/><rect x="22" y="24" width="48" height="58" rx="3" fill="${c.P}"/><circle cx="46" cy="53" r="12" fill="none" stroke="${c.D}" stroke-width="2.5"/><circle cx="46" cy="53" r="3" fill="${c.D}"/>`,
+  stylus: (c) =>
+    `<path d="M24 30h44l10 12H24z" fill="${c.P}"/><rect x="40" y="42" width="20" height="14" rx="3" fill="${INK}"/><path d="M50 56v16" stroke="${c.L}" stroke-width="3.5" stroke-linecap="round"/><circle cx="50" cy="74" r="2.5" fill="${INK}"/>`,
   speaker: (c) =>
     `<rect x="31" y="20" width="38" height="60" rx="9" fill="${INK}"/><circle cx="50" cy="59" r="13" fill="${c.P}"/><circle cx="50" cy="59" r="5" fill="${INK}"/><circle cx="50" cy="35" r="6" fill="${c.L}"/>`,
   note: (c) =>
@@ -344,6 +350,9 @@ const SHOP_GLYPHS: Record<string, Record<string, GlyphName>> = {
 
 /** A closer picture when the title says exactly what it is. */
 const TITLE_GLYPHS: [RegExp, GlyphName][] = [
+  [/slipmat/i, "slipmat"],
+  [/inner sleeves?/i, "sleeve"],
+  [/stylus/i, "stylus"],
   [/burger/i, "burger"],
   [/fries/i, "fries"],
   [/margherita|pizza/i, "pizza"],

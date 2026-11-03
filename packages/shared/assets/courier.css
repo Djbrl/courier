@@ -4900,27 +4900,6 @@ html:has(body.app-page) {
 .capform {
   gap: 4px;
 }
-.shopl {
-  list-style: none;
-  margin: 18px 0;
-  padding: 0;
-  border-top: 1px solid var(--line);
-}
-.shopl li {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 12px 0;
-  border-bottom: 1px solid var(--line);
-}
-.shopl b,
-.shopl small {
-  display: block;
-}
-.shopl small {
-  color: var(--mute);
-}
 
 /* ---------- first run: copy on the left, a courier's ID on the right ---------- */
 /* On rails: nothing in the header leads away from the next step. */
