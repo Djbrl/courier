@@ -5742,3 +5742,87 @@ html:has(body.app-page) {
   justify-content: flex-end;
   gap: 8px;
 }
+
+/* ---------- store: item pictures on the shelf, and demo orders apart on the shop dashboard ---------- */
+/* One block on purpose, so it merges cleanly. Used by apps/store/src/views.ts and art.ts. */
+.shelf-g {
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 16px;
+  margin: 18px 0 26px;
+  padding: 0;
+}
+.shelf-i {
+  display: flex;
+  flex-direction: column;
+  padding: 8px 8px 14px;
+  border-radius: 22px;
+  background: #fff;
+  box-shadow: inset 0 0 0 1.5px var(--line);
+}
+.shelf-cv {
+  display: block;
+  aspect-ratio: 1;
+  margin-bottom: 10px;
+  border-radius: 16px;
+  overflow: hidden;
+}
+.shelf-cv svg,
+.rcpt-items .cv svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.shelf-i b {
+  margin: 0 6px;
+  font-size: 16px;
+  line-height: 1.2;
+}
+.shelf-i small {
+  flex: 1;
+  margin: 3px 6px 0;
+  font-size: 13.5px;
+  color: var(--mute);
+}
+.shelf-i .pr {
+  margin: 10px 6px 0;
+  font:
+    700 15px / 1 "JetBrains Mono",
+    monospace;
+}
+@media (max-width: 560px) {
+  .shelf-g {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+}
+.md-demo {
+  display: inline-block;
+  padding: 2px 7px;
+  border: 1.5px dashed currentColor;
+  border-radius: 99px;
+  font:
+    700 10.5px / 1.2 "JetBrains Mono",
+    monospace;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  vertical-align: 1px;
+  color: var(--soft);
+}
+.md-stats li.md-demo-s {
+  background: #fff;
+  border: 1.5px dashed var(--mute);
+}
+.md-note {
+  max-width: 78ch;
+  font-size: 14.5px;
+  color: var(--soft);
+}
+.md-orders .rows + .md-demo-h {
+  margin-top: 26px;
+}
+.mo-demo .pr {
+  color: var(--mute);
+}
+/* ---------- end store block ---------- */
