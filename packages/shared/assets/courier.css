@@ -3603,6 +3603,8 @@ html:has(body.app-page) {
   max-width: 1360px;
   margin: 0 auto;
   padding: 10px var(--gut) 72px;
+  /* the order card's tilted backing may reach past a phone's edge */
+  overflow-x: clip;
 }
 .fs .big {
   font-size: clamp(44px, 5.4vw, 84px);
@@ -3863,9 +3865,14 @@ html:has(body.app-page) {
 }
 .fs-ip .steps span {
   color: inherit;
-  opacity: 0.8;
 }
 .fs-ip code.copy {
+  background: #fff;
+}
+/* The PayPal wordmark keeps its own colours, so on a bright tile it sits on white to stay readable. */
+.fs-ip .pp {
+  padding: 0.05em 0.35em;
+  border-radius: 0.35em;
   background: #fff;
 }
 .fs-ip .fs-t > :last-child {
