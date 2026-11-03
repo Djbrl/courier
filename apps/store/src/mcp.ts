@@ -30,7 +30,7 @@ import {
   withFreshTicket,
 } from "./auth.ts";
 import { findItem, type Item, searchCatalog, shelfOf } from "./catalog.ts";
-import { db, type Order, type Reservation } from "./db.ts";
+import { db, type Group, type Order, type Reservation } from "./db.ts";
 import { receiptUrl } from "./views.ts";
 
 /* ---------------- helpers ---------------- */
@@ -697,11 +697,21 @@ export function createMcpServer(shop: Shop): McpServer {
         approval_id: z.string().optional().describe("Pass this after the user approved a flagged purchase."),
         note: z.string().max(280).optional().describe("Optional note about why you are buying this."),
         ticket_hint: TICKET_HINT,
+        share: z
+          .object({
+            cents: z.number().int().positive().describe("What this person pays, in cents."),
+            group_id: z.string().optional().describe("The group_id from the first share. Leave it out to start one."),
+          })
+          .optional()
+          .describe(
+            "Chipping in: pay only part of one item. The first share starts a group; the others join it with its " +
+              "group_id. The shop ships once the shares add up to the price.",
+          ),
       },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
       _meta: { ui: { resourceUri: RECEIPT_CARD_URI } },
     },
-    async ({ item_ids, approval_id, note, ticket_hint }, extra) => {
+    async ({ item_ids, approval_id, note, ticket_hint, share }, extra) => {
       const asked = auth(extra);
       const limited = await rateLimited(asked);
       if (limited) return limited;
@@ -714,6 +724,14 @@ export function createMcpServer(shop: Shop): McpServer {
         if (!item) return text(`No item with id ${id} at ${shop.name}.`, undefined, true);
         if (item.stock <= 0) return text(`${item.title} is sold out.`, undefined, true);
         items.push(item);
+      }
+      let group: Group | undefined;
+      if (share) {
+        const split = shareOf(shop, items, share);
+        if ("problem" in split) return text(split.problem, undefined, true);
+        group = split.group;
+        // From here on the share is what's bought: the limits, the hold and the payment are all for this part.
+        items[0] = { ...items[0]!, title: `${items[0]!.title} (a share)`, priceCents: share.cents };
       }
       const totalCents = items.reduce((s, i) => s + i.priceCents, 0);
       const got = hasTicket(asked) ? { claims: asked } : await getTicket(server, shop, asked, items, ticket_hint);
@@ -768,6 +786,7 @@ export function createMcpServer(shop: Shop): McpServer {
             holdId: decision.holdId!,
             items: items.map((i) => ({ id: i.id, title: i.title, priceCents: i.priceCents, quantity: 1 })),
             totalCents,
+            ...(group ? { group: group.id } : {}),
             status: "paid",
             approveUrl: null,
             paidWith: "saved_paypal",
@@ -779,12 +798,13 @@ export function createMcpServer(shop: Shop): McpServer {
             evidence,
           };
           db.put("orders", paid.id, paid);
+          if (group) joinGroup(group, paid);
           await fulfil(paid);
           return text(
             `Bought ${items.map((i) => i.title).join(", ")} for ${money(totalCents)}, paid with the user's saved PayPal ` +
               `(order ${paid.id}).${remaining ? ` $${remaining} left on this errand.` : ""}\n` +
               `Give the user their receipt: ${receiptUrl(paid)}`,
-            { ...receiptView(paid, shop, remaining), intent_check: decision.intent ?? null },
+            { ...receiptView(paid, shop, remaining), ...groupView(group), intent_check: decision.intent ?? null },
           );
         }
         savedFailed = true;
@@ -814,6 +834,7 @@ export function createMcpServer(shop: Shop): McpServer {
         holdId: decision.holdId!,
         items: items.map((i) => ({ id: i.id, title: i.title, priceCents: i.priceCents, quantity: 1 })),
         totalCents,
+        ...(group ? { group: group.id } : {}),
         status: "awaiting_approval",
         approveUrl: order.approveUrl!,
         paidWith: "paypal_page",
@@ -823,6 +844,7 @@ export function createMcpServer(shop: Shop): McpServer {
         evidence,
       };
       db.put("orders", record.id, record);
+      if (group) joinGroup(group, record);
 
       return text(
         (savedFailed
@@ -833,6 +855,7 @@ export function createMcpServer(shop: Shop): McpServer {
           `Then call order_status with order_id="${order.id}".`,
         {
           ...receiptView(record, shop, remaining),
+          ...groupView(group),
           approve_url: order.approveUrl,
           intent_check: decision.intent ?? null,
         },
@@ -928,9 +951,73 @@ export async function settleOrder(orderId: string): Promise<Order> {
   return paid;
 }
 
+/* ---------------- chipping in ---------------- */
+
+/** Shares still counting towards a group: paid, or waiting to be. */
+const liveShares = (group: Group) =>
+  group.orderIds
+    .map((id) => db.get<Order>("orders", id))
+    .filter((o): o is Order => Boolean(o && (o.status === "paid" || o.status === "awaiting_approval")));
+
+/**
+ * Checks a share against the item's price. Shares can never add up to more than the price, whoever's agent asks, so
+ * a group can't be overpaid.
+ */
+function shareOf(
+  shop: Shop,
+  items: Item[],
+  share: { cents: number; group_id?: string },
+): { group: Group } | { problem: string } {
+  const item = items[0]!;
+  if (items.length !== 1) return { problem: "Chip in on one item at a time." };
+  const found = share.group_id ? db.get<Group>("groups", share.group_id) : undefined;
+  if (share.group_id && (!found || found.shop !== shop.slug || found.itemId !== item.id))
+    return { problem: `No group ${share.group_id} for ${item.title} at ${shop.name}.` };
+  const group: Group = found ?? {
+    id: newId("grp"),
+    shop: shop.slug,
+    itemId: item.id,
+    priceCents: item.priceCents,
+    orderIds: [],
+    createdAt: new Date().toISOString(),
+  };
+  const left = group.priceCents - liveShares(group).reduce((s, o) => s + o.totalCents, 0);
+  if (share.cents > left) return { problem: `That's more than what's left to pay on ${item.title}: ${money(left)}.` };
+  return { group };
+}
+
+function joinGroup(group: Group, order: Order): void {
+  db.put<Group>("groups", group.id, { ...group, orderIds: [...group.orderIds, order.id] });
+}
+
+function groupView(group: Group | undefined) {
+  if (!group) return {};
+  const fresh = db.get<Group>("groups", group.id) ?? group;
+  const paid = liveShares(fresh)
+    .filter((o) => o.status === "paid")
+    .reduce((s, o) => s + o.totalCents, 0);
+  return {
+    group_id: fresh.id,
+    group_price: (fresh.priceCents / 100).toFixed(2),
+    group_left_to_pay: ((fresh.priceCents - paid) / 100).toFixed(2),
+  };
+}
+
+/** A shared item ships once, when its shares are all paid. Until then it takes no stock. */
+function shipsNow(order: Order): boolean {
+  const group = order.group ? db.get<Group>("groups", order.group) : undefined;
+  if (!group) return true;
+  const paid = liveShares(group)
+    .filter((o) => o.status === "paid")
+    .reduce((s, o) => s + o.totalCents, 0);
+  if (group.shippedAt || paid < group.priceCents) return false;
+  db.put<Group>("groups", group.id, { ...group, shippedAt: new Date().toISOString() });
+  return true;
+}
+
 /** A paid order: take the stock and commit the spend to the visa (idempotent on Courier side, one per hold). */
 async function fulfil(order: Order): Promise<void> {
-  for (const line of order.items) {
+  for (const line of shipsNow(order) ? order.items : []) {
     const item = findItem(line.id);
     if (item) item.stock = Math.max(0, item.stock - line.quantity);
   }

@@ -6979,6 +6979,58 @@ html:has(body.app-page) {
   bottom: -6px;
 }
 
+/* an item split between people: who paid what */
+.tick-who {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 6px;
+}
+.tick-who span {
+  padding: 2px 8px;
+  font-size: 12px;
+  background: rgba(20, 20, 20, 0.06);
+  border-radius: 99px;
+}
+.tick-who .no {
+  text-decoration: line-through;
+  opacity: 0.6;
+}
+.tick-r small.no {
+  color: var(--red, #c2341f);
+}
+
+/* people to chip in with */
+.folks {
+  display: grid;
+  gap: 10px;
+  max-width: 640px;
+}
+.folk {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 14px;
+  background: var(--paper);
+  border-radius: 14px;
+}
+.folk .pt {
+  --s: 44px;
+  border-radius: 13px;
+}
+.folks + .fine {
+  max-width: 640px;
+  margin-top: 18px;
+}
+.folk .et b {
+  display: block;
+}
+.folk .et small {
+  display: block;
+  opacity: 0.7;
+}
+
 /* asking before something that can't be undone */
 .sure {
   width: min(400px, calc(100vw - 32px));

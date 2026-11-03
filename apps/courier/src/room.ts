@@ -28,6 +28,7 @@ import {
 import { mintAccessToken, mintShopConnectionToken } from "./auth/oauth.ts";
 import { anyShop, type Connection, type Courier, db, effectiveStatus, type Human, remainingBudget } from "./db.ts";
 import { demoClientId, firstName } from "./pages/shared.ts";
+import { type Contact, contactCourier, contactLine, contactsOf, findContacts, planSplit } from "./people.ts";
 import { addStamp, issueErrand, revokeVisa } from "./visas.ts";
 
 /**
@@ -64,6 +65,8 @@ export type ChatEvent =
       items: Record<string, unknown>[];
       status: "open" | "paid" | "cancelled" | "called_back";
       errand_id?: string;
+      /** A share of one item, paid with other people. Once it's paid, their couriers pay theirs. */
+      group?: string;
       callBackUntil: number;
     }
   | {
@@ -73,6 +76,14 @@ export type ChatEvent =
       total: string;
       items: Record<string, unknown>[];
       receipt_url: string | null;
+    }
+  | {
+      t: "group";
+      group_id: string;
+      shop: string;
+      item: Record<string, unknown>;
+      total: string;
+      payers: { name: string; courier: string; cents: number; paid: boolean; you?: boolean }[];
     }
   | { t: "ask"; approval_id: string; reason: string; items: string[]; answered?: "ok" | "no" }
   | { t: "no"; reason: string };
@@ -90,12 +101,25 @@ export interface RoomChat extends AgentMemory {
   amounts?: boolean;
   /** The courier told the person what it would get, and is waiting for their word. */
   confirm?: boolean;
-  /** The items in that offer, so their answer can start the errand. */
-  offered?: string;
+  /** Items chipped in on from this chat, and who pays what. */
+  groups?: GroupRun[];
   /** Goes up with every change to the events, so a window only redraws when it must. */
   rev: number;
   createdAt: string;
   updatedAt: string;
+}
+
+/** One item split with contacts. The person pays first; then each contact's courier pays their share. */
+interface GroupRun {
+  groupId: string;
+  orderId: string;
+  shopSlug: string;
+  item: Record<string, unknown>;
+  priceCents: number;
+  mineCents: number;
+  shares: { contactId: string; name: string; courier: string; cents: number }[];
+  /** Set once the contacts have been asked to pay, so a second look at the order can't ask again. */
+  collected?: boolean;
 }
 
 /** Chats with a turn running. Those are the only copies; the database catches up as they change. */
@@ -198,7 +222,7 @@ function chatTab(chat: RoomChat) {
   return {
     id: chat.id,
     title: chat.title,
-    working: running.has(chat.id),
+    working: running.has(chat.id) || gathering.has(chat.id),
     toPay: chat.events.some((e) => e.t === "pay" && e.status === "open"),
     errand,
   };
@@ -321,7 +345,14 @@ const pending = (chat: RoomChat, orderId: unknown) =>
 function settled(chat: RoomChat, card: Extract<ChatEvent, { t: "pay" }>, order: Record<string, any>): void {
   // Two windows or a popup and a timer can ask at once. Only the first answer writes the receipt.
   if (card.status !== "open") return;
-  if (order.status === "paid") {
+  if (order.status === "paid" && card.group) {
+    // Their share is in: the others' couriers pay now, and one ticket shows who paid what.
+    card.status = "paid";
+    chat.amounts = false;
+    chat.note = "Collecting the other shares…";
+    touch(chat);
+    void othersPay(chat.id, card.group);
+  } else if (order.status === "paid") {
     card.status = "paid";
     chat.events.push({
       t: "receipt",
@@ -340,6 +371,106 @@ function settled(chat: RoomChat, card: Extract<ChatEvent, { t: "pay" }>, order: 
     chat.amounts = false;
     finishErrands(chat);
     push(chat, { t: "say", text: "No problem, I’ve put it back. Your budget is untouched." });
+  }
+}
+
+/* ---------------- chipping in ---------------- */
+
+const usd = (cents: number) => `$${(cents / 100).toFixed(2).replace(/\.00$/, "")}`;
+
+/** A contact's courier pays their share: its own errand and token, their own saved PayPal. */
+async function payShare(owner: Human, run: GroupRun, share: GroupRun["shares"][number]): Promise<boolean> {
+  const contact = db.get<Contact>("contacts", share.contactId);
+  const human = contact && db.get<Human>("humans", contact.humanId);
+  const courier = contact && contactCourier(contact);
+  const shop = SHOPS.find((s) => s.slug === run.shopSlug);
+  if (!contact || contact.ownerId !== owner.id || !human || !courier || !shop) return false;
+  const clientId = demoClientId(courier.id);
+  const visa = issueErrand({
+    connection: { clientId, scopes: [...ALL_SCOPES] },
+    human,
+    courierName: courier.name,
+    what: `Chip in with ${firstName(owner) ?? "a friend"} on ${run.item.title}`,
+    budget: Math.ceil(share.cents / 100),
+    auto: false,
+  });
+  let paid = false;
+  try {
+    const { token } = await mintAccessToken(visa, human, clientId, { expiresInSeconds: 60, audience: shop.resource });
+    const out = await askShop(shop, token, courier, "request_purchase", {
+      item_ids: [run.item.id],
+      share: { cents: share.cents, group_id: run.groupId },
+    });
+    paid = out.data.status === "paid";
+    if (!paid) console.warn(`[errand] ${contact.name}'s share didn't go through: ${out.text.slice(0, 200)}`);
+  } catch (error) {
+    console.warn(`[errand] ${contact.name}'s share failed`, error);
+  }
+  // Its one job is done either way.
+  const fresh = db.get<Visa>("visas", visa.id);
+  if (paid && fresh) db.put<Visa>("visas", visa.id, { ...fresh, status: "expired", revokeReason: "Done" });
+  else await revokeVisa(visa.id, "The share didn't go through");
+  return paid;
+}
+
+/** Groups whose contacts are being asked right now, so two looks at the same order can't ask twice. */
+const collecting = new Set<string>();
+/** Chats waiting on those, which the window shows as busy. */
+const gathering = new Set<string>();
+
+async function collectShares(
+  owner: Human,
+  courier: Courier,
+  run: GroupRun,
+): Promise<Extract<ChatEvent, { t: "group" }>> {
+  const paid: boolean[] = [];
+  for (const share of run.shares) paid.push(await payShare(owner, run, share));
+  run.collected = true;
+  return {
+    t: "group",
+    group_id: run.groupId,
+    shop: SHOPS.find((s) => s.slug === run.shopSlug)?.name ?? run.shopSlug,
+    item: run.item,
+    total: (run.priceCents / 100).toFixed(2),
+    payers: [
+      { name: "You", courier: courier.name, cents: run.mineCents, paid: true, you: true },
+      ...run.shares.map((s, i) => ({ name: s.name, courier: s.courier, cents: s.cents, paid: paid[i]! })),
+    ],
+  };
+}
+
+/** After the person paid their share on PayPal's page: the others pay, and the chat gets the ticket. */
+async function othersPay(chatId: string, groupId: string): Promise<void> {
+  const chat = running.get(chatId) ?? db.get<RoomChat>("room_chats", chatId);
+  const run = chat?.groups?.find((g) => g.groupId === groupId);
+  const owner = chat && db.get<Human>("humans", chat.humanId);
+  const courier = chat && db.get<Courier>("couriers", chat.courierId);
+  if (!chat || !run || run.collected || !owner || !courier || collecting.has(groupId)) return;
+  collecting.add(groupId);
+  gathering.add(chatId);
+  try {
+    const ticket = await collectShares(owner, courier, run);
+    // A turn may have started meanwhile; write to the copy that's current now.
+    const live = running.get(chatId) ?? db.get<RoomChat>("room_chats", chatId);
+    if (!live) return;
+    const kept = live.groups?.find((g) => g.groupId === groupId);
+    if (kept) kept.collected = true;
+    live.events.push(ticket);
+    live.note = "";
+    finishErrands(live);
+    const short = ticket.payers.filter((p) => !p.paid);
+    push(
+      live,
+      short.length
+        ? {
+            t: "say",
+            text: `${short.map((p) => p.name).join(" and ")}’s share didn’t go through, so it isn’t complete yet.`,
+          }
+        : { t: "say", text: "Everyone’s paid, so it’s on its way. Let me know if you need anything else." },
+    );
+  } finally {
+    collecting.delete(groupId);
+    gathering.delete(chatId);
   }
 }
 
@@ -522,6 +653,103 @@ function roomTools(human: Human, courier: Courier, chat: RoomChat, message: stri
       case "order_status":
         if (!shop) return noShop(args.shop);
         return browse(shop, "order_status", { order_id: String(args.order_id ?? "") });
+      // Shares come from the shop's price and each contact's courier, here in code. The model only names the item and people.
+      case "chip_in": {
+        if (!shop) return noShop(args.shop);
+        const { found, unknown } = findContacts(human, args.with);
+        if (unknown.length || !found.length)
+          return {
+            text: `${unknown.length ? `${unknown.join(", ")} isn't one of their contacts. ` : ""}They can chip in with: ${contactLine(contactsOf(human))}.`,
+            isError: true,
+          };
+        const itemId = String(args.item_id ?? "");
+        const item = await browse(shop, "get_item", { item_id: itemId });
+        if (item.isError || !item.data.price)
+          return { text: `${shop.name} has no item ${itemId}. Search the shop for its id.`, isError: true };
+        if (!item.data.in_stock) return { text: `${item.data.title} is sold out.`, isError: true };
+        const priceCents = Math.round(Number(item.data.price) * 100);
+        const split = planSplit(priceCents, found);
+        const names = found.map((c) => c.name).join(" and ");
+        const key = `chip|${shop.name}|${itemId}|${found
+          .map((c) => c.name)
+          .sort()
+          .join("+")}`;
+        // Covering for someone is always asked first, and so is an item the person didn't name.
+        const sure = key === offeredBefore || (!split.coverCents && itemNamedIn(String(item.data.title), message));
+        if (!sure) {
+          chat.offered = key;
+          chat.confirm = true;
+          const short = split.shares.filter((x) => x.short);
+          return {
+            text:
+              `${item.data.title} is ${usd(priceCents)}. ` +
+              short
+                .map((x) => `${x.contact.courierName} says ${x.contact.name} can put in ${usd(x.cents)}. `)
+                .join("") +
+              `Their share would be ${usd(split.mineCents)}${split.coverCents ? `, covering ${usd(split.coverCents)} more than an even split` : ""}; ` +
+              split.shares.map((x) => `${x.contact.name} pays ${usd(x.cents)}`).join(", ") +
+              ". Tell them the split in one or two short sentences and ask if that's OK, then stop.",
+            data: { needs_ok: true },
+          };
+        }
+        chat.offered = undefined;
+        const dollars = Math.ceil(split.mineCents / 100);
+        const over = budgetProblem(human, dollars);
+        if (over) return { text: over, isError: true };
+        const what =
+          String(args.what ?? "")
+            .trim()
+            .slice(0, 120) || `${item.data.title}, with ${names}`;
+        const visa = startErrand(human, courier, chat, what, dollars);
+        touch(chat);
+        const { token } = await mintAccessToken(visa, human, clientId, {
+          expiresInSeconds: 60,
+          audience: shop.resource,
+        });
+        const out = await askShop(shop, token, courier, "request_purchase", {
+          item_ids: [itemId],
+          share: { cents: split.mineCents },
+        });
+        if (!out.data.group_id) {
+          await revokeVisa(visa.id, "The share didn't go through");
+          return { text: `That didn't go through: ${out.text}`, isError: true };
+        }
+        const run: GroupRun = {
+          groupId: out.data.group_id,
+          orderId: out.data.order_id,
+          shopSlug: shop.slug,
+          item: {
+            id: itemId,
+            title: item.data.title,
+            artist: item.data.artist,
+            category: item.data.category,
+            hue: item.data.hue,
+            price: item.data.price,
+          },
+          priceCents,
+          mineCents: split.mineCents,
+          shares: split.shares.map((x) => ({
+            contactId: x.contact.id,
+            name: x.contact.name,
+            courier: x.contact.courierName,
+            cents: x.cents,
+          })),
+        };
+        chat.groups = [...(chat.groups ?? []), run];
+        const data = { ...out.data, errand_id: visa.id };
+        if (out.data.status === "paid") {
+          collecting.add(run.groupId);
+          const ticket = await collectShares(human, courier, run).finally(() => collecting.delete(run.groupId));
+          return {
+            text: `Paid their share with their saved PayPal, and ${names} paid theirs. Say so in one short sentence.`,
+            data: { ...data, group_ticket: ticket },
+          };
+        }
+        return {
+          text: `Their share, ${usd(split.mineCents)}, is ready for them to pay. Once they do, ${split.shares.map((x) => x.contact.courierName).join(" and ")} pay${found.length > 1 ? "" : "s"} ${names}'s. Say that in one short sentence.`,
+          data,
+        };
+      }
       // Asking in words works for as long as nothing is paid. Only the button's time runs out when they carry on chatting.
       case "call_back": {
         const cards = chat.events.filter(
@@ -555,6 +783,7 @@ function roomTools(human: Human, courier: Courier, chat: RoomChat, message: stri
 const NOTES: Record<string, (step: Step) => string> = {
   search_shop: (s) => `Looking at ${s.data?.shop_name || s.args?.shop || "the shop"}…`,
   buy: (s) => `Checking out at ${s.data?.shop_name || s.args?.shop || "the shop"}…`,
+  chip_in: () => "Asking the others’ couriers…",
   start_errand: () => "Writing the errand…",
 };
 
@@ -572,7 +801,7 @@ const clean = (text: string) =>
 /** Turns what the courier did into what the window shows, in the order a person should read it. */
 function report(chat: RoomChat, steps: Step[], reply: string): void {
   if (reply) chat.events.push({ t: "say", text: clean(reply) });
-  const buys = steps.filter((s) => s.tool === "buy" && s.ok !== undefined);
+  const buys = steps.filter((s) => (s.tool === "buy" || s.tool === "chip_in") && s.ok !== undefined);
   const paid = buys.some((s) => s.data?.status === "paid");
   for (const step of buys) {
     const d = step.data ?? {};
@@ -587,8 +816,10 @@ function report(chat: RoomChat, steps: Step[], reply: string): void {
         items: d.items ?? [],
         status: "open",
         callBackUntil: d.call_back_until ? Date.parse(d.call_back_until) : Date.now() + CALL_BACK_MS,
-        errand_id: step.args.errand_id as string,
+        errand_id: (d.errand_id ?? step.args.errand_id) as string,
+        ...(d.group_id ? { group: d.group_id } : {}),
       });
+    else if (d.group_ticket) chat.events.push(d.group_ticket);
     else if (d.status === "paid")
       chat.events.push({
         t: "receipt",
@@ -675,6 +906,7 @@ async function roomTurn(human: Human, courier: Courier, chat: RoomChat, message:
             : [],
         ),
       ].join("; "),
+      contacts: contactLine(contactsOf(human)),
       resume,
       onStep: (step) => {
         const note = NOTES[step.tool]?.(step);

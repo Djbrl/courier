@@ -478,6 +478,84 @@ await step("The errand room: chats side by side, at any shop, and only the perso
   assert.equal((await view(await newChat())).left, 0);
 });
 
+await step("Chipping in: each person pays their own share, and their limits stay with their courier", async () => {
+  const person = new Browser();
+  await person.req(`${flow.courier}/auth/demo`, { form: { next: "/start/courier" } });
+  const made = await person.req(`${flow.courier}/start/courier`, {
+    form: { name: "Juno", human: "Maya", color: "cobalt" },
+  });
+  const courierId = new URL(made.headers.get("location")!, flow.courier).searchParams.get("c")!;
+
+  const people = await (await person.req(`${flow.courier}/app/people`)).text();
+  for (const name of ["Leo", "Priya", "Noor"]) assert.match(people, new RegExp(`<b>${name}</b>`));
+  assert.doesNotMatch(people, /\$50|\$40|\$25/, "what each can put in is their courier's to know");
+  const invited = await (
+    await person.req(`${flow.courier}/errand?c=${courierId}&say=${encodeURIComponent("Chip in with Leo on a gift")}`)
+  ).text();
+  assert.match(invited, /invite people to an errand/);
+  assert.match(invited, /"draft":"Chip in with Leo on a gift"/);
+
+  const url = (path: string) => `${flow.courier}/errand/api/${path}${path.includes("?") ? "&" : "?"}c=${courierId}`;
+  const api = async (path: string, body: unknown) => (await person.req(url(path), { json: body })).json() as any;
+  const view = async (id: string) => (await person.req(url(`chats/${id}`))).json() as any;
+  const until = async (id: string, done: (out: any) => boolean) => {
+    for (let i = 0; i < 200; i++) {
+      const out = await view(id);
+      if (done(out)) return out;
+      await new Promise((r) => setTimeout(r, 25));
+    }
+    throw new Error("the chat never got there");
+  };
+  const say = async (id: string, message: string) => {
+    const before = (await view(id)).chat.events.length;
+    await api("chat", { chat: id, message });
+    const out = await until(id, (o) => !o.chat.working);
+    return { ...out, fresh: out.chat.events.slice(before) };
+  };
+  const payUp = async (id: string, card: any) => {
+    await person.follow(card.approve_url, "http://none/", { form: { decision: "approve" } });
+    await person.req(url(`order/${card.order_id}?chat=${id}`));
+    const out = await until(id, (o) => o.chat.events.some((e: any) => e.t === "group"));
+    return out.chat.events.find((e: any) => e.t === "group");
+  };
+
+  const chat = (await api("chats", {})).chat.id;
+  const stranger = await say(chat, "Chip in with Bob on the Late Night Jazz box set");
+  assert.match(stranger.fresh.find((e: any) => e.t === "say").text, /Bob isn't one of their contacts.*Leo \(brother/);
+
+  // Leo can only put in $50 of an even $60, so Maya would cover $10. She's asked before anything starts.
+  const offer = await say(chat, "Chip in with Leo on the Late Night Jazz box set");
+  assert.equal(offer.chat.confirm, true, JSON.stringify(offer.fresh));
+  assert.equal(offer.chat.errand, null);
+  const yes = await say(chat, "Go ahead");
+  assert.equal(yes.chat.errand.limitCents, 7000);
+  const card = yes.fresh.find((e: any) => e.t === "pay");
+  assert.equal(card.total, "70.00");
+  assert.ok(card.group);
+  const ticket = await payUp(chat, card);
+  assert.equal(ticket.total, "120.00");
+  assert.deepEqual(
+    ticket.payers.map((p: any) => [p.name, p.cents, p.paid]),
+    [
+      ["You", 7000, true],
+      ["Leo", 5000, true],
+    ],
+  );
+  assert.match((await view(chat)).chat.events.at(-1).text, /Everyone’s paid/);
+
+  // An even split that fits everyone, on an item they named, goes straight to paying.
+  const three = (await api("chats", {})).chat.id;
+  const even = await say(three, "Chip in with Leo and Priya on the Late Night Jazz box set");
+  const share = even.fresh.find((e: any) => e.t === "pay");
+  assert.equal(share?.total, "40.00", JSON.stringify(even.fresh));
+  const split = await payUp(three, share);
+  assert.deepEqual(
+    split.payers.map((p: any) => p.cents),
+    [4000, 4000, 4000],
+  );
+  assert.ok(split.payers.every((p: any) => p.paid));
+});
+
 await step("Under-18 PayPal account is refused", async () => {
   const out = await authorize(flow, new Browser(), "riley", { refused: true });
   assert.match(out.refusal!, /for adults/);

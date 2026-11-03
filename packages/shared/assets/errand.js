@@ -134,6 +134,22 @@
       </div>`;
   }
 
+  /** One item, several people: who paid what, each with their own PayPal. */
+  function groupTicket(e) {
+    const all = e.payers.every((p) => p.paid);
+    const who = e.payers
+      .map(
+        (p) =>
+          `<span class="${p.paid ? "" : "no"}" title="${p.you ? "You" : `${esc(p.name)}, through ${esc(p.courier)}`}"><b>${esc(p.name)}</b> ${usd(p.cents)}</span>`,
+      )
+      .join("");
+    return `<div class="tick grp" role="group" aria-label="${esc(e.shop)}, $${esc(e.total)} split between ${e.payers.length} people">
+        <span class="tick-th">${thumb(e.item)}</span>
+        <span class="tick-b"><b>${esc(e.shop)} · split ${e.payers.length} ways</b><small>${esc(e.item?.title)}</small><span class="tick-who">${who}</span></span>
+        <span class="tick-r"><b>$${esc(e.total)}</b><small class="${all ? "" : "no"}">${all ? "All paid" : "Not complete"}</small></span>
+      </div>`;
+  }
+
   const DRAW = {
     me: (e) => `<div class="bub me">${esc(e.text)}</div>`,
     say: (e) => `<div class="bub">${rich(e.text)}</div>`,
@@ -151,6 +167,7 @@
         .join("")}</div>`,
     pay: payCard,
     receipt,
+    group: groupTicket,
     ask: (e) =>
       `<div class="notif cc" style="${C.vars}" ${e.answered ? `data-v="${esc(e.answered)}"` : ""}>
         <div class="nh">${boot.receiptParts.logo}</div>
@@ -452,5 +469,7 @@
   draw();
   checkCards();
   tick();
+  // Sent here from the People page: the message is ready, for them to read and send.
+  if (boot.draft && !chat.events.length) input.value = boot.draft;
   input.focus();
 })();

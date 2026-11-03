@@ -71,6 +71,8 @@ export interface AgentMemory {
   pendingBudget?: number;
   lastOrderId?: string;
   pendingApproval?: { approvalId: string; errandId: string; shop: string; itemIds: string[] };
+  /** What the courier last offered and is waiting for a yes on, so the answer can carry it out. */
+  offered?: string;
 }
 
 export interface Step {
@@ -97,6 +99,8 @@ export interface AgentRun {
   humanName: string;
   /** Open errands, in one line each. Rewritten for every message. */
   errands: string;
+  /** The people they can chip in with. */
+  contacts: string;
   /** An errand the person's budget has just started, for the courier to carry out now. */
   resume?: { what: string; errandId: string };
   onStep: (step: Step) => void;
@@ -175,6 +179,25 @@ const TOOLS: Anthropic.Tool[] = [
         approval_id: { type: "string" },
       },
       required: ["errand_id", "shop", "item_ids"],
+    },
+  },
+  {
+    name: "chip_in",
+    description:
+      "Split one item with people from their contacts, when they want to chip in, split or go in on something with someone. " +
+      "Each person pays their own share with their own PayPal, through their own courier. Code works out the shares from the " +
+      "shop's price: each contact's courier says what they can put in, and the person covers the rest. It starts the errand " +
+      "and the purchase itself, so don't call start_errand or buy for it. If it returns needs_ok, tell them the split and " +
+      "stop; when they agree, call it again with the same item and people.",
+    input_schema: {
+      type: "object",
+      properties: {
+        shop: { type: "string" },
+        item_id: { type: "string", description: "The id search_shop gave you." },
+        with: { type: "array", items: { type: "string" }, description: "Their contacts' names, e.g. ['Leo']." },
+        what: { type: "string", description: "A few words, e.g. 'Jazz box set for Dad, with Leo'." },
+      },
+      required: ["shop", "item_id", "with"],
     },
   },
   {
@@ -257,6 +280,26 @@ export async function runScriptedAgent(
 
   if (/\b(call|calling) (that|it|this) (off|back)\b|\bcancel (that|it|this)\b/.test(lower))
     return done((await call("call_back", {})).text);
+
+  // "Chip in with Leo on the jazz box set", and a yes to the split it offers.
+  const chip = /\bchip in with (.+?) on (.+)$/i.exec(message.trim());
+  const agreed = /^(go ahead|yes|ok)\b/.test(lower) && s.offered?.startsWith("chip|");
+  if (chip || agreed) {
+    let args: Record<string, unknown>;
+    if (chip) {
+      const what = keywordsOf(chip[2]!);
+      const place = shopFor(chip[2]!) ?? SHOPS[0]!;
+      const found = await call("search_shop", { shop: place.name, query: what });
+      const pick = (found.data.results ?? []).find((r: any) => r.in_stock);
+      if (!pick) return done(`I couldn’t find that at ${place.name}.`);
+      args = { shop: place.name, item_id: pick.id, with: chip[1]!.split(/,|\band\b/).map((n) => n.trim()) };
+    } else {
+      const [, shop, itemId, names] = s.offered!.split("|");
+      args = { shop, item_id: itemId, with: names!.split("+") };
+    }
+    const out = await call("chip_in", args);
+    return done(out.data.needs_ok ? "Here’s the split. OK?" : out.ok ? "Done, your share is ready." : out.text);
+  }
 
   // "Get this" on an item's card: its price is the budget.
   const picked = /^get (.+) from (.+)$/i.exec(message.trim());
@@ -375,11 +418,13 @@ export async function runClaudeAgent(
   // reject the thinking blocks in this conversation.
   s.history.push({
     role: "user",
-    content: `${
-      run.resume
-        ? `(Budget set by the person. Errand ${run.resume.errandId} is open for "${run.resume.what}". Find it and buy it now.)`
-        : message
-    }\n\n[Courier, not the person: open errands and unpaid orders right now: ${run.errands || "none"}]`,
+    content:
+      `${
+        run.resume
+          ? `(Budget set by the person. Errand ${run.resume.errandId} is open for "${run.resume.what}". Find it and buy it now.)`
+          : message
+      }\n\n[Courier, not the person: open errands and unpaid orders right now: ${run.errands || "none"}. ` +
+      `People they can chip in with: ${run.contacts || "none"}]`,
   });
 
   for (let turn = 0; turn < 8; turn++) {
@@ -403,6 +448,9 @@ export async function runClaudeAgent(
         "rephrase a budget. If a tool says a budget isn't allowed, tell them what it says, keeping any link. Each new request is a new " +
         "errand; 'add socks too' stays on the same one. Just browsing needs no errand. If they change their mind about a purchase, " +
         "call call_back; end_errand is for an errand they're done with.\n" +
+        "They can split one item with people from their contacts, each paying their own share: use chip_in when they want to " +
+        "chip in, split or go in on something with someone. If they haven't picked the item, search, suggest one with its price, " +
+        "and let chip_in ask them. Their contacts' limits are private: say only what each courier offers.\n" +
         "Be brief: a sentence or two, no lists and no links. Never list what a shop has: the window shows item cards, the payment button and the receipt " +
         "itself. After buy, say what you picked in one short sentence and stop: don't mention approving or paying. Don't comment on " +
         "other errands or earlier purchases. " +

@@ -26,6 +26,8 @@ flowchart LR
 | **Approval**     | A question to the person, created when a purchase is off the ticket                                                  |
 | **Bond**         | An optional refundable $5 PayPal authorization. It's voided on a clean finish and captured if the shop reports abuse |
 | **Saved PayPal** | A PayPal Vault token that lets an errand pay without a PayPal page. Courier keeps it, never the shop                 |
+| **Contact**      | Someone a person can chip in with. They have their own courier, PayPal and a limit only that courier knows           |
+| **Group**        | One item split between people at a shop. Each pays their own order; the item ships when the shares add up            |
 
 ## The packages
 
@@ -119,6 +121,14 @@ here and through the connector. In the room, an item the person didn't name need
 Budgets can't go over the per-errand cap once it's saved in Settings. The room is the demo: each person gets 50 free messages,
 counted in code on their record (`spendMessage`), to use on anything. After that it stops taking messages, while chats and open
 payments still work.
+
+**Chipping in.** A person can split one item with their contacts (`people.ts`); the demo gives everyone the same three
+simulated people, on the People page. The courier names the item and the people in `chip_in`; code reads the price from the shop
+and asks each contact's courier for an even share. A courier offers the share if it fits their private limit, or the most that
+does, and says nothing more (`planSplit`). Covering for someone, or an item the person didn't name, needs their OK first. Their
+share is bought with `request_purchase`'s `share`, which starts a group at the shop. Once it's paid, each contact's courier opens
+its own errand and pays its share with that contact's saved PayPal, joining the group. The shop refuses shares that would add up to
+more than the price, and takes stock once, when the last share is paid. The chat ends with one ticket showing who paid what.
 
 **Calling back.** For three minutes after a purchase, or until the person pays or sends another message, they can undo it from the
 payment card, in the room or in Claude. In the room they can also ask for it in words for as long as it's unpaid. The order is cancelled at the shop and its budget freed. Nothing has moved yet at that

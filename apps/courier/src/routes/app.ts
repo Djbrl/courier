@@ -28,12 +28,14 @@ import {
   errandRoom,
   errandsPage,
   homePage,
+  peoplePage,
   settingsPage,
   shopsPage,
   signInPage,
   signInStepPage,
   welcomePage,
 } from "../pages/index.ts";
+import { contactCourier, contactsOf, ideaFor } from "../people.ts";
 import {
   answerApproval,
   blankChat,
@@ -254,6 +256,17 @@ appRouter.get("/app/shops", (req, res) => {
   if (d) res.send(shopsPage(d));
 });
 
+appRouter.get("/app/people", (req, res) => {
+  const d = requireDesk(req, res);
+  if (!d) return;
+  const people = contactsOf(d.human).map((contact) => ({
+    contact,
+    courier: contactCourier(contact),
+    idea: ideaFor(contact),
+  }));
+  res.send(peoplePage(d, people));
+});
+
 appRouter.get("/app/couriers", (req, res) => {
   const d = requireDesk(req, res);
   if (d) res.send(couriersPage(d, { courierId: q(req.query.c) }));
@@ -308,8 +321,10 @@ appRouter.get("/errand", (req, res) => {
   const back = human && typeof req.query.order === "string" ? chatWithOrder(human.id, req.query.order) : undefined;
   const ctx = requireCourier(req, res, back?.courierId);
   if (!ctx) return;
-  const chat = back ?? findChat(ctx.courier, req.query.chat) ?? blankChat(ctx.courier);
-  res.send(errandRoom(desk(ctx.human), ctx.courier, chatView(chat), chatTabs(ctx.courier)));
+  // A message to start from opens in an empty chat, so it begins an errand of its own.
+  const draft = q(req.query.say)?.slice(0, 200);
+  const chat = back ?? (draft ? undefined : findChat(ctx.courier, req.query.chat)) ?? blankChat(ctx.courier);
+  res.send(errandRoom(desk(ctx.human), ctx.courier, chatView(chat), chatTabs(ctx.courier), draft));
 });
 
 const api = Router();

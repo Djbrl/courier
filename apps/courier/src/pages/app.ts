@@ -23,6 +23,7 @@ import {
   type Visa,
 } from "@courier/shared";
 import type { Approval, Connection, Courier, Human, Stamp } from "../db.ts";
+import type { Contact } from "../people.ts";
 import { capFields } from "./consent.ts";
 import { backBy, courierForErrand, courierLook, demoClientId, dots, firstName, lookForAgent, short } from "./shared.ts";
 
@@ -56,7 +57,7 @@ export interface Desk {
   chatByVisa: Map<string, string>;
 }
 
-type View = "home" | "errands" | "shops" | "couriers" | "settings";
+type View = "home" | "errands" | "shops" | "people" | "couriers" | "settings";
 
 const ICON: Record<View, string> = {
   home: '<svg viewBox="0 0 20 20"><path d="M3 9.2 10 3l7 6.2V17h-5v-4.5H8V17H3z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>',
@@ -64,6 +65,8 @@ const ICON: Record<View, string> = {
     '<svg viewBox="0 0 20 20"><rect x="4" y="2.8" width="12" height="14.4" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M7 7h6M7 10h6M7 13h3.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>',
   shops:
     '<svg viewBox="0 0 20 20"><rect x="3" y="3" width="6" height="6" rx="1.6" fill="none" stroke="currentColor" stroke-width="1.8"/><rect x="11" y="3" width="6" height="6" rx="1.6" fill="none" stroke="currentColor" stroke-width="1.8"/><rect x="3" y="11" width="6" height="6" rx="1.6" fill="none" stroke="currentColor" stroke-width="1.8"/><rect x="11" y="11" width="6" height="6" rx="1.6" fill="none" stroke="currentColor" stroke-width="1.8"/></svg>',
+  people:
+    '<svg viewBox="0 0 20 20"><circle cx="7.5" cy="7" r="2.6" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="13.6" cy="8" r="2.1" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M2.8 16c.6-2.8 2.4-4.3 4.7-4.3s4.1 1.5 4.7 4.3M12.4 12.4c.4-.1.8-.2 1.2-.2 1.9 0 3.3 1.2 3.7 3.8" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>',
   couriers:
     '<svg viewBox="0 0 20 20"><rect x="2.5" y="4" width="15" height="12" rx="2.4" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="7.3" cy="9.3" r="1.9" fill="currentColor"/><path d="M11 9h4M11 12h3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>',
   settings:
@@ -93,6 +96,7 @@ export function shell(
           ${item("home", "Home", "/app", d.approvals.length, true)}
           ${item("errands", "Errands", "/app/errands", out)}
           ${item("shops", "Shops", "/app/shops")}
+          ${item("people", "People", "/app/people")}
           ${item("couriers", "Couriers", "/app/couriers")}
           ${item("settings", "Settings", "/app/settings")}
         </nav>
@@ -344,6 +348,26 @@ export function shopsPage(d: Desk): string {
     <p class="fine">Demo shops with made-up names and products, not affiliated with any real brand. No real money moves.</p>
   </div>`;
   return shell("Shops", d, "shops", main);
+}
+
+/* ---------------- people to chip in with ---------------- */
+
+export function peoplePage(
+  d: Desk,
+  people: { contact: Contact; courier: Courier | undefined; idea: string }[],
+): string {
+  const mine = d.couriers.find((c) => !c.revokedAt) ?? d.couriers[0]!;
+  const main = html`<div class="sett">
+    <h1 class="big">People</h1>
+    <p class="lead">Invite them to an errand and chip in on one thing. Each pays their own share with their own PayPal, through their own courier.</p>
+    <div class="folks">${people.map(
+      ({ contact: c, courier, idea }) => html`<div class="folk cc" style="${courierVars(c.color)}">
+        ${courier ? portrait(courier) : ""}<span class="et"><b>${c.name}</b><small>Your ${c.relation} · courier ${c.courierName}</small></span>
+        <a class="btn sm" href="/errand?c=${mine.id}&say=${encodeURIComponent(`Chip in with ${c.name} on ${idea}`)}">Invite to an errand</a></div>`,
+    )}</div>
+    <p class="fine">Or just ask ${mine.name}: “Chip in with Leo on a gift for Dad.” Each courier keeps its person’s limit to itself and only says what fits. In the demo these are made-up people with simulated PayPal.</p>
+  </div>`;
+  return shell("People", d, "people", main);
 }
 
 /* ---------------- couriers: list + detail ---------------- */

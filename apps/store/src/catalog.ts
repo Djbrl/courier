@@ -388,6 +388,17 @@ export const CATALOG: Item[] = [
     blurb: "Ten crate-digger breaks.",
     hue: 52,
   },
+  {
+    id: "jr-035",
+    title: "Late Night Jazz, 5-LP box set",
+    artist: "Various Artists",
+    category: "vinyl",
+    genre: "jazz box set gift",
+    priceCents: 12000,
+    stock: 3,
+    blurb: "Five records of after-hours standards, in a cloth box. A gift to split.",
+    hue: 232,
+  },
 ];
 
 const item = (

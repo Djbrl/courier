@@ -32,6 +32,19 @@ export interface Order {
     humanVerified: boolean;
   };
   disputed?: boolean;
+  /** A share of one item, paid alongside other people's shares. */
+  group?: string;
+}
+
+/** People chipping in on one item. Each pays their own order; the item ships once the shares add up to its price. */
+export interface Group {
+  id: string;
+  shop: string;
+  itemId: string;
+  priceCents: number;
+  orderIds: string[];
+  createdAt: string;
+  shippedAt?: string;
 }
 
 export interface Reservation {
