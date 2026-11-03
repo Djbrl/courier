@@ -5,6 +5,7 @@ import {
   internalFetch,
   JUNIPER,
   newId,
+  paypalFor,
   type Shop,
   type VisaTokenClaims,
 } from "@courier/shared";
@@ -47,7 +48,14 @@ export interface RequestLogEntry {
   agent?: string | null;
   method?: string | null;
   source?: string | null;
+  /** The ID's payments only reach the PayPal simulator (a demo person, or a server with no sandbox). Unset when no
+   * valid ID was shown, and on entries logged before shops told demo from sandbox. */
+  demo?: boolean;
 }
+
+/** Whether this ID's payments go to the PayPal simulator rather than the PayPal sandbox. Read from the signed claim
+ * the shop already gets, so it adds nothing about the person. */
+export const isDemo = (human: { simulated?: boolean }) => paypalFor(human).mode === "simulated";
 
 export function logRequest(entry: Omit<RequestLogEntry, "id" | "at">): void {
   const full: RequestLogEntry = { id: newId("req"), at: new Date().toISOString(), ...entry };
@@ -198,7 +206,15 @@ export const requireVisa =
       const standing = await connectionStatus(token.connection.id);
       if (standing?.status !== "active") {
         const reason = `Connection ${standing?.status ?? "unknown"}`;
-        logRequest({ outcome: "blocked", reason, status: 401, sub: token.sub, agent: token.connection.agent, source });
+        logRequest({
+          outcome: "blocked",
+          reason,
+          status: 401,
+          sub: token.sub,
+          agent: token.connection.agent,
+          source,
+          demo: isDemo(token.human),
+        });
         challenge(res, 401, "invalid_token", reason);
         return;
       }
@@ -221,6 +237,7 @@ export const requireVisa =
           visaId: token.visa.id,
           agent: token.visa.agent,
           source,
+          demo: isDemo(token.human),
         });
         challenge(res, 401, "invalid_token", reason);
         return;
@@ -248,6 +265,7 @@ export const requireVisa =
       agent: agentName(claims),
       method,
       source,
+      demo: isDemo(claims.human),
     });
     next();
   };

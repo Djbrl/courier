@@ -20,6 +20,7 @@ import {
   shopLogo,
   timeAgo,
 } from "@courier/shared";
+import { itemArt } from "./art.ts";
 import type { RequestLogEntry } from "./auth.ts";
 import { findItem, type Item } from "./catalog.ts";
 import type { Order } from "./db.ts";
@@ -54,24 +55,6 @@ function storePage(
   });
 }
 
-/** Same artwork as the shop front inside the errand room (errand.js `cover`). */
-function cover(i: Item): RawHtml {
-  const k = i.category;
-  const disc =
-    k === "vinyl" || k === "turntable"
-      ? `<circle cx="66" cy="50" r="30" fill="#141414"/><circle cx="66" cy="50" r="22" fill="none" stroke="#2E2E2E" stroke-width="1"/><circle cx="66" cy="50" r="9" fill="hsl(${i.hue} 90% 70%)"/><circle cx="66" cy="50" r="1.6" fill="#F2EFE9"/>`
-      : k === "cassette"
-        ? `<rect x="22" y="30" width="56" height="38" rx="5" fill="#141414"/><circle cx="38" cy="49" r="6" fill="#F2EFE9"/><circle cx="62" cy="49" r="6" fill="#F2EFE9"/>`
-        : k === "cd"
-          ? `<circle cx="50" cy="50" r="28" fill="#E8E6E1"/><circle cx="50" cy="50" r="8" fill="hsl(${i.hue} 55% 46%)"/>`
-          : `<rect x="28" y="28" width="44" height="44" rx="12" fill="#141414" opacity=".85"/><circle cx="50" cy="50" r="10" fill="hsl(${i.hue} 90% 70%)"/>`;
-  const sleeve =
-    k === "vinyl"
-      ? `<rect x="10" y="20" width="60" height="60" rx="3" fill="hsl(${i.hue} 60% 38%)"/><circle cx="40" cy="50" r="14" fill="hsl(${(i.hue + 40) % 360} 90% 72%)" opacity=".9"/>`
-      : "";
-  return raw(`<svg viewBox="0 0 100 100" aria-hidden="true">${k === "vinyl" ? disc + sleeve : disc}</svg>`);
-}
-
 /** Every shop as a logo: the front door people recognise. */
 export function shopGrid(): string {
   return storePage(
@@ -101,9 +84,10 @@ export function storefront(shop: Shop, items: Item[], category = ""): string {
         <a href="/${shop.slug}" aria-pressed="${!category}">Everything</a>
         ${categories.map((c) => html`<a href="/${shop.slug}?c=${encodeURIComponent(c)}" aria-pressed="${c === category}">${labelFor(c)}</a>`)}
       </nav>
-      <ul class="shopl" aria-label="What’s here">${shown.map(
+      <ul class="shelf-g" aria-label="What’s here">${shown.map(
         (i) =>
-          html`<li><div><b>${i.title}</b><small>${i.artist} · ${i.blurb}</small></div><span class="pr">${money(i.priceCents)}</span></li>`,
+          html`<li class="shelf-i"><span class="shelf-cv">${itemArt(i, shop.slug)}</span>
+            <b>${i.title}</b><small>${i.artist} · ${i.blurb}</small><span class="pr">${money(i.priceCents)}</span></li>`,
       )}</ul>
       <p class="fine">Ask Claude to send your courier here. ${NOT_REAL}</p>
     </main>`,
@@ -159,7 +143,7 @@ export function receiptPage(order: Order | undefined): string {
       <h1 class="big">${paid ? `${order.agent} got it.` : "Not paid yet."}</h1>
       <ul class="rcpt-items">${order.items.map((line) => {
         const item = findItem(line.id);
-        return html`<li>${item ? html`<div class="cv" style="--h:${item.hue}">${cover(item)}</div>` : ""}
+        return html`<li>${item ? html`<div class="cv">${itemArt(item, order.shop)}</div>` : ""}
           <div><b>${line.title}</b>${item ? html`<small>${item.artist} · ${item.category}</small>` : ""}</div>
           <span class="pr">${money(line.priceCents)}</span></li>`;
       })}</ul>
@@ -201,29 +185,65 @@ const STATUS: Record<Order["status"], string> = {
   failed: "Failed",
 };
 
+/**
+ * Demo or sandbox, by the payment path: an order for a demo person, or any order while the shop has no PayPal sandbox,
+ * only ever reaches the PayPal simulator. Sandbox orders move PayPal test money. Neither is real money.
+ */
+const isDemoOrder = (order: Order) => paypalFor(order).mode === "simulated";
+
+const sum = (orders: Order[]) => orders.filter((o) => o.status === "paid").reduce((s, o) => s + o.totalCents, 0);
+
 export function merchantDashboard(orders: Order[], requests: RequestLogEntry[]): string {
   const blocked = requests.filter((r) => r.outcome === "blocked");
   const accepted = requests.filter((r) => r.outcome === "accepted");
-  const revenue = orders.filter((o) => o.status === "paid").reduce((s, o) => s + o.totalCents, 0);
-  const couriers = new Set(accepted.map((r) => r.sub).filter(Boolean));
+  const demoOrders = orders.filter(isDemoOrder);
+  const sandboxOrders = orders.filter((o) => !isDemoOrder(o));
+  // A courier is demo when its ID said so at the door, or when it only ever bought through the simulator. Entries
+  // from before the door noted it, with no order to go by, are left out rather than guessed.
+  const demoCouriers = new Set<string>([
+    ...accepted.filter((r) => r.demo === true).flatMap((r) => (r.sub ? [r.sub] : [])),
+    ...demoOrders.map((o) => o.sub),
+  ]);
+  const sandboxCouriers = new Set<string>(
+    [
+      ...accepted.filter((r) => r.demo === false).flatMap((r) => (r.sub ? [r.sub] : [])),
+      ...sandboxOrders.map((o) => o.sub),
+    ].filter((sub) => !demoCouriers.has(sub)),
+  );
   return storePage(
     "What shops see",
     "merchant",
     html`<main class="jr-main mdash" data-autorefresh="6000">
       <header class="md-h">
         <div><h1 class="big">Who’s shopping here?</h1>
-          <p class="lead">Every courier shows a PayPal-verified ID and its limits. Never the person’s name.</p></div>
+          <p class="lead">Every courier shows a signed ID and its limits. Never the person’s name.</p></div>
         <ul class="stats md-stats" aria-label="Today">
-          <li class="ok"><span><b>${couriers.size}</b><small>verified couriers</small></span></li>
+          <li class="ok"><span><b>${sandboxCouriers.size}</b><small>sandbox couriers</small></span></li>
+          <li class="md-demo-s"><span><b>${demoCouriers.size}</b><small>demo couriers</small></span></li>
           <li><span><b>${accepted.length}</b><small>requests served</small></span></li>
           <li class="bad"><span><b>${blocked.length}</b><small>blocked</small></span></li>
-          <li class="money"><span><b>${money(revenue)}</b><small>from couriers</small></span></li>
+          <li class="money"><span><b>${money(sum(sandboxOrders))}</b><small>paid in PayPal sandbox</small></span></li>
+          <li class="md-demo-s"><span><b>${money(sum(demoOrders))}</b><small>simulated, not money</small></span></li>
         </ul>
       </header>
+      <p class="md-note"><span class="md-demo">Demo</span> orders were paid at the PayPal simulator, by made-up people or on a shop with no PayPal sandbox. Nothing moved, so they are counted apart. Sandbox orders move PayPal test money only.</p>
       <div class="md-g">
         <section class="panel md-orders" aria-label="Orders">
-          <h2 class="sec-t">Orders</h2>
-          ${orders.length ? html`<div class="rows">${orders.map(orderRow)}</div>` : html`<p class="empty">No courier orders yet.</p>`}
+          ${
+            orders.length
+              ? html`${
+                  sandboxOrders.length
+                    ? html`<h2 class="sec-t">Sandbox orders <span>${sandboxOrders.length}</span></h2>
+                      <div class="rows">${sandboxOrders.map(orderRow)}</div>`
+                    : ""
+                }${
+                  demoOrders.length
+                    ? html`<h2 class="sec-t md-demo-h">Demo orders <span>${demoOrders.length}</span></h2>
+                      <div class="rows">${demoOrders.map(orderRow)}</div>`
+                    : ""
+                }`
+              : html`<h2 class="sec-t">Orders</h2><p class="empty">No courier orders yet.</p>`
+          }
         </section>
         <section class="panel md-log" aria-label="Request log">
           <h2 class="sec-t">At the door</h2>
@@ -231,12 +251,19 @@ export function merchantDashboard(orders: Order[], requests: RequestLogEntry[]):
             (
               r,
             ) => html`<li><span class="k ${r.outcome === "blocked" ? "no" : "id"}" aria-hidden="true">${r.outcome === "blocked" ? "×" : "✓"}</span>
-              <div><b>${r.agent ?? "No ID"}</b><span class="d">${r.reason}</span></div><time>${timeAgo(r.at)}</time></li>`,
+              <div><b>${r.agent ?? "No ID"}${r.demo ? html` <span class="md-demo">Demo</span>` : ""}</b><span class="d">${r.reason}</span></div><time>${timeAgo(r.at)}</time></li>`,
           )}</ul>
         </section>
       </div>
     </main>`,
   );
+}
+
+/** Who stands behind the order, as far as the shop can tell from the signed ID. */
+function personLine(order: Order): string {
+  if (order.simulated) return "Demo person, nothing checked by PayPal";
+  if (!order.evidence.humanVerified) return "Not verified";
+  return isDemoOrder(order) ? "Verified at the PayPal simulator" : "Verified by PayPal sandbox";
 }
 
 function orderRow(order: Order): RawHtml {
@@ -247,18 +274,20 @@ function orderRow(order: Order): RawHtml {
     per_purchase_limit: { value: string };
   };
   const intent = order.evidence.intent as { model?: string; reason?: string; probability?: number } | null;
-  return html`<article class="mo">
+  const demo = isDemoOrder(order);
+  return html`<article class="mo${demo ? " mo-demo" : ""}">
     <div class="mo-top">
-      <span class="mo-who cc" style="${courierVars(colorFor(order.agent))}">${portrait({ name: order.agent, color: colorFor(order.agent) })}<span><b>${order.agent}</b><small>${CK}${PP}</small></span></span>
+      <span class="mo-who cc" style="${courierVars(colorFor(order.agent))}">${portrait({ name: order.agent, color: colorFor(order.agent) })}<span><b>${order.agent}</b><small>${demo ? html`<span class="md-demo" title="Paid at the PayPal simulator">Demo</span>` : html`${CK}${PP}`}</small></span></span>
       <div class="mo-what"><b>${order.items.map((i) => i.title).join(", ")}</b><small>${(findShop(order.shop) ?? JUNIPER).name} · ${timeAgo(order.createdAt)} · ${visa.intent ? html`for “${visa.intent}”` : "no purpose given"}</small></div>
       <span class="pr">${money(order.totalCents)}</span>
       <span class="st ${order.status === "paid" ? "active" : order.status === "awaiting_approval" ? "pending_bond" : "revoked"}"><i></i>${STATUS[order.status]}</span>
     </div>
     <details class="mo-ev"><summary>${CK}Signed proof</summary>
       <dl>
-        <dt>Person</dt><dd>${order.simulated ? "Demo person, simulated PayPal" : order.evidence.humanVerified ? "Verified by PayPal" : "Not verified"} · <code>${order.sub.slice(0, 14)}…</code></dd>
+        <dt>Person</dt><dd>${personLine(order)} · <code>${order.sub.slice(0, 14)}…</code></dd>
         <dt>Limits</dt><dd>$${visa.spend_limit.value} in total · $${visa.per_purchase_limit.value} each</dd>
         ${intent ? html`<dt>Check</dt><dd>${intent.model ?? "?"}${intent.probability !== undefined ? ` (${Math.round(intent.probability * 100)}%)` : ""}: ${intent.reason ?? ""}</dd>` : ""}
+        <dt>Paid at</dt><dd>${demo ? "PayPal simulator: no money moved" : "PayPal sandbox: test money only"}</dd>
         <dt>Pass</dt><dd><code>${visa.id}</code></dd>
       </dl>
       <form method="post" action="/merchant/report/${visa.id}"><button class="btn danger sm" type="submit" title="Suspends this courier's pass and claims its bond, if any">Report this courier</button></form>

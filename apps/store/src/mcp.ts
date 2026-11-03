@@ -24,6 +24,7 @@ import {
   claimsOf,
   forgetVisa,
   hasTicket,
+  isDemo,
   logRequest,
   ownerId,
   type TicketClaims,
@@ -260,6 +261,7 @@ async function rateLimited(claims: AgentClaims): Promise<CallToolResult | null> 
         sub: claims.sub,
         visaId: claims.visa.id,
         agent: claims.visa.agent,
+        demo: isDemo(claims.human),
       });
     } catch (error) {
       console.warn("[store] report failed", (error as Error).message);
