@@ -1090,6 +1090,34 @@ await step("Twenty shops through one connector, each browsable with no errand an
   assert.doesNotMatch(grid, /amazon|doordash|fortnite|nike\b|v-bucks/i, "parodies only");
 });
 
+await step(
+  "The public pages: the landing shows the same shops, the badge back is fields, For shops and Install",
+  async () => {
+    const { shops } = structured(await tool("list_shops"));
+    const landing = await (await fetch(`${flow.courier}/`)).text();
+    const data = landing.match(/<script type="application\/json" id="shops-data">(.*?)<\/script>/s);
+    assert.ok(data, "the landing gets its shops from the app");
+    const shown = JSON.parse(data[1]!) as { slug: string }[];
+    assert.deepEqual(shown.map((s) => s.slug).sort(), shops.map((s: any) => s.shop).sort());
+    assert.match(landing, /<h3>Shared<\/h3>/);
+    for (const field of ["Name", "Email", "PayPal ID"])
+      assert.match(landing, new RegExp(`<dt>${field}</dt><dd><i aria-hidden="true"></i></dd>`), `${field} is withheld`);
+    for (const href of ["/#why", "/for-shops", "/install"]) assert.ok(landing.includes(`href="${href}"`), href);
+
+    const forShops = await fetch(`${flow.courier}/for-shops`);
+    assert.equal(forShops.status, 200);
+    const shopsPage = await forShops.text();
+    assert.match(shopsPage, /id="install"/);
+    assert.ok(shopsPage.includes(`${flow.courier}/jwks.json`));
+    const install = await fetch(`${flow.courier}/install`);
+    assert.equal(install.status, 200);
+    assert.match(await install.text(), /Install Courier in your/);
+    const old = await fetch(`${flow.courier}/developers`, { redirect: "manual" });
+    assert.equal(old.status, 301);
+    assert.equal(old.headers.get("location"), "/for-shops#install");
+  },
+);
+
 let flowers = "";
 await step("Without saved PayPal even a small errand asks first; the person saves it once", async () => {
   // Items the person picked come with their price: code reads it, and the card starts from it.
