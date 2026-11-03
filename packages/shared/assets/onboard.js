@@ -4,9 +4,7 @@
   const preview = document.getElementById("preview");
   if (!form || !preview) return;
   const vars = JSON.parse(preview.dataset.vars);
-  const pts = JSON.parse(preview.dataset.pts);
   const card = preview.querySelector(".idc");
-  const letter = (name) => ([...name.trim()][0] || "C").toUpperCase();
   const input = form.elements.name;
   const hint = document.getElementById("name-hint");
   function update() {
@@ -20,8 +18,6 @@
     card.setAttribute("style", vars[color]);
     card.querySelector('[data-f="name"]').textContent = name;
     card.querySelector('[data-f="human"]').textContent = human;
-    const pt = card.querySelector(".bd .pt");
-    pt.outerHTML = pts[color].replace("<b>?</b>", `<b>${letter(name).replace(/[<&>]/g, "")}</b>`);
     window.fitText?.(preview);
   }
   form.addEventListener("input", update);

@@ -268,89 +268,183 @@ a {
 }
 
 /* ---------- the ID card ---------- */
+/* The tab is a real tear-off: --cut is where it perforates, and the mask punches the notches at each end. */
 .idc {
+  --cut: 7.6em;
   position: relative;
-  width: 32em;
+  width: 20em;
+  height: 31em;
+  text-align: left;
+  filter: drop-shadow(0 1.1em 1em rgba(20, 20, 20, 0.28));
+}
+.idf {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  border-radius: 1.5em;
   background: #fff;
   color: var(--ink);
-  border-radius: 1.8em;
-  padding: 0.6em 0.6em 1.15em;
-  text-align: left;
-  box-shadow:
-    0 2.2em 3em -1.5em rgba(0, 0, 0, 0.3),
-    0 0.25em 0.7em rgba(0, 0, 0, 0.08),
-    inset 0 0 0 1px rgba(20, 20, 20, 0.05);
+  -webkit-mask:
+    radial-gradient(circle 0.95em at 0 var(--cut), #0000 97%, #000) left / 51% 100% no-repeat,
+    radial-gradient(circle 0.95em at 100% var(--cut), #0000 97%, #000) right / 51% 100% no-repeat;
+  mask:
+    radial-gradient(circle 0.95em at 0 var(--cut), #0000 97%, #000) left / 51% 100% no-repeat,
+    radial-gradient(circle 0.95em at 100% var(--cut), #0000 97%, #000) right / 51% 100% no-repeat;
 }
-.idc .band {
-  height: 4.6em;
-  border-radius: 1.25em;
-  background: var(--bb);
-  display: flex;
-  align-items: center;
-  padding: 0 1.5em;
-  transition: background-color 0.4s;
-}
-.idc .band .logo {
-  font-size: 2.15em;
-  --slash: var(--bs);
-  color: var(--bt);
-  transition: color 0.4s;
-}
-.idc .bd {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  gap: 1.5em;
-  padding: 1.35em 1em 0;
-  transition:
-    opacity 0.5s,
-    filter 0.5s;
-}
-.idc .dt {
+.idc .tab {
+  position: absolute;
+  inset: 0 1.3em auto;
+  height: var(--cut);
+  box-sizing: border-box;
+  padding-top: 2.5em;
   display: flex;
   flex-direction: column;
+  gap: 0.75em;
+}
+.idc .tr {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.8em;
+}
+.idc .tr .logo {
+  font-size: 1.15em;
+  --slash: var(--ink);
+}
+.idc .idn {
+  font:
+    700 0.86em / 1 "JetBrains Mono",
+    monospace;
+  white-space: nowrap;
+}
+.idc .sb {
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+  font-size: 0.95em;
+  font-weight: 500;
+  line-height: 1;
+  white-space: nowrap;
   min-width: 0;
-  padding-top: 0.1em;
+}
+.idc .sb b {
+  font-weight: 700;
+}
+.idc .sb .av {
+  flex: none;
+  width: 1.7em;
+  height: 1.7em;
+}
+.idc .bd {
+  position: absolute;
+  inset: var(--cut) 0 0;
+  overflow: hidden;
+  background: var(--bb);
+  color: var(--bt);
+  transition:
+    background-color 0.4s,
+    color 0.4s;
+}
+.idc .mark {
+  position: absolute;
+  right: -3.4em;
+  top: 1.3em;
+  width: 17em;
+  height: 8.5em;
+  fill: color-mix(in srgb, var(--bb) 82%, #fff);
+}
+/* The name reads up the side; fitText measures it along that length, so it still shrinks to fit. */
+.idc .sn {
+  position: absolute;
+  left: 1em;
+  bottom: 0.9em;
+  width: 21.4em;
+  transform-origin: 0 100%;
+  transform: rotate(-90deg) translateY(100%);
 }
 .idc .nm {
   font-family: "Archivo", sans-serif;
   font-style: italic;
   font-weight: 900;
   font-stretch: 125%;
-  font-size: 4.5em;
-  line-height: 0.86;
-  letter-spacing: -0.045em;
-  margin-left: -0.04em;
+  font-size: 6.5em;
+  line-height: 0.92;
+  letter-spacing: -0.05em;
   white-space: nowrap;
 }
-.idc .on {
-  margin-top: 0.5em;
-  font-size: 1.4em;
+.idc .vt {
+  position: absolute;
+  right: 1.25em;
+  bottom: 1.25em;
+  height: 2.1em;
+  padding: 0 0.8em;
+  border-radius: 999px;
+  background: #fff;
+  color: var(--ink);
+  font-size: 0.86em;
+}
+.idc .pf {
+  position: absolute;
+  left: 1.4em;
+  right: 1.4em;
+  top: calc(var(--cut) - 0.07em);
+  border-top: 0.14em dashed rgba(20, 20, 20, 0.55);
+}
+.idc .slot {
+  position: absolute;
+  left: 50%;
+  top: 1em;
+  width: 4em;
+  height: 1em;
+  margin-left: -2em;
+  border-radius: 1em;
+  background: var(--ink);
+}
+.idb .tab {
+  padding-top: 2.6em;
+  gap: 0.35em;
+}
+.idb .tt {
+  font:
+    italic 900 1.5em / 1 "Archivo",
+    sans-serif;
+  font-stretch: 125%;
+  letter-spacing: -0.04em;
+}
+.idb .tl {
+  font-size: 0.82em;
   font-weight: 500;
-  color: #5a564f;
   line-height: 1.2;
 }
-.idc .on b {
-  font-weight: 700;
-  color: var(--ink);
+.idb .bd {
+  padding: 1.5em 1.4em 0;
 }
-.idc .idn {
-  margin-top: auto;
-  font:
-    500 1.5em / 1 "JetBrains Mono",
-    monospace;
-  letter-spacing: 0.03em;
+.idb .ii {
+  margin: 0 0 0.9em;
+  font-size: 1em;
+  font-weight: 600;
+  line-height: 1.28;
 }
-.idc .ft {
+.idb .rw {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.8em;
-  margin: 1.25em 1em 0;
-  padding-top: 1.05em;
-  border-top: 1px solid var(--line);
-  transition:
-    opacity 0.5s,
-    filter 0.5s;
+  align-items: baseline;
+  gap: 0.6em;
+  padding: 0.85em 0;
+  border-top: 1px solid currentColor;
+}
+.idb .rw b {
+  flex: none;
+  min-width: 2.15em;
+  font:
+    italic 900 1.75em / 1 "Archivo",
+    sans-serif;
+  font-stretch: 125%;
+  letter-spacing: -0.04em;
+}
+.idb .rw span {
+  font-size: 0.86em;
+  font-weight: 500;
+  line-height: 1.2;
 }
 .chip {
   display: inline-flex;
@@ -1109,9 +1203,9 @@ a {
   transform: rotate(-1deg) translateY(-4px);
 }
 .idc.blank .nm {
-  color: #c9c4ba;
+  opacity: 0.45;
 }
-.idc.blank .ft {
+.idc.blank :is(.sb, .vt) {
   opacity: 0.5;
 }
 

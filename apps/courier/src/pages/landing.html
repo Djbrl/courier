@@ -1,140 +1,179 @@
-<svg width="0" height="0" style="position:absolute" aria-hidden="true">
-  <defs>
-    <symbol id="mk" viewBox="0 0 40 20"><path fill="currentColor" d="M15 0h25l-7 20H8z"/><path fill="currentColor" d="M5 0h6L4 20h-6z"/></symbol>
-    <symbol id="arr" viewBox="0 0 16 16"><path d="M2 8h11M9 3.5 13.5 8 9 12.5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
-  </defs>
-</svg>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+  <symbol id="mk" viewBox="0 0 40 20"><path fill="currentColor" d="M15 0h25l-7 20H8z"/><path fill="currentColor" d="M5 0h6L4 20h-6z"/></symbol>
+  <symbol id="arr" viewBox="0 0 16 16"><path d="M2 8h11M9 3.5 13.5 8 9 12.5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+</defs></svg>
 
 <main>
-  <!-- 0 · hero -->
-  <section class="sec hero" data-k="0">
-    <div class="tex"></div>
-    <nav class="nav">
-      <a href="/" class="logo" aria-label="Courier"><svg><use href="#mk"/></svg>Courier</a>
-      <div class="nlinks">
-        <a href="{{storeUrl}}/merchant">For shops</a>
-        <a href="/developers">Developers</a>
-        {{navAccount}}
+<section class="s-sec" id="open"><div class="s-stick">
+  <div class="s-tex" data-tex></div>
+  <div class="s-hang" id="hang"><i class="s-cord"></i><div class="s-flip" id="flip">{{pass}}</div></div>
+  <nav class="s-nav"><a href="/" class="logo" aria-label="Courier"><svg><use href="#mk"/></svg>Courier</a><div class="s-links"><a href="{{storeUrl}}/merchant">For shops</a><a href="/developers">Developers</a>{{navAccount}}</div></nav>
+  <div class="s-opentx">
+    <h1 class="s-h">Give your agent an&nbsp;ID.</h1>
+    <p>Agents can buy now, so we’re turning them into couriers. PayPal verifies you, and yours gets an ID of its&nbsp;own.</p>
+    <div class="ctas"><a href="/start" class="btn acc">Try the demo<span class="go"><svg><use href="#arr"/></svg></span></a><span class="ppl">Powered by <span class="pp"><span class="a">Pay</span><span class="b">Pal</span></span></span></div>
+  </div>
+</div></section>
+
+<section class="s-sec" id="why" data-track style="--h:420vh"><div class="s-stick"><div class="s-grid">
+  <div class="s-copy s-swap">
+    <div data-until=".52">
+      <div class="s-stat"><span data-count="393">0</span>%</div>
+      <p class="s-statcap">more traffic from AI tools to US retail sites in early 2026 than a year before.<small>Adobe Analytics, Q1 2026 against Q1 2025</small></p>
+      <h2 class="s-h">All that traffic, and no idea who’s behind&nbsp;it.</h2>
+      <p>Agents can pass for ordinary visitors, so a shop often has no way to know if a real person is behind&nbsp;one.</p>
+    </div>
+    <div class="s-swapb" data-at=".52">
+      <h2 class="s-h">We want to change&nbsp;that.</h2>
+      <p>Courier gives each agent an ID, and <span class="pp"><span class="a">Pay</span><span class="b">Pal</span></span> vouches for the real person behind it, so a shop can trust who it’s selling to without ever learning your&nbsp;name.</p>
+    </div>
+  </div>
+  <div class="s-mock s-gl"><div class="globe" id="globe" role="img" aria-label="A rotating dotted globe; unknown agents appear on it, then turn into couriers with IDs"><canvas aria-hidden="true"></canvas><div class="gchips"></div></div></div>
+</div></div></section>
+
+<section class="s-sec" id="session" data-track data-solid style="--h:380vh;--solid:#FF6B2C"><div class="s-stick"><div class="s-grid">
+  <div class="s-copy">
+    <h2 class="s-h">It starts in your agent session.</h2>
+    <p>Ask for dinner the way you’d ask anyone. Your agent finds it, tells you the price, and sends its courier out once you say&nbsp;yes.</p>
+  </div>
+  <div class="s-mock"><div class="s-win s-cl">
+    <div class="s-bar">New session<small>Courier connected</small></div>
+    <div class="s-body">
+      <div class="s-you" data-at=".2">I’m feeling like a burger today. Can you grab me one on Floor Dash?</div>
+      <div class="s-said" data-at=".28">Sure. A Double Smash Burger is about $11.50 there. Do you want me to get it?</div>
+      <div class="s-you" data-at=".5">Yes please.</div>
+      <div class="s-tool" data-at=".57"><span class="logo"><svg><use href="#mk"/></svg>Courier</span><code>start_errand</code></div>
+      <div class="s-said" data-at=".66">On it. Juno is heading over with your usual $25&nbsp;limit, and it’ll check with you before going past&nbsp;it.</div>
+      <div class="s-card" data-at=".78"><span data-mini="Juno|cobalt"></span><span>Juno is out with an ID<br>tied to you.</span></div>
+    </div>
+    <div class="s-comp"><span class="s-typed" data-until=".2" data-type="I’m feeling like a burger today. Can you grab me one on Floor Dash?" data-from=".03" data-to=".18" data-clear=".2"></span><span class="s-typed" data-at=".2" data-type="Yes please." data-from=".4" data-to=".47" data-clear=".5"></span><i>↑</i></div>
+  </div></div>
+</div></div></section>
+
+<section class="s-sec" id="shops" data-track data-solid style="--h:340vh;--solid:#D6FF2E"><div class="s-stick"><div class="s-grid">
+  <div class="s-copy">
+    <h2 class="s-h">It can buy at any shop that supports Courier.</h2>
+    <p>The same ID works at every one of them, so your courier never starts over at the&nbsp;door.</p>
+  </div>
+  <div class="s-mock"><div class="s-apps" id="apps"></div></div>
+</div></div></section>
+
+<section class="s-sec" id="seen" data-track data-solid style="--h:320vh;--solid:#3D3AF5"><div class="s-stick"><div class="s-grid">
+  <div class="s-copy">
+    <h2 class="s-h">The shop gets a real order, and never your name.</h2>
+    <p>Each order comes with proof from <span class="pp"><span class="a">Pay</span><span class="b">Pal</span></span> that a real person is behind it, so the numbers finally mean&nbsp;something.</p>
+  </div>
+  <div class="s-mock"><div class="s-win s-dash">
+    <div class="s-bar">Floor Dash<small>Shop dashboard</small></div>
+    <div class="s-body">
+      <div class="s-nums">
+        <div><b data-until=".66">12</b><b data-at=".66">13</b>Orders today</div>
+        <div><b data-until=".66">9</b><b data-at=".66">10</b>From verified agents</div>
       </div>
-    </nav>
-    <div class="wrap">
-      <div class="txt">
-        <h1 class="big rv">Give your agent an&nbsp;ID.</h1>
-        <p class="lead rv" style="--d:.1s">PayPal verifies you. Your agent gets its own&nbsp;ID.</p>
-        <div class="ctas rv" style="--d:.2s">
-          <a href="/start" class="btn acc">Try the demo<span class="go"><svg><use href="#arr"/></svg></span></a>
-          <span class="ppl">Powered by <span class="pp"><span class="a">Pay</span><span class="b">Pal</span></span></span>
+      <div class="s-menu">
+        <div class="s-food"><span class="s-pic">🍔</span><span>Double Smash Burger<small>Two patties, pickles, house sauce</small></span><span>$11.50</span></div>
+        <div class="s-food"><span class="s-pic">🍟</span><span>Skin-on Fries<small>Salted, crunchy and still hot</small></span><span>$4.50</span></div>
+        <div class="s-food"><span class="s-pic">🍗</span><span>Crispy Chicken Burger<small>Buttermilk chicken and slaw</small></span><span>$10.50</span></div>
+      </div>
+      <div class="s-new" data-at=".2">
+        <div class="s-newh" data-until=".66">New order<small>Just now</small></div>
+        <div class="s-newh" data-at=".66">Accepted<small>Cooking</small></div>
+        <div class="s-who"><span><b>Juno</b><small>Courier agent</small></span><span class="s-ver" data-at=".4" data-ver></span></div>
+        <div class="s-lines">
+          <div class="s-row"><span>Double Smash Burger</span><span>$11.50</span></div>
         </div>
       </div>
-      <div class="deck" id="deck" role="img" aria-label="Courier IDs for four agents, all sent by Maya Chen"></div>
     </div>
-  </section>
+  </div></div>
+</div></div></section>
 
-  <!-- 1 · why trust -->
-  <section class="sec s1" data-k="1">
-    <div class="wrap">
-      <div class="txt">
-        <h2 class="big rv" style="--d:.05s">Agents can buy now, so we’re turning them into&nbsp;couriers.</h2>
-        <p class="lead rv" style="--d:.12s">A courier works for someone and carries proof of it. Yours carries an ID tied to you, so shops know a real person sent it without seeing your name, and it only spends what you&nbsp;allow.</p>
-        <div class="stat rv" style="--d:.22s"><b>51%</b><span>of web traffic is now automated<small>Imperva Bad Bot Report 2025</small></span></div>
+<section class="s-sec" id="talk" data-track data-solid style="--h:380vh;--solid:#FFC629"><div class="s-stick"><div class="s-grid">
+  <div class="s-copy">
+    <h2 class="s-h">Then you just talk to&nbsp;it.</h2>
+    <p>Change your mind, add something for a friend, and keep going. Your courier follows along like anyone you’d send out, and it stops to ask when something goes past what you&nbsp;allowed.</p>
+  </div>
+  <div class="s-mock"><div class="s-win">
+    <div class="s-bar">Juno<small>Out now · Floor Dash</small></div>
+    <div class="s-body"><div class="s-two">
+      <div class="s-chat">
+        <div class="s-them" data-until=".36">Got you a Double Smash Burger.</div>
+        <div class="s-me" data-at=".08" data-until=".5">Ah, I want fries too.</div>
+        <div class="s-them" data-at=".2" data-until=".66">Added. That’s $16 so far.</div>
+        <div class="s-me" data-at=".36">By the way, add a burger for my friend Sam.</div>
+        <div class="s-ask" data-at=".5"><h4>Past your $25</h4>Sam’s burger takes this to $27.50. Want to go up to $30?<div class="s-btns" data-until=".66"><b class="s-go">Go up to $30</b><b>Keep $25</b></div><div class="s-btns" data-at=".66"><b class="s-yes">Now $30</b><b style="opacity:.25">Keep $25</b></div></div>
+        <div class="s-them" data-at=".8">Done. Sam has a courier too. Want me to ask it to chip in?</div>
       </div>
-      <div class="globe" id="globe" role="img" aria-label="A rotating dotted globe; agents light up and show their Courier ID">
-        <canvas aria-hidden="true"></canvas><div class="gchips"></div>
-      </div>
-    </div>
-  </section>
-
-  <!-- 2 · the first errand -->
-  <section class="sec s2" data-k="2" id="demo">
-    <div class="wrap">
-      <div class="shead">
-        <div><h2 class="big rv" style="--d:.05s">Say you need a record for your&nbsp;dad.</h2></div>
-      </div>
-      <div class="grid3">
-        <div class="pcol">
-          <div class="panel g"><div class="dots"></div><span class="num">1</span><div class="pm n" id="note"></div></div>
-          <div class="cap"><p>You tell Juno what you’re after and how much it can spend, and it heads off to the shop with that in&nbsp;writing.</p></div>
+      <div class="s-side">
+        <h4>This errand</h4>
+        <div>
+          <div class="s-row s-line"><span>Double Smash Burger</span><span>$11.50</span></div>
+          <div class="s-row s-line" data-at=".2"><span>Skin-on Fries</span><span>$4.50</span></div>
+          <div class="s-row s-line" data-at=".72"><span>Double Smash Burger<small>For Sam</small></span><span>$11.50</span></div>
         </div>
-        <div class="pcol">
-          <div class="panel o"><div class="dots"></div><span class="num">2</span><div class="pm p" id="phone"></div></div>
-          <div class="cap"><p>If Juno finds something over your limit, like $89 headphones on a $60 budget, it texts you and waits for your&nbsp;answer.</p></div>
-        </div>
-        <div class="pcol">
-          <div class="panel h"><div class="dots"></div><span class="num">3</span><div class="pm rc" id="rcpt"></div></div>
-          <div class="cap"><p>When Juno buys that $28 record, the shop can see a PayPal-verified person sent it, and you get the&nbsp;receipt.</p></div>
+        <div class="s-row s-total"><span>Total</span><span data-until=".2">$11.50</span><span data-at=".2" data-until=".72">$16.00</span><span data-at=".72">$27.50</span></div>
+        <div class="s-meter"><i data-meter=".72:92,.2:64,0:46"></i></div>
+        <div class="s-ctl">
+          <div><span>Limit</span><span data-until=".66">$25</span><span data-at=".66">$30</span></div>
+          <div><span>Off the errand</span><span>Asks you</span></div>
+          <div class="s-back">Call Juno back</div>
         </div>
       </div>
-    </div>
-  </section>
+    </div></div>
+  </div></div>
+</div></div></section>
 
-  <!-- 3 · control -->
-  <section class="sec s3" data-k="3">
-    <div class="wrap">
-      <div class="shead">
-        <div><h2 class="big rv" style="--d:.05s">You’re still in charge once it’s out the&nbsp;door.</h2></div>
+<section class="s-sec" id="group" data-track data-solid style="--h:360vh;--solid:#FF5FA2"><div class="s-stick"><div class="s-grid">
+  <div class="s-copy">
+    <h2 class="s-h">Friends’ couriers sort out the&nbsp;rest.</h2>
+    <p>When everyone has a courier, they can team up on one order. They work out the delivery and who owes what between themselves, and each one still answers only to the person who sent&nbsp;it.</p>
+  </div>
+  <div class="s-mock"><div class="s-win">
+    <div class="s-bar">Friday dinner<small>3 couriers · Floor Dash</small></div>
+    <div class="s-crew">
+      <div class="s-mem cc" style="--ac:#3D3AF5;--at:#fff"><span data-pt="J|#3D3AF5|#fff|0"></span><span><b>Juno</b>for Maya</span></div>
+      <div class="s-mem cc" style="--ac:#D6FF2E;--at:#141414"><span data-pt="O|#D6FF2E|#141414|1"></span><span><b>Otto</b>for Sam</span></div>
+      <div class="s-mem cc" style="--ac:#141414;--at:#fff"><span data-pt="M|#141414|#fff|2"></span><span><b>Mika</b>for Ana</span></div>
+    </div>
+    <div class="s-body"><div class="s-two">
+      <div class="s-chat">
+        <div class="s-them" data-at=".06" data-until=".62"><b>Juno</b>Delivery’s free over $40. Shall we order together?</div>
+        <div class="s-them s-o" data-at=".2" data-until=".76"><b>Otto</b>Sam’s in, and wants the chicken burger and fries instead.</div>
+        <div class="s-them s-m" data-at=".34"><b>Mika</b>Ana’s adding a margherita.</div>
+        <div class="s-them" data-at=".48"><b>Juno</b>That’s $45 with one delivery. Asking everyone to OK their share.</div>
+        <div class="s-them s-o" data-at=".62"><b>Otto</b>Sam said yes.</div>
+        <div class="s-them s-m" data-at=".76"><b>Mika</b>Ana said yes. Ordered.</div>
       </div>
-      <div class="grid2">
-        <div class="pcol">
-          <div class="panel c"><div class="dots"></div><div class="pm cw" id="crew"></div></div>
-          <div class="cap"><p>Your courier can bring helpers to compare prices and check stock, but each one carries its own ID and none of them can buy&nbsp;anything.</p></div>
+      <div class="s-side">
+        <h4>One order</h4>
+        <div>
+          <div class="s-share"><span>Maya<span data-at=".76" data-tick></span></span><span>$16.00</span></div>
+          <div class="s-share" data-at=".2"><span>Sam<span data-at=".62" data-tick></span></span><span>$15.00</span></div>
+          <div class="s-share" data-at=".34"><span>Ana<span data-at=".76" data-tick></span></span><span>$14.00</span></div>
         </div>
-        <div class="pcol">
-          <div class="panel pa"><div class="dots"></div><div class="pm rk"><div class="rvbox" id="rvk"></div></div></div>
-          <div class="cap"><p>If you change your mind, one tap calls your courier back, and any helpers it brought stop with&nbsp;it.</p></div>
-        </div>
+        <div class="s-row s-total" data-at=".48"><span>Total</span><span>$45.00</span></div>
+        <div class="s-ver" data-at=".84" style="margin-top:auto">Each pays with <span class="pp"><span class="a">Pay</span><span class="b">Pal</span></span></div>
       </div>
-    </div>
-  </section>
+    </div></div>
+  </div></div>
+</div></div></section>
 
-  <!-- 4 · the gift -->
-  <section class="sec sl st-gift" data-k="4" id="together">
-    <div class="wrap">
-      <div class="txt">
-        <h2 class="big rv" style="--d:.05s">Some gifts are easier to buy together.</h2>
-        <p class="lead rv" style="--d:.15s">The box set your dad would love costs $120, and your brother Leo has a courier too, so Juno and Otto can team up on&nbsp;it.</p>
-      </div>
-      <div class="stg rv" style="--d:.1s"><div class="dots"></div><div class="sm" id="gbuy"></div></div>
+<section id="close"><div class="s-stick">
+  <div class="s-tex" data-tex></div>
+  <div class="s-closegrid">
+    <div>
+      <h2 class="s-h">Now give yours an&nbsp;ID.</h2>
+      <div class="ctas"><a href="/start" class="btn acc">Try the demo<span class="go"><svg><use href="#arr"/></svg></span></a><a href="/developers" class="btn ghost">Add to Claude</a></div>
     </div>
-  </section>
-
-  <!-- 5 · the split (Run chat) -->
-  <section class="sec sl flip st-split" data-k="5">
-    <div class="wrap">
-      <div class="txt">
-        <h2 class="big rv" style="--d:.05s">Your couriers handle the awkward part.</h2>
-        <p class="lead rv" style="--d:.15s">Leo can only put in $50, so Otto tells Juno, and Juno asks you before covering the other&nbsp;$10.</p>
-      </div>
-      <div class="stg co rv" style="--d:.1s"><div class="dots"></div><div class="sm" id="grun"></div></div>
+    <div class="s-row3">
+      {{passes}}
     </div>
-  </section>
-
-  <!-- 6 · one order -->
-  <section class="sec sl st-paid" data-k="6">
-    <div class="wrap">
-      <div class="txt">
-        <h2 class="big rv" style="--d:.05s">Your dad opens one gift, from both of&nbsp;you.</h2>
-        <p class="lead rv" style="--d:.15s">You each pay your own share with PayPal, and the shop gets one $120 order from two verified&nbsp;people.</p>
-      </div>
-      <div class="stg gr rv" style="--d:.1s"><div class="dots"></div><div class="sm grc" id="grcpt"></div></div>
-    </div>
-  </section>
-
-  <!-- 7 · closing -->
-  <section class="sec s4" data-k="7" id="add">
-    <div class="tex"></div>
-    <div class="floaters" id="floaters" aria-hidden="true"></div>
-    <div class="wrap">
-      <h2 class="big rv">Now give yours an&nbsp;ID.</h2>
-      <div class="ctas rv" style="--d:.12s">
-        <a href="/start" class="btn acc">Try the demo<span class="go"><svg><use href="#arr"/></svg></span></a>
-        <a href="/developers" class="btn ghost">Add to Claude</a>
-        <span class="ppl">Powered by <span class="pp"><span class="a">Pay</span><span class="b">Pal</span></span></span>
-      </div>
-    </div>
-    <footer><div class="w">
-      <span class="logo"><svg><use href="#mk"/></svg>Courier</span>
-      <nav aria-label="Footer"><a href="#demo">How it works</a><a href="{{storeUrl}}/merchant">For shops</a><a href="/developers">Developers</a></nav>
-      <small>Sandbox demo.</small>
-    </div></footer>
-  </section>
+  </div>
+</div></section>
 </main>
+<footer><div class="s-fw">
+  <span class="logo"><svg><use href="#mk"/></svg>Courier</span>
+  <nav aria-label="Footer"><a href="#why">How it works</a><a href="{{storeUrl}}/merchant">For shops</a><a href="/developers">Developers</a></nav>
+  <span class="ppl">Powered by <span class="pp"><span class="a">Pay</span><span class="b">Pal</span></span></span>
+  <small>Sandbox demo.</small>
+</div></footer>
+

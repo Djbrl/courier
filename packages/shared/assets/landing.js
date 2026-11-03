@@ -1,116 +1,34 @@
-// Courier landing page: hero deck, dotted globe, section reveals.
+// Courier landing page: a story told in sticky screens. This first part is the dotted globe and its little IDs.
 (() => {
   const D = document.documentElement;
-  const qs = new URLSearchParams(location.search);
   const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
   D.classList.add("js");
   if ("scrollRestoration" in history) history.scrollRestoration = "manual";
-  const $ = (s) => document.querySelector(s),
-    $$ = (s) => [...document.querySelectorAll(s)];
+  const $ = (s) => document.querySelector(s);
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
   const opt = { cards: "own" };
 
-  /* ---------- parts ---------- */
+  /* ---------- parts for the globe's little IDs ---------- */
   const PP = '<span class="pp"><span class="a">Pay</span><span class="b">Pal</span></span>';
   const LOGO = '<span class="logo"><svg><use href="#mk"/></svg>Courier</span>';
   const CK =
     '<span class="ck"><svg viewBox="0 0 12 12"><path d="M2.5 6.2 5 8.6l4.6-5" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>';
-  const MAYA =
-    '<span class="av" aria-hidden="true"><svg viewBox="0 0 20 20"><rect width="20" height="20" fill="#FFC629"/><circle cx="10" cy="8" r="3.6" fill="#141414"/><path d="M3.2 20c.6-4.4 3.3-6.6 6.8-6.6s6.2 2.2 6.8 6.6z" fill="#141414"/></svg></span>';
-  const VT = `<span class="vt">${CK}Verified by ${PP}</span>`;
   /* each courier's own colour: ac band, at text on band, as slash, ad deep (lines/dots), al light tint */
   const COL = {
-    green: { ac: "#0A7A4A", at: "#FFFFFF", as: "#D6FF2E", ad: "#0A7A4A", al: "#D5EEDF" },
     cobalt: { ac: "#3D3AF5", at: "#FFFFFF", as: "#D6FF2E", ad: "#3D3AF5", al: "#DEDDFF" },
-    lilac: { ac: "#B7A3FF", at: "#141414", as: "#FFFFFF", ad: "#6A4FE0", al: "#ECE6FF" },
     tang: { ac: "#FF6B2C", at: "#141414", as: "#FFFFFF", ad: "#E85A1C", al: "#FFE2D2" },
     ink: { ac: "#141414", at: "#FFFFFF", as: "#D6FF2E", ad: "#141414", al: "#E8E6E1" },
     hivis: { ac: "#D6FF2E", at: "#141414", as: "#141414", ad: "#7FA300", al: "#EFFFC0" },
     cab: { ac: "#FFC629", at: "#141414", as: "#FFFFFF", ad: "#D69C00", al: "#FFF1C4" },
   };
-  const cv = (k) => {
+  const colourVars = (k) => {
     const c = COL[k];
     return `--ac:${c.ac};--at:${c.at};--as:${c.as};--ad:${c.ad};--al:${c.al}`;
   };
-  const AG = {
-    juno: {
-      n: "Juno",
-      L: "J",
-      c: "cobalt",
-      id: "CR-7Q3F-JR",
-      on: "runs on <b>Claude</b>",
-      pc: "#141414",
-      lc: "#FFFFFF",
-      sh: '<circle cx="68" cy="34" r="24" fill="#D6FF2E"/>',
-    },
-    otto: {
-      n: "Otto",
-      L: "O",
-      c: "tang",
-      id: "CR-2M8K-OT",
-      on: "runs on <b>ChatGPT</b>",
-      pc: "#FFC629",
-      lc: "#141414",
-      sh: '<rect x="48" y="12" width="40" height="20" rx="10" fill="#141414"/><rect x="48" y="38" width="40" height="20" rx="10" fill="#141414"/>',
-    },
-    mika: {
-      n: "Mika",
-      L: "M",
-      c: "ink",
-      id: "CR-9X4D-MK",
-      on: "runs on <b>Llama</b>",
-      pc: "#3D3AF5",
-      lc: "#F2EFE9",
-      sh: '<path d="M90 10 90 56 48 10z" fill="#D6FF2E"/>',
-    },
-    remy: {
-      n: "Rémy",
-      L: "R",
-      c: "hivis",
-      id: "CR-5H1V-RM",
-      on: "runs on <b>Mistral</b>",
-      pc: "#E8352A",
-      lc: "#141414",
-      sh: '<path d="M46 12a22 22 0 0 0 44 0z" fill="#FFFFFF"/><circle cx="82" cy="58" r="7" fill="#FFC629"/>',
-    },
-  };
-  const HELP = [
-    { n: "Price Scout", id: "JR/1", can: "Compares prices", cant: "can’t buy" },
-    { n: "Stock Checker", id: "JR/2", can: "Checks stock", cant: "can’t buy" },
-  ];
   const pt = (a) =>
     `<span class="pt" style="--pc:${a.pc};--lc:${a.lc}" aria-hidden="true"><svg viewBox="0 0 100 100">${a.sh}</svg><b>${a.L}</b></span>`;
-  function card(a) {
-    return `<div class="idc cc" style="${cv(a.c)}" role="img" aria-label="Courier ID: ${a.n}, ${a.on.replace(/<[^>]+>/g, "")}, ${a.id}, sent by Maya Chen, verified by PayPal">
-      <div class="band">${LOGO}</div>
-      <div class="bd">${pt(a)}<div class="dt"><div class="nm">${a.n}</div><div class="on">${a.on}</div><div class="idn">${a.id}</div></div></div>
-      <div class="ft"><span class="chip">${MAYA}Sent by <b>Maya Chen</b></span>${VT}</div>
-    </div>`;
-  }
-  /* Juno + two helper tags, tethered. Units: 1em = 10 svg units. */
-  const RVP = '<span class="rvp"><i></i>Revoked</span>';
-  function fam(revoke) {
-    const helper = (
-      h,
-      i,
-    ) => `<div class="hlp h${i + 1}" role="img" aria-label="Juno's helper: ${h.n}, ${h.can.toLowerCase()}, ${h.cant}">
-        <div class="hb">${pt(AG.juno)}Juno’s helper</div>
-        <b class="hn">${h.n}</b>
-        <div class="hs"><span><b>${h.can}</b> · <s>${h.cant}</s></span><span class="mono">${h.id}</span></div>
-        ${revoke ? RVP : ""}
-      </div>`;
-    return `<div class="fam cc" style="${cv(AG.juno.c)}">
-      <svg class="tether" viewBox="0 0 620 270" aria-hidden="true">
-        <path pathLength="1" d="M272 133 C 322 133 322 64 372 64"/>
-        <path pathLength="1" d="M272 133 C 322 133 322 208 372 208"/>
-        <rect class="clip" x="263" y="121" width="16" height="24" rx="6"/>
-      </svg>
-      <div class="pj">${card(AG.juno)}${revoke ? RVP : ""}</div>
-      ${HELP.map(helper).join("")}
-    </div>`;
-  }
   const mini = (a) =>
-    `<span class="gci"><span class="mini cc" style="${cv(a.c)}"><span class="mb">${LOGO}</span><span class="mr">${pt(a)}<span><span class="mn">${a.n}</span><span class="mv">${CK}${PP}</span></span></span></span></span>`;
+    `<span class="gci"><span class="mini cc" style="${colourVars(a.c)}"><span class="mb">${LOGO}</span><span class="mr">${pt(a)}<span><span class="mn">${a.n}</span><span class="mv">${CK}${PP}</span></span></span></span></span>`;
 
   /* ---------- halftone (from v4) ---------- */
   function halftone(flip) {
@@ -129,230 +47,6 @@
       }
     return `${s}</g></svg>`;
   }
-  $$(".tex").forEach((t, i) => (t.innerHTML = halftone(i === 1)));
-  // light dot field inside panels (corner fade)
-  {
-    let s = '<svg viewBox="0 0 400 500" preserveAspectRatio="xMaxYMin slice"><g fill="currentColor">';
-    for (let y = 0; y <= 500; y += 16)
-      for (let x = 0; x <= 400; x += 16) {
-        const f = Math.max(0, 1 - Math.hypot(400 - x, y) / 330);
-        const r = 3.6 * f * f;
-        if (r > 0.4) s += `<circle cx="${x}" cy="${y}" r="${r.toFixed(2)}"/>`;
-      }
-    s += "</g></svg>";
-    $$(".dots").forEach((d) => (d.innerHTML = s));
-  }
-
-  /* ---------- build ---------- */
-  const DECK = ["juno", "otto", "mika", "remy"];
-  $("#deck").innerHTML =
-    `<span class="disc" aria-hidden="true"></span>${DECK.map((k) => `<div class="dc">${card(AG[k])}</div>`).join("")}`;
-
-  $("#note").innerHTML =
-    `<div class="note" role="img" aria-label="Errand for Juno: Juniper Records, jazz records for my dad, 60 dollars max, back by tomorrow, Continue with PayPal">
-    <span class="tape"></span>
-    <div class="nhd">${pt(AG.juno)}Errand for Juno</div>
-    <div class="nshop">Juniper Records</div>
-    <div class="nask">Jazz records for my dad</div>
-    <div class="nrow"><div class="nchip"><small>Max</small><b>$60</b></div><div class="nchip"><small>Back by</small><b>Tomorrow</b></div></div>
-    <div class="ppb" aria-hidden="true">Continue with ${PP}</div>
-  </div>`;
-
-  $("#phone").innerHTML = `<div class="phone" role="group" aria-label="Approval text from Courier">
-    <div class="scr"><span class="island"></span>
-      <div class="sbar"><span>16:19</span><span class="ic"><i style="height:.45em"></i><i style="height:.65em"></i><i style="height:.85em"></i><i style="height:1.05em"></i></span></div>
-      <div class="clk">16:19</div><div class="dte">Sunday, 25 October</div>
-      <div class="notif">
-        <div class="nh">${LOGO}</div>
-        <div class="nwho">${pt(AG.juno)}Juno asks</div>
-        <div class="nq">Studio headphones, $89?</div>
-        <div class="ns">Over your $60.</div>
-        <div class="acts"><button type="button" class="ap">Approve</button><button type="button" class="dn">Deny</button></div>
-      </div>
-    </div></div>`;
-
-  $("#rcpt").innerHTML = `<div class="lift"><div class="rcpt zz" role="group" aria-label="Juniper Records receipt">
-    <div class="rh"><b>Juniper Records</b><span class="mono">#4471</span></div>
-    <div class="ramt"><b>$28.00</b><span>paid</span></div>
-    <div class="ragent">${pt(AG.juno)}<div><b>Juno</b><span class="mono">${AG.juno.id}</span></div></div>
-    <div class="rwho">${MAYA}<div><b>Sent by a real person</b><br>${VT}</div></div>
-  </div></div>`;
-
-  $("#crew").innerHTML = fam(false);
-  $("#rvk").innerHTML = `<div class="tog" aria-hidden="true">${pt(AG.juno)}<span>Juno</span><i></i></div>${fam(true)}`;
-
-  /* ---------- the gift (slides 4–6) ---------- */
-  {
-    const LEO = MAYA.replace("#FFC629", "#D6FF2E");
-    const OK =
-      '<span class="okc" aria-hidden="true"><svg viewBox="0 0 12 12"><path d="M2.5 6.2 5 8.6l4.6-5" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>';
-    const J = AG.juno,
-      O = AG.otto;
-
-    /* 4 · the gift, two couriers joining it */
-    const gid = (
-      a,
-      who,
-    ) => `<div class="gid cc" style="${cv(a.c)}" role="img" aria-label="Courier ID: ${a.n}, for ${who}, ${a.id}, verified by PayPal">
-        <div class="mb">${LOGO}</div>
-        <div class="mr">${pt(a)}<div class="mt"><b>${a.n}</b><span>for <b>${who}</b></span></div></div>
-        <div class="mf"><span class="mono">${a.id}</span><span class="vt">${CK}${PP}</span></div>
-      </div>`;
-    /* box set art: two sleeves behind, one record sliding out */
-    const ART = `<svg viewBox="0 0 360 150" preserveAspectRatio="xMidYMid meet" aria-hidden="true">
-        <rect x="114" y="10" width="112" height="112" rx="5" fill="#FF6B2C"/>
-        <rect x="104" y="18" width="112" height="112" rx="5" fill="#3D3AF5"/>
-        <g transform="rotate(-18 238 74)"><circle cx="238" cy="74" r="54" fill="#141414"/>
-          <circle cx="238" cy="74" r="40" fill="none" stroke="#2E2E2E" stroke-width="1.4"/>
-          <circle cx="238" cy="74" r="17" fill="#FFC629"/><circle cx="238" cy="74" r="2.6" fill="#F2EFE9"/></g>
-        <rect x="94" y="26" width="112" height="112" rx="5" fill="#141414"/>
-        <circle cx="150" cy="82" r="32" fill="#D6FF2E"/>
-        <rect x="106" y="118" width="44" height="7" rx="3.5" fill="#F2EFE9"/>
-      </svg>`;
-    $("#gbuy").innerHTML = `<div class="duo">
-        <div class="prod" role="group" aria-label="Late Night Jazz, 5-LP box set from Juniper Records, 120 dollars, a gift for Dad">
-          <div class="art">${ART}</div>
-          <div class="ph"><div><b>Late Night Jazz</b><span>5-LP box set · Juniper Records</span></div><span class="pr">$120</span></div>
-          <span class="gtag"><span>For Dad</span></span>
-        </div>
-        <div class="pair">${gid(J, "Maya")}${gid(O, "Leo")}</div>
-      </div>`;
-
-    /* 5 · the Run chat, then Maya's approval */
-    const msg = (a, t) =>
-      `<div class="msg cc" style="${cv(a.c)}">${pt(a)}<div><small>${a.n}</small><p>${t}</p></div></div>`;
-    $("#grun").innerHTML = `<div class="run">
-        <div class="thr" role="group" aria-label="Couriers' chat for Dad's gift">
-          <div class="thd">Dad’s gift</div>
-          ${msg(O, "Leo is $10 short.")}
-          ${msg(J, "Asking Maya.")}
-        </div>
-        <div class="gnote" role="group" aria-label="Approval request on Maya's phone">
-          <div class="nh">${LOGO}</div>
-          <div class="nwho">${pt(J)}Juno asks</div>
-          <div class="nq">Cover $10 more for Dad’s gift?</div>
-          <div class="nsub">Still within your $70.</div>
-          <div class="acts"><button type="button" class="ap">Approve</button><button type="button" class="dn">Deny</button></div>
-        </div>
-      </div>`;
-
-    /* 6 · one receipt, two people */
-    const row = (av, who, amt, d) =>
-      `<div class="rrow" style="--d:${d}s">${av}<div><b>${who}</b><span class="vt">${CK}Paid with ${PP}</span></div><span class="amt">${amt}</span></div>`;
-    $("#grcpt").innerHTML =
-      `<div class="lift"><div class="rcpt zz" role="group" aria-label="Juniper Records receipt: Late Night Jazz box set, 120 dollars paid; Maya 70 dollars and Leo 50 dollars, both paid with PayPal; 1 order, 2 verified people">
-        <div class="rh"><b>Juniper Records</b><span class="mono">#4502</span></div>
-        <div class="ritem">Late Night Jazz box set</div>
-        <div class="ramt"><b>$120.00</b><span>paid</span></div>
-        ${row(MAYA, "Maya", "$70", 0.7)}
-        ${row(LEO, "Leo", "$50", 1)}
-        <div class="rfoot">${OK}<span><b>1 order</b> · 2 verified people</span></div>
-      </div></div>`;
-  }
-
-  {
-    const F = [
-      ["otto", "6%", "16%", "-8deg", "0s"],
-      ["mika", "80%", "13%", "7deg", "-1.5s"],
-      ["remy", "10%", "58%", "6deg", "-3s"],
-      ["juno", "78%", "56%", "-6deg", "-2.2s"],
-    ];
-    $("#floaters").innerHTML = F.map(
-      ([k, x, y, r, ad]) => `<span class="gc" style="left:${x};top:${y};rotate:${r};--ad:${ad}">${mini(AG[k])}</span>`,
-    ).join("");
-  }
-
-  /* ---------- phone buttons ---------- */
-  document.addEventListener("click", (e) => {
-    const b = e.target.closest(".acts button");
-    if (!b) return;
-    const v = b.classList.contains("ap") ? "ok" : "no",
-      p = b.closest(".phone, .gnote");
-    const same = p.dataset.v === v;
-    if (same) delete p.dataset.v;
-    else p.dataset.v = v;
-    p.querySelector(".ap").textContent = !same && v === "ok" ? "Approved ✓" : "Approve";
-    p.querySelector(".dn").textContent = !same && v === "no" ? "Denied" : "Deny";
-  });
-
-  /* ---------- hero deck shuffle ---------- */
-  const deck = (() => {
-    const els = $$("#deck .dc");
-    const POS = [
-      { x: 0, y: 0, r: -4, s: 1, o: 1 },
-      { x: 3.4, y: -3.4, r: 3, s: 0.95, o: 1 },
-      { x: 6.6, y: -6.6, r: 9, s: 0.9, o: 1 },
-      { x: 9.2, y: -9.4, r: 15, s: 0.85, o: 0 },
-    ];
-    const OUT = "translate(-1.2em,1.6em) rotate(-6deg) scale(.97)"; // fade out where it sits
-    const tf = (p) => `translate(${p.x}em,${p.y}em) rotate(${p.r}deg) scale(${p.s})`;
-    let order = els.map((_, i) => i),
-      timer = null,
-      hover = false,
-      busy = false;
-    function place() {
-      order.forEach((ci, pos) => {
-        const el = els[ci],
-          p = POS[pos];
-        el.style.zIndex = 10 - pos;
-        el.style.transform = tf(p);
-        el.style.opacity = p.o;
-        el.classList.toggle("bk", pos > 0);
-      });
-    }
-    function step() {
-      if (hover || busy || document.hidden) return;
-      busy = true;
-      const front = order.shift(),
-        el = els[front];
-      el.classList.add("out");
-      el.style.zIndex = 20;
-      el.style.transform = OUT;
-      el.style.opacity = 0;
-      order.forEach((ci, pos) => {
-        const e = els[ci],
-          p = POS[pos];
-        e.style.zIndex = 10 - pos;
-        e.style.transform = tf(p);
-        e.style.opacity = p.o;
-        e.classList.toggle("bk", pos > 0);
-      });
-      setTimeout(() => {
-        // jump, invisible, to the back slot; it fades in there on a later step
-        order.push(front);
-        el.classList.remove("out");
-        el.classList.add("tuck", "bk");
-        el.style.zIndex = 5;
-        el.style.transform = tf(POS[3]);
-        el.style.opacity = 0;
-        requestAnimationFrame(() =>
-          requestAnimationFrame(() => {
-            el.classList.remove("tuck");
-            busy = false;
-          }),
-        );
-      }, 260);
-    }
-    const box = $("#deck");
-    box.addEventListener("mouseenter", () => (hover = true));
-    box.addEventListener("mouseleave", () => (hover = false));
-    function set(mode) {
-      clearTimeout(timer);
-      clearInterval(timer);
-      timer = null;
-      if (mode === "shuffle" && !reduce) {
-        timer = setTimeout(() => {
-          step();
-          timer = setInterval(step, 2200);
-        }, 2000);
-      } else {
-        order = els.map((_, i) => i);
-        place();
-      }
-    }
-    place();
-    return { set };
-  })();
 
   /* ---------- dotted globe ---------- */
   const globe = (() => {
@@ -444,6 +138,13 @@
       '<path d="M90 10 90 56 48 10z" fill="#fff" opacity=".45"/>',
       '<rect x="48" y="12" width="40" height="20" rx="10" fill="#141414" opacity=".5"/>',
     ];
+    let known = false;
+    function setKnown(on) {
+      if (on === known) return;
+      known = on;
+      for (const c of chips) c.el.classList.toggle("known", on);
+      redraw();
+    }
     let ni = 0,
       chips = [],
       lastSpawn = 0;
@@ -480,7 +181,13 @@
         const [n, ck, pc, lc] = NAMES[ni++ % NAMES.length];
         const el = document.createElement("span");
         el.className = "gc";
-        el.innerHTML = mini({ n, L: n[0], c: ck, pc, lc, sh: SH[ni % SH.length] });
+        /* Both faces are there from the start, so a chip can turn into a courier and back. */
+        el.innerHTML = mini({ n, L: n[0], c: ck, pc, lc, sh: SH[ni % SH.length] }).replace(
+          '<span class="gci">',
+          '<span class="gci"><span class="s-anon"><i>?</i>Unknown agent</span>',
+        );
+        el.classList.toggle("known", known);
+        el.style.setProperty("--d", `${(chips.length * 0.12).toFixed(2)}s`);
         layer.appendChild(el);
         const c = { p, el, ck, born: now - age, life: 4200 };
         chips.push(c);
@@ -522,7 +229,7 @@
       for (const c of chips) {
         place(c);
         const k = clamp((now - c.born) / 900, 0, 1);
-        const col = pingCol(c.ck);
+        const col = known ? pingCol(c.ck) : "#a8a59c";
         ctx.fillStyle = col;
         ctx.beginPath();
         ctx.arc(c.x, c.y, 4.2, 0, 7);
@@ -603,82 +310,265 @@
     function redraw() {
       if (W && !running) draw(performance.now());
     }
-    return { start, stop, still, redraw };
+    return { start, stop, still, redraw, setKnown };
   })();
 
-  /* ---------- play sections on view ---------- */
-  const secs = $$(".sec");
-  function play(sec) {
-    if (!sec.classList.contains("play")) sec.classList.add("play");
-  }
-  if (reduce || !("IntersectionObserver" in window)) secs.forEach(play);
-  else {
-    const io = new IntersectionObserver(
-      (es) =>
-        es.forEach((e) => {
-          if (e.isIntersecting) {
-            play(e.target);
-            io.unobserve(e.target);
-          }
-        }),
-      { rootMargin: "0px 0px -18% 0px", threshold: 0 },
-    );
-    secs.forEach((s) => io.observe(s));
-  }
-  /* Cards arrive one at a time, whether they're on screen together or stacked on a phone. */
-  const cards = $$(".pcol");
-  if (reduce || !("IntersectionObserver" in window)) cards.forEach((c) => c.classList.add("in"));
-  else {
-    const queue = [];
-    let busy = false;
-    const next = () => {
-      const c = queue.shift();
-      busy = !!c;
-      if (!c) return;
-      c.classList.add("in");
-      setTimeout(next, 1000);
-    };
-    const io = new IntersectionObserver(
-      (es) => {
-        for (const e of es) {
-          if (!e.isIntersecting) continue;
-          queue.push(e.target);
-          io.unobserve(e.target);
-        }
-        if (!busy) next();
-      },
-      { rootMargin: "0px 0px -18% 0px", threshold: 0 },
-    );
-    cards.forEach((c) => io.observe(c));
-  }
-  if (reduce) globe.still();
-  else if ("IntersectionObserver" in window) {
-    new IntersectionObserver((es) => es.forEach((e) => (e.isIntersecting ? globe.start() : globe.stop())), {
-      threshold: 0.02,
-    }).observe(secs[1]);
-  } else globe.start();
+  window.courierGlobe = { globe, halftone, mini };
+})();
 
-  /* ---------- boot ---------- */
-  /* ?beat=N renders the page starting at section N (earlier ones hidden) for headless screenshots.
-     The first wheel/touch/key restores the full page there. */
-  const forced = qs.has("beat") ? clamp(parseInt(qs.get("beat"), 10) || 0, 0, secs.length - 1) : 0;
-  let pinned = forced > 0;
-  function unpin() {
-    if (!pinned) return;
-    pinned = false;
-    ["wheel", "touchstart", "keydown"].forEach((t) => removeEventListener(t, unpin, true));
-    secs.forEach((s) => s.classList.remove("pin-hide"));
-    scrollTo({ top: secs[forced].getBoundingClientRect().top + scrollY, behavior: "auto" });
+/* The story: each screen moves through its steps as you scroll, and goes back on the way up. */
+(() => {
+  const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+  const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const { globe, halftone, mini } = window.courierGlobe;
+  const SHOPS = [
+    {
+      slug: "floor-dash",
+      name: "Floor Dash",
+      tile: "#f0531c",
+      mark: '<path d="M26 22h24M18 32h32M26 42h24" stroke="#fff" stroke-width="6" stroke-linecap="round"/><circle cx="12" cy="22" r="3" fill="#fff"/><circle cx="16" cy="42" r="3" fill="#fff"/>',
+    },
+    {
+      slug: "amazoo",
+      name: "Amazoo",
+      tile: "#12a150",
+      mark: '<circle cx="23" cy="32" r="10" fill="#fff"/><circle cx="41" cy="32" r="10" fill="#fff"/><circle cx="25" cy="33" r="4.4" fill="#143d28"/><circle cx="43" cy="33" r="4.4" fill="#143d28"/><path d="M14 19c3-3 7-4 11-3M50 19c-3-3-7-4-11-3" fill="none" stroke="#fff" stroke-width="3.4" stroke-linecap="round"/><path d="M24 47c5 3.4 11 3.4 16 0" fill="none" stroke="#fff" stroke-width="3.4" stroke-linecap="round"/>',
+    },
+    {
+      slug: "beanbucks",
+      name: "Beanbucks",
+      tile: "#8b5a2b",
+      mark: '<path d="M19 21h26l-3 27a4 4 0 0 1-4 4H26a4 4 0 0 1-4-4z" fill="#fff"/><rect x="16" y="14" width="32" height="7" rx="3.5" fill="#e9d8c3"/><ellipse cx="32" cy="36" rx="6" ry="8" fill="#8b5a2b"/>',
+    },
+    {
+      slug: "forknite",
+      name: "Forknite",
+      tile: "#7c3aed",
+      mark: '<path d="M14 14h36v20c0 9-8 15-18 18-10-3-18-9-18-18z" fill="#f2c14e"/><path d="M21 34V22l5.5 5L32 20l5.5 7 5.5-5v12z" fill="#7c3aed"/>',
+    },
+    {
+      slug: "mike",
+      name: "Mike",
+      tile: "#17171a",
+      mark: '<path d="M12 44 19 18h7l6 14 12-14h8l-7 26h-7l4-15-10 12h-5l-4-12-4 15z" fill="#fff"/><path d="M8 52h48" stroke="#ff5a36" stroke-width="4" stroke-linecap="round"/>',
+    },
+    {
+      slug: "ikeep",
+      name: "Ikeep",
+      tile: "#ff8a1f",
+      mark: '<path d="M13 32 32 15l19 17v19H13z" fill="#fff"/><rect x="27" y="36" width="10" height="15" rx="2" fill="#ff8a1f"/>',
+    },
+    {
+      slug: "juniper",
+      name: "Juniper Records",
+      tile: "#fb7185",
+      mark: '<circle cx="32" cy="32" r="21" fill="#0f1f1a"/><circle cx="32" cy="32" r="14" fill="none" stroke="#fff" stroke-width="1.4" opacity=".45"/><circle cx="32" cy="32" r="6" fill="#d9f26b"/>',
+    },
+    {
+      slug: "walmore",
+      name: "Walmore",
+      tile: "#dc1f3c",
+      mark: '<path d="M21 27a11 12 0 0 1 22 0" fill="none" stroke="#fff" stroke-width="4"/><path d="M11 27h42l-5 25H16z" fill="#fff"/><path d="M24 34v11M32 34v11M40 34v11" stroke="#dc1f3c" stroke-width="3" stroke-linecap="round"/>',
+    },
+    {
+      slug: "itsy",
+      name: "Itsy",
+      tile: "#ff5fa2",
+      mark: '<rect x="17" y="13" width="30" height="7" rx="3" fill="#fff"/><rect x="17" y="44" width="30" height="7" rx="3" fill="#fff"/><path d="M22 24h20M22 30h20M22 36h20M22 41h20" stroke="#fbcfe8" stroke-width="3.4" stroke-linecap="round"/>',
+    },
+    {
+      slug: "gamestomp",
+      name: "Gamestomp",
+      tile: "#6366f1",
+      mark: '<path d="M19 22h26c7 0 11 9 12 19 1 8-7 11-11 5l-4-5H22l-4 5c-4 6-12 3-11-5 1-10 5-19 12-19z" fill="#fff"/><path d="M21 27v8M17 31h8" stroke="#6366f1" stroke-width="3.4" stroke-linecap="round"/><circle cx="43" cy="28" r="2.6" fill="#6366f1"/><circle cx="48" cy="33" r="2.6" fill="#6366f1"/>',
+    },
+    {
+      slug: "sephoria",
+      name: "Sephoria",
+      tile: "#a21caf",
+      mark: '<rect x="23" y="35" width="18" height="18" rx="2.5" fill="#f2c14e"/><rect x="26" y="26" width="12" height="10" fill="#fff"/><path d="M26 26V16l12-5v15z" fill="#fda4af"/>',
+    },
+    {
+      slug: "best-bye",
+      name: "Best Bye",
+      tile: "#06b6d4",
+      mark: '<path d="M15 15h19l16 16a3 3 0 0 1 0 4L35 50a3 3 0 0 1-4 0L15 34z" fill="#fff"/><circle cx="24" cy="24" r="4" fill="#06b6d4"/>',
+    },
+    {
+      slug: "wholesome-foods",
+      name: "Wholesome Foods",
+      tile: "#65a30d",
+      mark: '<path d="M15 49C14 27 29 14 50 14c1 21-12 36-35 35z" fill="#fff"/><path d="M15 49 38 26" stroke="#65a30d" stroke-width="3" stroke-linecap="round"/>',
+    },
+    {
+      slug: "zaza",
+      name: "Zaza",
+      tile: "#f5c518",
+      mark: '<path d="M26 18a6 6 0 1 1 9 5c-2 1-3 2-3 5l19 13a3 3 0 0 1-2 6H15a3 3 0 0 1-2-6l19-13" fill="none" stroke="#141414" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>',
+    },
+    {
+      slug: "petsmarty",
+      name: "Petsmarty",
+      tile: "#2563eb",
+      mark: '<ellipse cx="32" cy="41" rx="12" ry="10" fill="#fff"/><circle cx="16" cy="30" r="5" fill="#fff"/><circle cx="26" cy="20" r="5.5" fill="#fff"/><circle cx="38" cy="20" r="5.5" fill="#fff"/><circle cx="48" cy="30" r="5" fill="#fff"/>',
+    },
+    {
+      slug: "bookworm",
+      name: "Bookworm",
+      tile: "#312e81",
+      mark: '<path d="M32 21c-6-5-13-6-21-5v31c8-1 15 0 21 5 6-5 13-6 21-5V16c-8-1-15 0-21 5z" fill="#fff"/><path d="M32 21v31" stroke="#312e81" stroke-width="3"/><circle cx="43" cy="26" r="4" fill="#d9f26b"/>',
+    },
+    {
+      slug: "home-despot",
+      name: "Home Despot",
+      tile: "#475569",
+      mark: '<rect x="28.5" y="24" width="7" height="29" rx="3" fill="#fbbf24"/><path d="M17 13h27l6 11H17z" fill="#fff"/>',
+    },
+    {
+      slug: "airbedd",
+      name: "Airbedd",
+      tile: "#2dd4bf",
+      mark: '<rect x="10" y="17" width="6" height="33" rx="3" fill="#fff"/><rect x="48" y="30" width="6" height="20" rx="3" fill="#fff"/><rect x="16" y="33" width="32" height="10" fill="#fff"/><rect x="19" y="24" width="14" height="9" rx="3" fill="#cffafe"/>',
+    },
+    {
+      slug: "ticketmonster",
+      name: "Ticketmonster",
+      tile: "#ea9a00",
+      mark: '<path d="M10 20h44v9a4 4 0 0 0 0 8v9H10v-9a4 4 0 0 0 0-8z" fill="#fff"/><circle cx="25" cy="30" r="4" fill="#ea9a00"/><circle cx="39" cy="30" r="4" fill="#ea9a00"/><path d="M24 39c5 3 11 3 16 0" fill="none" stroke="#ea9a00" stroke-width="3" stroke-linecap="round"/>',
+    },
+    {
+      slug: "trader-moes",
+      name: "Trader Moe’s",
+      tile: "#134e4a",
+      mark: '<path d="M36 22 16 50c-1 2 1 3 3 2l28-20c3-4 0-9-4-11-2-1-5-1-7 1z" fill="#fdba74"/><path d="M41 21c0-5 2-8 6-10M43 23c5-1 9 0 12 3M42 22c3-3 7-4 10-3" fill="none" stroke="#fff" stroke-width="3.4" stroke-linecap="round"/>',
+    },
+  ];
+  const CK =
+    '<span class="ck"><svg viewBox="0 0 12 12"><path d="M2.5 6.2 5 8.6l4.6-5" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>';
+  const PP = '<span class="pp"><span class="a">Pay</span><span class="b">Pal</span></span>';
+
+  $$("[data-tex]").forEach((t) => (t.innerHTML = halftone(false)));
+  $$("[data-ver]").forEach((e) => (e.innerHTML = `${CK}Verified by ${PP}`));
+  $$("[data-tick]").forEach((e) => (e.innerHTML = CK));
+  /* The earlier small card, the same one the globe shows. */
+  const SHAPE = { cobalt: ["#141414", "#fff", '<circle cx="68" cy="34" r="24" fill="#fff" opacity=".5"/>'] };
+  $$("[data-mini]").forEach((e) => {
+    const [n, c] = e.dataset.mini.split("|");
+    const [pc, lc, sh] = SHAPE[c];
+    e.innerHTML = mini({ n, L: n[0], c, pc, lc, sh }).replace('class="gci"', 'style="display:block"');
+  });
+  /* Square courier pictures for the group chat. */
+  const SHP = [
+    '<circle cx="68" cy="34" r="24" fill="#fff" opacity=".35"/>',
+    '<path d="M90 10 90 56 48 10z" fill="#141414" opacity=".2"/>',
+    '<rect x="48" y="12" width="40" height="20" rx="10" fill="#fff" opacity=".3"/>',
+  ];
+  const pic = ([l, bg, fg, sh]) =>
+    `<span class="s-pt" style="background:${bg};color:${fg}" aria-hidden="true"><svg viewBox="0 0 100 100">${SHP[sh]}</svg><b>${l}</b></span>`;
+  $$("[data-pt]").forEach((e) => (e.outerHTML = pic(e.dataset.pt.split("|"))));
+  const PICS = { Juno: "J|#3D3AF5|#fff|0", Otto: "O|#D6FF2E|#141414|1", Mika: "M|#141414|#fff|2" };
+  $$("#group .s-them > b").forEach((b) => b.insertAdjacentHTML("afterbegin", pic(PICS[b.textContent].split("|"))));
+
+  /* An uneven cluster: lopsided outline, nudged positions, mixed sizes, and shops popping up at random. The seed keeps it the same on every load. */
+  let seed = 11;
+  const rnd = () => {
+    seed = (seed * 16807) % 2147483647;
+    return (seed - 1) / 2147483646;
+  };
+  const cells = [];
+  for (let row = -4; row <= 4; row++)
+    for (let col = -5; col <= 5; col++) {
+      const x = (col + (row & 1) / 2) * 1.3,
+        y = row * 1.12,
+        a = Math.atan2(y, x);
+      cells.push({ x, y, score: Math.hypot(x, y * 1.25) * (1 + 0.14 * Math.sin(a * 3 + 0.8) + 0.3 * rnd()) });
+    }
+  cells.sort((a, b) => a.score - b.score);
+  const spots = cells.slice(0, SHOPS.length).map((c, i) => ({
+    x: i ? c.x + (rnd() - 0.5) * 0.14 : 0,
+    y: i ? c.y + (rnd() - 0.5) * 0.14 : 0,
+    z: i ? 0.76 + rnd() * 0.3 : 1.08,
+    order: rnd(),
+  }));
+  const queue = [...spots].sort((a, b) => a.order - b.order);
+  queue.forEach((c, i) => (c.at = 0.07 + (i / (queue.length - 1)) * 0.68 + (i ? (rnd() - 0.5) * 0.025 : 0)));
+  const reach = (k) => (2 * Math.max(...spots.map((c) => Math.abs(c[k]) + c.z / 2))).toFixed(3);
+  const apps = document.getElementById("apps");
+  apps.style.setProperty("--fx", reach("x"));
+  apps.style.setProperty("--fy", reach("y"));
+  apps.innerHTML = SHOPS.map((s, i) => {
+    const c = spots[i];
+    return `<div class="s-app${i ? "" : " pick"}" title="${s.name}" style="--t:${s.tile};--x:${c.x.toFixed(3)};--y:${c.y.toFixed(3)};--z:${c.z.toFixed(3)}"><svg viewBox="0 0 64 64" aria-hidden="true">${s.mark}</svg>${i ? "" : `<span>${s.name}</span>`}</div>`;
+  }).join("");
+  const lit = $$(".s-app", apps).map((n, i) => [n, spots[i].at]);
+
+  const hang = document.getElementById("hang");
+  let lastY = scrollY,
+    angle = 0,
+    speed = 0;
+
+  const tracks = $$("[data-track]").map((el) => ({
+    el,
+    ats: $$("[data-at]", el).map((n) => [n, +n.dataset.at]),
+    untils: $$("[data-until]", el).map((n) => [n, +n.dataset.until]),
+    types: $$("[data-type]", el),
+    meters: $$("[data-meter]", el).map((n) => [n, n.dataset.meter.split(",").map((s) => s.split(":").map(Number))]),
+    counts: $$("[data-count]", el),
+  }));
+  const why = document.getElementById("why");
+  const open = document.getElementById("open");
+  const flip = document.getElementById("flip");
+  let globeOn = false;
+
+  function frame() {
+    for (const t of tracks) {
+      const r = t.el.getBoundingClientRect();
+      const span = r.height - innerHeight;
+      const p = reduce ? 1 : Math.max(0, Math.min(1, -r.top / span));
+      for (const [n, at] of t.ats) n.classList.toggle("is", p >= at);
+      for (const [n, u] of t.untils) n.classList.toggle("gone", p >= u);
+      for (const n of t.types) {
+        const from = +n.dataset.from,
+          to = +n.dataset.to,
+          clear = +n.dataset.clear,
+          text = n.dataset.type;
+        const count = Math.round(Math.max(0, Math.min(1, (p - from) / (to - from))) * text.length);
+        const show = p >= clear ? "" : text.slice(0, count);
+        if (n.textContent !== show) n.textContent = show;
+      }
+      for (const [n, stops] of t.meters) n.style.setProperty("--w", `${stops.find(([at]) => p >= at)[1]}%`);
+      for (const n of t.counts) n.textContent = Math.round(Math.min(1, p / 0.22) * +n.dataset.count);
+      if (t.el.id === "why") {
+        globe.setKnown(p >= 0.52);
+        t.el.classList.toggle("wait", p < 0.52);
+      }
+      if (t.el.id === "shops") {
+        for (const [n, at] of lit) n.classList.toggle("lit", p >= at);
+        apps.classList.toggle("focus", p >= 0.86);
+      }
+    }
+    /* The badge hangs still until the page moves, then swings on how fast it moved. */
+    const moved = Math.max(-90, Math.min(90, scrollY - lastY));
+    lastY = scrollY;
+    if (!reduce) {
+      speed = (speed + moved * 0.0045 - angle * 0.04) * 0.93;
+      angle += speed;
+      hang.style.transform = `rotate(${angle.toFixed(2)}deg)`;
+    }
+    /* Turns over in the middle of the hero, then holds on its back before the next screen. */
+    const or = open.getBoundingClientRect();
+    const op = Math.max(0, Math.min(1, -or.top / (or.height - innerHeight)));
+    const ft = reduce ? +(op > 0.45) : Math.max(0, Math.min(1, (op - 0.2) / 0.45));
+    const eased = ft * ft * (3 - 2 * ft);
+    flip.style.transform = `perspective(2400px) rotateY(${(eased * 180).toFixed(1)}deg)`;
+    const wr = why.getBoundingClientRect();
+    const onOpen = wr.bottom > 0 && wr.top < innerHeight;
+    if (onOpen !== globeOn) {
+      globeOn = onOpen;
+      if (reduce) onOpen && globe.still();
+      else onOpen ? globe.start() : globe.stop();
+    }
+    requestAnimationFrame(frame);
   }
-  if (pinned) {
-    secs.forEach((s, k) => s.classList.toggle("pin-hide", k < forced));
-    ["wheel", "touchstart", "keydown"].forEach((t) => addEventListener(t, unpin, { capture: true, passive: true }));
-  }
-  deck.set("shuffle");
-  requestAnimationFrame(() =>
-    requestAnimationFrame(() => {
-      play(secs[forced]);
-      if (!pinned) play(secs[0]);
-    }),
-  );
+  requestAnimationFrame(frame);
 })();
