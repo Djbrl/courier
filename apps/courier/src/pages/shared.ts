@@ -2,7 +2,6 @@ import {
   ARROW,
   avatar,
   type CourierLook,
-  config,
   courierLayout,
   html,
   LOGO,
@@ -99,19 +98,23 @@ export function dots(): RawHtml {
   return raw(dotsSvg);
 }
 
-export function cnav(human: Human | null): RawHtml {
+/** The site's links, the same on the landing page and every page around it. */
+export function navLinks(human: Human | null, here = ""): RawHtml {
   const name = firstName(human);
-  return html`<header class="cnav">
-    <a href="/" aria-label="Courier home">${LOGO}</a>
-    <nav>
-      <a class="hide-sm" href="${config.store.url}/merchant">For shops</a>
-      <a class="hide-sm" href="/developers">Developers</a>
+  const link = (href: string, label: string) =>
+    html`<a class="hide-sm" href="${href}" ${href === here ? raw('aria-current="page"') : ""}>${label}</a>`;
+  return html`${link("/#why", "How it works")}${link("/for-shops", "For shops")}${link("/install", "Install")}
       ${
         human
           ? html`<a class="who" href="/app">${avatar()}${name ?? "My Courier"}</a>`
-          : html`<a class="btn sm" href="/start">Try the demo${ARROW}</a>`
-      }
-    </nav>
+          : html`<a class="hide-sm signin" href="/app">Sign in</a><a class="btn sm" href="/start">Try the demo${ARROW}</a>`
+      }`;
+}
+
+export function cnav(human: Human | null, here = ""): RawHtml {
+  return html`<header class="cnav">
+    <a href="/" aria-label="Courier home">${LOGO}</a>
+    <nav>${navLinks(human, here)}</nav>
   </header>`;
 }
 
@@ -119,11 +122,11 @@ export function cpage(
   title: string,
   human: Human | null,
   body: RawHtml,
-  opts: { bodyClass?: string; scripts?: string[]; head?: RawHtml; nav?: boolean } = {},
+  opts: { bodyClass?: string; scripts?: string[]; head?: RawHtml; nav?: boolean; here?: string } = {},
 ): string {
   return courierLayout({
     title: `${title} · Courier`,
-    nav: opts.nav === false ? undefined : cnav(human),
+    nav: opts.nav === false ? undefined : cnav(human, opts.here),
     body,
     bodyClass: opts.bodyClass,
     scripts: opts.scripts,

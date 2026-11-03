@@ -1075,9 +1075,9 @@ await step("Claude adds one connector: Courier, with a cap the person sets while
     );
 });
 
-await step("Five shops through one connector, each browsable with no errand and known by name", async () => {
+await step("Twenty shops through one connector, each browsable with no errand and known by name", async () => {
   const { shops } = structured(await tool("list_shops"));
-  assert.equal(shops.length, 5);
+  assert.equal(shops.length, 20);
   const found = structured(await tool("search_shop", { shop: "floor dash", query: "flowers" }));
   assert.ok(
     found.results.some((r: any) => r.id === "fd-006"),

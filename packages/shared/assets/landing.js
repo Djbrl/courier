@@ -321,128 +321,8 @@
   const $$ = (s, r = document) => [...r.querySelectorAll(s)];
   const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
   const { globe, halftone, mini } = window.courierGlobe;
-  const SHOPS = [
-    {
-      slug: "floor-dash",
-      name: "Floor Dash",
-      tile: "#f0531c",
-      mark: '<path d="M26 22h24M18 32h32M26 42h24" stroke="#fff" stroke-width="6" stroke-linecap="round"/><circle cx="12" cy="22" r="3" fill="#fff"/><circle cx="16" cy="42" r="3" fill="#fff"/>',
-    },
-    {
-      slug: "amazoo",
-      name: "Amazoo",
-      tile: "#12a150",
-      mark: '<circle cx="23" cy="32" r="10" fill="#fff"/><circle cx="41" cy="32" r="10" fill="#fff"/><circle cx="25" cy="33" r="4.4" fill="#143d28"/><circle cx="43" cy="33" r="4.4" fill="#143d28"/><path d="M14 19c3-3 7-4 11-3M50 19c-3-3-7-4-11-3" fill="none" stroke="#fff" stroke-width="3.4" stroke-linecap="round"/><path d="M24 47c5 3.4 11 3.4 16 0" fill="none" stroke="#fff" stroke-width="3.4" stroke-linecap="round"/>',
-    },
-    {
-      slug: "beanbucks",
-      name: "Beanbucks",
-      tile: "#8b5a2b",
-      mark: '<path d="M19 21h26l-3 27a4 4 0 0 1-4 4H26a4 4 0 0 1-4-4z" fill="#fff"/><rect x="16" y="14" width="32" height="7" rx="3.5" fill="#e9d8c3"/><ellipse cx="32" cy="36" rx="6" ry="8" fill="#8b5a2b"/>',
-    },
-    {
-      slug: "forknite",
-      name: "Forknite",
-      tile: "#7c3aed",
-      mark: '<path d="M14 14h36v20c0 9-8 15-18 18-10-3-18-9-18-18z" fill="#f2c14e"/><path d="M21 34V22l5.5 5L32 20l5.5 7 5.5-5v12z" fill="#7c3aed"/>',
-    },
-    {
-      slug: "mike",
-      name: "Mike",
-      tile: "#17171a",
-      mark: '<path d="M12 44 19 18h7l6 14 12-14h8l-7 26h-7l4-15-10 12h-5l-4-12-4 15z" fill="#fff"/><path d="M8 52h48" stroke="#ff5a36" stroke-width="4" stroke-linecap="round"/>',
-    },
-    {
-      slug: "ikeep",
-      name: "Ikeep",
-      tile: "#ff8a1f",
-      mark: '<path d="M13 32 32 15l19 17v19H13z" fill="#fff"/><rect x="27" y="36" width="10" height="15" rx="2" fill="#ff8a1f"/>',
-    },
-    {
-      slug: "juniper",
-      name: "Juniper Records",
-      tile: "#fb7185",
-      mark: '<circle cx="32" cy="32" r="21" fill="#0f1f1a"/><circle cx="32" cy="32" r="14" fill="none" stroke="#fff" stroke-width="1.4" opacity=".45"/><circle cx="32" cy="32" r="6" fill="#d9f26b"/>',
-    },
-    {
-      slug: "walmore",
-      name: "Walmore",
-      tile: "#dc1f3c",
-      mark: '<path d="M21 27a11 12 0 0 1 22 0" fill="none" stroke="#fff" stroke-width="4"/><path d="M11 27h42l-5 25H16z" fill="#fff"/><path d="M24 34v11M32 34v11M40 34v11" stroke="#dc1f3c" stroke-width="3" stroke-linecap="round"/>',
-    },
-    {
-      slug: "itsy",
-      name: "Itsy",
-      tile: "#ff5fa2",
-      mark: '<rect x="17" y="13" width="30" height="7" rx="3" fill="#fff"/><rect x="17" y="44" width="30" height="7" rx="3" fill="#fff"/><path d="M22 24h20M22 30h20M22 36h20M22 41h20" stroke="#fbcfe8" stroke-width="3.4" stroke-linecap="round"/>',
-    },
-    {
-      slug: "gamestomp",
-      name: "Gamestomp",
-      tile: "#6366f1",
-      mark: '<path d="M19 22h26c7 0 11 9 12 19 1 8-7 11-11 5l-4-5H22l-4 5c-4 6-12 3-11-5 1-10 5-19 12-19z" fill="#fff"/><path d="M21 27v8M17 31h8" stroke="#6366f1" stroke-width="3.4" stroke-linecap="round"/><circle cx="43" cy="28" r="2.6" fill="#6366f1"/><circle cx="48" cy="33" r="2.6" fill="#6366f1"/>',
-    },
-    {
-      slug: "sephoria",
-      name: "Sephoria",
-      tile: "#a21caf",
-      mark: '<rect x="23" y="35" width="18" height="18" rx="2.5" fill="#f2c14e"/><rect x="26" y="26" width="12" height="10" fill="#fff"/><path d="M26 26V16l12-5v15z" fill="#fda4af"/>',
-    },
-    {
-      slug: "best-bye",
-      name: "Best Bye",
-      tile: "#06b6d4",
-      mark: '<path d="M15 15h19l16 16a3 3 0 0 1 0 4L35 50a3 3 0 0 1-4 0L15 34z" fill="#fff"/><circle cx="24" cy="24" r="4" fill="#06b6d4"/>',
-    },
-    {
-      slug: "wholesome-foods",
-      name: "Wholesome Foods",
-      tile: "#65a30d",
-      mark: '<path d="M15 49C14 27 29 14 50 14c1 21-12 36-35 35z" fill="#fff"/><path d="M15 49 38 26" stroke="#65a30d" stroke-width="3" stroke-linecap="round"/>',
-    },
-    {
-      slug: "zaza",
-      name: "Zaza",
-      tile: "#f5c518",
-      mark: '<path d="M26 18a6 6 0 1 1 9 5c-2 1-3 2-3 5l19 13a3 3 0 0 1-2 6H15a3 3 0 0 1-2-6l19-13" fill="none" stroke="#141414" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>',
-    },
-    {
-      slug: "petsmarty",
-      name: "Petsmarty",
-      tile: "#2563eb",
-      mark: '<ellipse cx="32" cy="41" rx="12" ry="10" fill="#fff"/><circle cx="16" cy="30" r="5" fill="#fff"/><circle cx="26" cy="20" r="5.5" fill="#fff"/><circle cx="38" cy="20" r="5.5" fill="#fff"/><circle cx="48" cy="30" r="5" fill="#fff"/>',
-    },
-    {
-      slug: "bookworm",
-      name: "Bookworm",
-      tile: "#312e81",
-      mark: '<path d="M32 21c-6-5-13-6-21-5v31c8-1 15 0 21 5 6-5 13-6 21-5V16c-8-1-15 0-21 5z" fill="#fff"/><path d="M32 21v31" stroke="#312e81" stroke-width="3"/><circle cx="43" cy="26" r="4" fill="#d9f26b"/>',
-    },
-    {
-      slug: "home-despot",
-      name: "Home Despot",
-      tile: "#475569",
-      mark: '<rect x="28.5" y="24" width="7" height="29" rx="3" fill="#fbbf24"/><path d="M17 13h27l6 11H17z" fill="#fff"/>',
-    },
-    {
-      slug: "airbedd",
-      name: "Airbedd",
-      tile: "#2dd4bf",
-      mark: '<rect x="10" y="17" width="6" height="33" rx="3" fill="#fff"/><rect x="48" y="30" width="6" height="20" rx="3" fill="#fff"/><rect x="16" y="33" width="32" height="10" fill="#fff"/><rect x="19" y="24" width="14" height="9" rx="3" fill="#cffafe"/>',
-    },
-    {
-      slug: "ticketmonster",
-      name: "Ticketmonster",
-      tile: "#ea9a00",
-      mark: '<path d="M10 20h44v9a4 4 0 0 0 0 8v9H10v-9a4 4 0 0 0 0-8z" fill="#fff"/><circle cx="25" cy="30" r="4" fill="#ea9a00"/><circle cx="39" cy="30" r="4" fill="#ea9a00"/><path d="M24 39c5 3 11 3 16 0" fill="none" stroke="#ea9a00" stroke-width="3" stroke-linecap="round"/>',
-    },
-    {
-      slug: "trader-moes",
-      name: "Trader Moe’s",
-      tile: "#134e4a",
-      mark: '<path d="M36 22 16 50c-1 2 1 3 3 2l28-20c3-4 0-9-4-11-2-1-5-1-7 1z" fill="#fdba74"/><path d="M41 21c0-5 2-8 6-10M43 23c5-1 9 0 12 3M42 22c3-3 7-4 10-3" fill="none" stroke="#fff" stroke-width="3.4" stroke-linecap="round"/>',
-    },
-  ];
+  /* The same shops the app has, sent with the page. */
+  const SHOPS = JSON.parse(document.getElementById("shops-data").textContent);
   const CK =
     '<span class="ck"><svg viewBox="0 0 12 12"><path d="M2.5 6.2 5 8.6l4.6-5" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>';
   const PP = '<span class="pp"><span class="a">Pay</span><span class="b">Pal</span></span>';
@@ -503,6 +383,12 @@
   const lit = $$(".s-app", apps).map((n, i) => [n, spots[i].at]);
 
   const hang = document.getElementById("hang");
+  const nav = document.getElementById("nav");
+  /* Back to the top in one go, rather than scrolling back through every screen. */
+  nav.querySelector(".logo").addEventListener("click", (e) => {
+    e.preventDefault();
+    scrollTo({ top: 0, behavior: reduce ? "auto" : "smooth" });
+  });
   let lastY = scrollY,
     angle = 0,
     speed = 0;
@@ -515,12 +401,21 @@
     meters: $$("[data-meter]", el).map((n) => [n, n.dataset.meter.split(",").map((s) => s.split(":").map(Number))]),
     counts: $$("[data-count]", el),
   }));
+  const screens = $$("main > section");
   const why = document.getElementById("why");
   const open = document.getElementById("open");
   const flip = document.getElementById("flip");
   let globeOn = false;
 
   function frame() {
+    /* Screens hand over to each other: the next one rises into place as it arrives, the last one fades as it goes. */
+    for (const el of screens) {
+      const r = el.getBoundingClientRect();
+      const e = reduce ? 1 : Math.max(0, Math.min(1, 1 - r.top / innerHeight));
+      const x = reduce ? 0 : Math.max(0, Math.min(1, 1 - r.bottom / innerHeight));
+      el.style.setProperty("--e", e.toFixed(3));
+      el.style.setProperty("--x", x.toFixed(3));
+    }
     for (const t of tracks) {
       const r = t.el.getBoundingClientRect();
       const span = r.height - innerHeight;
@@ -537,7 +432,9 @@
         if (n.textContent !== show) n.textContent = show;
       }
       for (const [n, stops] of t.meters) n.style.setProperty("--w", `${stops.find(([at]) => p >= at)[1]}%`);
-      for (const n of t.counts) n.textContent = Math.round(Math.min(1, p / 0.22) * +n.dataset.count);
+      /* The number runs up as soon as the screen settles, easing into its last few. */
+      const run = Math.min(1, p / 0.09);
+      for (const n of t.counts) n.textContent = Math.round((1 - (1 - run) ** 3) * +n.dataset.count);
       if (t.el.id === "why") {
         globe.setKnown(p >= 0.52);
         t.el.classList.toggle("wait", p < 0.52);
@@ -547,8 +444,11 @@
         apps.classList.toggle("focus", p >= 0.86);
       }
     }
-    /* The badge hangs still until the page moves, then swings on how fast it moved. */
     const moved = Math.max(-90, Math.min(90, scrollY - lastY));
+    nav.classList.toggle("solid", scrollY > 24);
+    if (moved > 4 && scrollY > innerHeight * 0.6) nav.classList.add("away");
+    else if (moved < -4 || scrollY < innerHeight * 0.6) nav.classList.remove("away");
+    /* The badge hangs still until the page moves, then swings on how fast it moved. */
     lastY = scrollY;
     if (!reduce) {
       speed = (speed + moved * 0.0045 - angle * 0.04) * 0.93;
@@ -558,7 +458,7 @@
     /* Turns over in the middle of the hero, then holds on its back before the next screen. */
     const or = open.getBoundingClientRect();
     const op = Math.max(0, Math.min(1, -or.top / (or.height - innerHeight)));
-    const ft = reduce ? +(op > 0.45) : Math.max(0, Math.min(1, (op - 0.2) / 0.45));
+    const ft = reduce ? +(op > 0.45) : Math.max(0, Math.min(1, (op - 0.12) / 0.48));
     const eased = ft * ft * (3 - 2 * ft);
     flip.style.transform = `perspective(2400px) rotateY(${(eased * 180).toFixed(1)}deg)`;
     const wr = why.getBoundingClientRect();

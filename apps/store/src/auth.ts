@@ -31,7 +31,7 @@ export const protectedResourceMetadata = {
   scopes_supported: [...ALL_SCOPES],
   bearer_methods_supported: ["header"],
   resource_name: `${JUNIPER.name} (Courier demo merchant)`,
-  resource_documentation: `${config.courier.url}/developers`,
+  resource_documentation: `${config.courier.url}/for-shops`,
 };
 
 const jwks = createRemoteJWKSet(new URL(`${config.courier.url}/jwks.json`), { cooldownDuration: 30_000 });

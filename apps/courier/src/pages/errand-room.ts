@@ -60,7 +60,7 @@ export function errandRoom(d: Desk, courier: Courier, chat: unknown, list: unkno
         <div class="rm-end" id="demo-end" hidden>
           <b>That’s the end of the demo.</b>
           <p>You’ve used your ${FREE_MESSAGES} free messages. Your chats and receipts stay here. To keep going, connect Courier to your own agent.</p>
-          <div class="after"><a class="btn sm" href="${connect}">Connect to Claude${ARROW}</a><a class="btn ghost sm" href="/developers">Use another agent</a></div>
+          <div class="after"><a class="btn sm" href="${connect}">Connect to Claude${ARROW}</a><a class="btn ghost sm" href="/install">Use another agent</a></div>
         </div>
         <p class="demo-tag">${config.anthropicConfigured ? `${look.name} runs on Claude.` : `A scripted stand-in for Claude, using the real shop tools.`} ${paypalFor(d.human).mode === "simulated" ? "Simulated PayPal: no real money." : "PayPal sandbox: no real money."} <span id="left"></span></p>
       </div>

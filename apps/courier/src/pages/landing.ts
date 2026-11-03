@@ -4,7 +4,6 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
-  avatar,
   CK,
   type CourierLook,
   config,
@@ -17,9 +16,10 @@ import {
   type RawHtml,
   ROOT_DIR,
   raw,
+  SHOPS,
 } from "@courier/shared";
 import type { Human } from "../db.ts";
-import { firstName } from "./shared.ts";
+import { navLinks } from "./shared.ts";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 
@@ -52,26 +52,34 @@ const MARK = raw(
   '<svg class="mark" viewBox="-2 0 42 20" aria-hidden="true"><path d="M15 0h25l-7 20H8z"/><path d="M5 0h6L4 20h-6z"/></svg>',
 );
 
-/** The back of the pass: what a shop is shown, and what it never is. */
+/** The back of the pass: the fields a shop gets, and the ones it never does, as an ID would print them. */
 function passBack(c: CourierLook): RawHtml {
-  return html`<div class="idc s-rev cc" style="${courierVars(c.color)}" role="img" aria-label="A shop sees ${c.name}, a courier agent verified by PayPal with a real person behind it. It never sees your name, your email or your PayPal account.">
+  const shared: [string, RawHtml | string][] = [
+    ["Agent", c.name],
+    ["Shopper", "pp_7f3a…c91"],
+    ["Person", html`${CK}Real`],
+    ["Verified", html`${CK}${PP}`],
+  ];
+  const withheld = ["Name", "Email", "PayPal ID"];
+  return html`<div class="idc s-rev cc" style="${courierVars(c.color)}" role="img" aria-label="Shared with a shop: agent ${c.name}, a shopper pseudonym, a real person, verified by PayPal. Withheld: name, email, PayPal account ID.">
     <div class="idf">
       <div class="tab"><div class="tr">${LOGO}<span class="idn">${c.idNo}</span></div></div>
       <i class="pf"></i><i class="slot"></i>
-      <div class="s-revt"><h3>A shop sees</h3><ul><li><b>${c.name}</b><small>Courier agent</small></li><li>${CK}Verified by ${PP}</li><li>${CK}A real person behind it</li></ul></div>
-      <div class="s-revb">${MARK}<h3>It never sees</h3><p>Your name, your email or your PayPal account.</p></div>
+      <div class="s-revt"><h3>Shared</h3><dl class="s-fld">${shared.map(([k, v]) => html`<div><dt>${k}</dt><dd>${v}</dd></div>`)}</dl></div>
+      <div class="s-revb">${MARK}<h3>Withheld</h3><dl class="s-fld">${withheld.map((k) => html`<div><dt>${k}</dt><dd><i aria-hidden="true"></i></dd></div>`)}</dl></div>
     </div>
   </div>`;
 }
 
 export function landingPage(human: Human | null): string {
   landingTemplate ||= fs.readFileSync(path.join(here, "landing.html"), "utf8");
-  const account = human
-    ? html`<a class="who" href="/app">${avatar()}${firstName(human) ?? "My Courier"}</a>`
-    : html`<a class="who signin" href="/app">Sign in</a>`;
   const body = landingTemplate
-    .replaceAll("{{navAccount}}", () => String(account))
+    .replaceAll("{{navLinks}}", () => String(navLinks(human)))
     .replaceAll("{{storeUrl}}", config.store.url)
+    .replaceAll("{{shops}}", () => {
+      const shops = SHOPS.map(({ slug, name, tile, mark }) => ({ slug, name, tile, mark }));
+      return `<script type="application/json" id="shops-data">${JSON.stringify(shops).replace(/</g, "\\u003c")}</script>`;
+    })
     .replaceAll("{{pass}}", () => String(html`<div>${idCard(JUNO, "Maya Chen")}</div><div>${passBack(JUNO)}</div>`))
     .replaceAll("{{passes}}", () =>
       String(

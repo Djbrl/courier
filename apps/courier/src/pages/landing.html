@@ -3,11 +3,11 @@
   <symbol id="arr" viewBox="0 0 16 16"><path d="M2 8h11M9 3.5 13.5 8 9 12.5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
 </defs></svg>
 
+<header class="s-nav" id="nav"><a href="/" class="logo" aria-label="Courier"><svg><use href="#mk"/></svg>Courier</a><nav class="s-links" aria-label="Site">{{navLinks}}</nav></header>
 <main>
 <section class="s-sec" id="open"><div class="s-stick">
   <div class="s-tex" data-tex></div>
   <div class="s-hang" id="hang"><i class="s-cord"></i><div class="s-flip" id="flip">{{pass}}</div></div>
-  <nav class="s-nav"><a href="/" class="logo" aria-label="Courier"><svg><use href="#mk"/></svg>Courier</a><div class="s-links"><a href="{{storeUrl}}/merchant">For shops</a><a href="/developers">Developers</a>{{navAccount}}</div></nav>
   <div class="s-opentx">
     <h1 class="s-h">Give your agent an&nbsp;ID.</h1>
     <p>Agents can buy now, so we’re turning them into couriers. PayPal verifies you, and yours gets an ID of its&nbsp;own.</p>
@@ -15,7 +15,7 @@
   </div>
 </div></section>
 
-<section class="s-sec" id="why" data-track style="--h:420vh"><div class="s-stick"><div class="s-grid">
+<section class="s-sec" id="why" data-track style="--h:250vh"><div class="s-stick"><div class="s-grid">
   <div class="s-copy s-swap">
     <div data-until=".52">
       <div class="s-stat"><span data-count="393">0</span>%</div>
@@ -31,7 +31,7 @@
   <div class="s-mock s-gl"><div class="globe" id="globe" role="img" aria-label="A rotating dotted globe; unknown agents appear on it, then turn into couriers with IDs"><canvas aria-hidden="true"></canvas><div class="gchips"></div></div></div>
 </div></div></section>
 
-<section class="s-sec" id="session" data-track data-solid style="--h:380vh;--solid:#FF6B2C"><div class="s-stick"><div class="s-grid">
+<section class="s-sec" id="session" data-track data-solid style="--h:250vh;--solid:#FF6B2C"><div class="s-stick"><div class="s-grid">
   <div class="s-copy">
     <h2 class="s-h">It starts in your agent session.</h2>
     <p>Ask for dinner the way you’d ask anyone. Your agent finds it, tells you the price, and sends its courier out once you say&nbsp;yes.</p>
@@ -50,15 +50,15 @@
   </div></div>
 </div></div></section>
 
-<section class="s-sec" id="shops" data-track data-solid style="--h:340vh;--solid:#D6FF2E"><div class="s-stick"><div class="s-grid">
+<section class="s-sec" id="shops" data-track data-solid style="--h:210vh;--solid:#D6FF2E"><div class="s-stick"><div class="s-grid">
   <div class="s-copy">
     <h2 class="s-h">It can buy at any shop that supports Courier.</h2>
     <p>The same ID works at every one of them, so your courier never starts over at the&nbsp;door.</p>
   </div>
-  <div class="s-mock"><div class="s-apps" id="apps"></div></div>
+  <div class="s-mock"><div class="s-apps" id="apps"></div>{{shops}}</div>
 </div></div></section>
 
-<section class="s-sec" id="seen" data-track data-solid style="--h:320vh;--solid:#3D3AF5"><div class="s-stick"><div class="s-grid">
+<section class="s-sec" id="seen" data-track data-solid style="--h:220vh;--solid:#3D3AF5"><div class="s-stick"><div class="s-grid">
   <div class="s-copy">
     <h2 class="s-h">The shop gets a real order, and never your name.</h2>
     <p>Each order comes with proof from <span class="pp"><span class="a">Pay</span><span class="b">Pal</span></span> that a real person is behind it, so the numbers finally mean&nbsp;something.</p>
@@ -87,7 +87,7 @@
   </div></div>
 </div></div></section>
 
-<section class="s-sec" id="talk" data-track data-solid style="--h:380vh;--solid:#FFC629"><div class="s-stick"><div class="s-grid">
+<section class="s-sec" id="talk" data-track data-solid style="--h:260vh;--solid:#FFC629"><div class="s-stick"><div class="s-grid">
   <div class="s-copy">
     <h2 class="s-h">Then you just talk to&nbsp;it.</h2>
     <p>Change your mind, add something for a friend, and keep going. Your courier follows along like anyone you’d send out, and it stops to ask when something goes past what you&nbsp;allowed.</p>
@@ -122,7 +122,7 @@
   </div></div>
 </div></div></section>
 
-<section class="s-sec" id="group" data-track data-solid style="--h:360vh;--solid:#FF5FA2"><div class="s-stick"><div class="s-grid">
+<section class="s-sec" id="group" data-track data-solid style="--h:250vh;--solid:#FF5FA2"><div class="s-stick"><div class="s-grid">
   <div class="s-copy">
     <h2 class="s-h">Friends’ couriers sort out the&nbsp;rest.</h2>
     <p>When everyone has a courier, they can team up on one order. They work out the delivery and who owes what between themselves, and each one still answers only to the person who sent&nbsp;it.</p>
@@ -162,7 +162,7 @@
   <div class="s-closegrid">
     <div>
       <h2 class="s-h">Now give yours an&nbsp;ID.</h2>
-      <div class="ctas"><a href="/start" class="btn acc">Try the demo<span class="go"><svg><use href="#arr"/></svg></span></a><a href="/developers" class="btn ghost">Add to Claude</a></div>
+      <div class="ctas"><a href="/start" class="btn acc">Try the demo<span class="go"><svg><use href="#arr"/></svg></span></a><a href="/install" class="btn ghost">Add to Claude</a></div>
     </div>
     <div class="s-row3">
       {{passes}}
@@ -172,7 +172,7 @@
 </main>
 <footer><div class="s-fw">
   <span class="logo"><svg><use href="#mk"/></svg>Courier</span>
-  <nav aria-label="Footer"><a href="#why">How it works</a><a href="{{storeUrl}}/merchant">For shops</a><a href="/developers">Developers</a></nav>
+  <nav aria-label="Footer"><a href="#why">How it works</a><a href="/for-shops">For shops</a><a href="/install">Install</a><a href="{{storeUrl}}">The shops</a></nav>
   <span class="ppl">Powered by <span class="pp"><span class="a">Pay</span><span class="b">Pal</span></span></span>
   <small>Sandbox demo.</small>
 </div></footer>

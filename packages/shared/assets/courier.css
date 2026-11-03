@@ -1065,8 +1065,20 @@ a {
   font-size: 16px;
   font-weight: 600;
 }
-.cnav nav > a:not(.btn):not(.who):hover {
+.cnav nav > a:not(.btn):not(.who):hover,
+.s-links > a:not(.btn):not(.who):hover {
   color: var(--cobalt);
+}
+.cnav nav > a[aria-current="page"] {
+  text-decoration: underline;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 6px;
+}
+@media (max-width: 860px) {
+  .cnav nav > .hide-sm,
+  .s-links > .hide-sm {
+    display: none;
+  }
 }
 .who {
   display: inline-flex;
@@ -5211,7 +5223,303 @@ html:has(body.app-page) {
   }
 }
 
-/* ---------- developers + release the bots ---------- */
+/* ---------- for shops and install ---------- */
+.fs {
+  max-width: 1360px;
+  margin: 0 auto;
+  padding: 10px var(--gut) 72px;
+}
+.fs .big {
+  font-size: clamp(44px, 5.4vw, 84px);
+}
+.fs .lead {
+  margin-top: 16px;
+  max-width: 34em;
+}
+.fs .ctas {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 28px;
+}
+.fs-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 7fr) minmax(0, 5fr);
+  gap: clamp(28px, 5vw, 80px);
+  align-items: center;
+  padding: clamp(16px, 4vw, 56px) 0 clamp(40px, 6vw, 88px);
+}
+/* An order as it lands on the shop's side: the person never appears on it. */
+.fs-order {
+  position: relative;
+  padding: 22px;
+  border-radius: var(--rad);
+  background: #fff;
+  box-shadow: 0 24px 60px rgba(20, 20, 20, 0.14);
+  border: 1px solid var(--line);
+  rotate: 1.5deg;
+}
+.fs-ostage {
+  position: relative;
+  isolation: isolate;
+}
+.fs-ostage::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  inset: -28px -24px -28px 36px;
+  border-radius: 36px;
+  background: var(--cobalt);
+  rotate: -3.5deg;
+}
+.fs-oh {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  font-size: 18px;
+}
+.fs-oh small {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--mute);
+}
+.fs-who {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin: 18px 0 8px;
+}
+.fs-who > span:nth-child(2) b {
+  display: block;
+  font:
+    italic 900 20px / 1 "Archivo",
+    sans-serif;
+  font-stretch: 118%;
+}
+.fs-who small {
+  font-size: 13px;
+  color: var(--mute);
+}
+.fs-who .vt {
+  margin-left: auto;
+}
+.fs-pt {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  background: var(--cobalt);
+  color: #fff;
+  font:
+    italic 900 20px "Archivo",
+    sans-serif;
+}
+/* label and value, the way a receipt prints them */
+.fs-kv {
+  display: grid;
+  margin: 0;
+}
+.fs-kv > div {
+  display: grid;
+  grid-template-columns: 7em minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  min-height: 40px;
+  border-top: 1px solid var(--line);
+}
+.fs-kv dt {
+  font:
+    600 11.5px "JetBrains Mono",
+    monospace;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--mute);
+}
+.fs-kv dd {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  font-weight: 700;
+}
+.fs-kv code {
+  font:
+    600 13.5px "JetBrains Mono",
+    monospace;
+  white-space: nowrap;
+}
+.fs-kv dd i {
+  display: block;
+  width: 70%;
+  height: 12px;
+  border-radius: 3px;
+  background: currentColor;
+}
+.fs-ok {
+  margin-top: 14px;
+  padding: 13px;
+  border-radius: 14px;
+  background: var(--ink);
+  color: #fff;
+  text-align: center;
+  font-weight: 700;
+}
+.fs-g {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+}
+.fs-t {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 24px;
+  border-radius: var(--rad);
+  background: var(--t);
+  color: var(--tt);
+}
+.fs-t .sec-t {
+  font-size: 24px;
+  line-height: 1.02;
+}
+.fs-t p {
+  font-weight: 500;
+  line-height: 1.35;
+}
+.fs-vis {
+  display: grid;
+  place-items: center;
+  height: 150px;
+  margin-bottom: 8px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.92);
+  color: var(--ink);
+}
+.fs-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  border-radius: 99px;
+  background: #fff;
+  box-shadow: 0 6px 18px rgba(20, 20, 20, 0.14);
+  font-weight: 700;
+  white-space: nowrap;
+}
+.fs-pill .ck {
+  width: 20px;
+  height: 20px;
+}
+.fs-stop {
+  flex-direction: column;
+  gap: 2px;
+  border-radius: 16px;
+  font-size: 13px;
+  color: var(--mute);
+}
+.fs-stop b {
+  font-size: 16px;
+  color: var(--red);
+}
+.fs-meter {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 10px;
+  width: 84%;
+  font:
+    700 13px "JetBrains Mono",
+    monospace;
+}
+.fs-meter i {
+  position: relative;
+  height: 12px;
+  border-radius: 99px;
+  background: var(--paper);
+  overflow: hidden;
+}
+.fs-meter i::after {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: var(--w);
+  border-radius: inherit;
+  background: var(--orange);
+}
+.fs-mini {
+  width: 86%;
+}
+.fs-mini code {
+  font-size: 12px;
+}
+.fs-mini > div {
+  min-height: 34px;
+  grid-template-columns: 5.5em minmax(0, 1fr);
+}
+.fs-mini > div:first-child {
+  border-top: 0;
+}
+.fs-install {
+  margin-top: clamp(56px, 8vw, 120px);
+}
+.fs-ig {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: clamp(20px, 3vw, 40px);
+  align-items: start;
+  margin-top: 32px;
+}
+.fs-install .steps code:not(.code) {
+  font:
+    600 0.9em "JetBrains Mono",
+    monospace;
+}
+.fs-ih {
+  padding: clamp(16px, 4vw, 56px) 0 8px;
+}
+.fs-ip {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: stretch;
+}
+.fs-ip .steps {
+  margin: 6px 0 14px;
+}
+.fs-ip .steps span {
+  color: inherit;
+  opacity: 0.8;
+}
+.fs-ip code.copy {
+  background: #fff;
+}
+.fs-ip .fs-t > :last-child {
+  margin-top: auto;
+  align-self: flex-start;
+}
+.fs-try {
+  justify-content: flex-start;
+}
+.fs-try .sec-t {
+  font-size: 30px;
+}
+@media (max-width: 1000px) {
+  .fs-hero,
+  .fs-ig,
+  .fs-ip {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .fs-g {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 560px) {
+  .fs-g {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* ---------- release the bots ---------- */
 .devs,
 .bots-pg {
   max-width: 1360px;
@@ -6057,37 +6365,67 @@ html:has(body.app-page) {
 .hm3-card:hover {
   transform: translateY(-3px);
 }
+/* Other couriers peek out behind the card as the tops of their own badges: same width and corners, a little further back. */
 .hm3-peek {
+  position: relative;
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 12px;
-  width: 27em;
-  min-height: 5.6em;
-  padding: 0.9em 1.2em 2.2em;
-  margin-bottom: -1em;
-  border-radius: 1.2em 1.2em 0 0;
+  gap: 0.8em;
+  box-sizing: border-box;
+  width: 20em;
+  height: 5.4em;
+  padding: 1.6em 1.3em 0;
+  margin-bottom: 0;
+  border-radius: 1.5em 1.5em 0 0;
   background: var(--ac);
   color: var(--at, #fff);
   font-size: 1em;
   text-decoration: none;
+  scale: 0.94;
+  transform-origin: 50% 100%;
+  transition: translate 0.15s;
+}
+.hm3-peek + .hm3-peek {
+  scale: 0.97;
+}
+.hm3-peek:first-child:not(:last-of-type) {
+  scale: 0.9;
+}
+.hm3-peek:hover {
+  translate: 0 -4px;
+}
+/* the slot a clip goes through */
+.hm3-peek::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 0.65em;
+  width: 3.4em;
+  height: 0.6em;
+  margin-left: -1.7em;
+  border-radius: 99px;
+  background: rgba(20, 20, 20, 0.22);
 }
 .hm3-peek b {
-  font-size: 15px;
+  font-size: 1.05em;
 }
 .hm3-peek small {
-  font-size: 12px;
+  font-size: 0.82em;
   opacity: 0.8;
 }
 .hm3-peek.ghost {
   justify-content: center;
-  background: rgba(255, 255, 255, 0.45);
+  background: rgba(255, 255, 255, 0.5);
   border: 1.5px dashed rgba(20, 20, 20, 0.28);
   border-bottom: 0;
   color: var(--soft);
 }
+.hm3-peek.ghost::before {
+  background: rgba(20, 20, 20, 0.12);
+}
 .hm3-peek.ghost:hover {
-  background: rgba(255, 255, 255, 0.75);
+  background: rgba(255, 255, 255, 0.8);
   color: var(--ink);
 }
 .hm3-now {
@@ -6545,6 +6883,10 @@ html:has(body.app-page) {
   --s: 42px;
   flex: none;
 }
+.rm-who {
+  flex: none;
+  white-space: nowrap;
+}
 .rm-who b {
   display: block;
   font-size: 17px;
@@ -6554,10 +6896,23 @@ html:has(body.app-page) {
   font-size: 13px;
   color: var(--mute);
 }
+/* Twenty shops don't fit across, so they scroll sideways and fade at the edges. */
 .rm-shops {
   display: flex;
   gap: 6px;
+  min-width: 0;
   margin-left: auto;
+  padding: 4px 12px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  -webkit-mask: linear-gradient(90deg, #0000, #000 14px calc(100% - 28px), #0000);
+  mask: linear-gradient(90deg, #0000, #000 14px calc(100% - 28px), #0000);
+}
+.rm-shops::-webkit-scrollbar {
+  display: none;
+}
+.rm-shops button {
+  flex: none;
 }
 .rm-shops button {
   padding: 0;

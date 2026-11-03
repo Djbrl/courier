@@ -43,8 +43,9 @@ import {
   courierChoice,
   courierForClient,
   DEMO_CLIENT_PREFIX,
-  developersPage,
   errorPage,
+  forShopsPage,
+  installPage,
   landingPage,
   refusalPage,
   signInPage,
@@ -92,7 +93,7 @@ const metadata = {
     provider,
     issuerUrl,
     scopesSupported: [...ALL_SCOPES],
-    serviceDocumentationUrl: new URL("/developers", issuerUrl),
+    serviceDocumentationUrl: new URL("/for-shops", issuerUrl),
   }),
   // RFC 8414: the issuer must exactly match the identifier clients use (no trailing slash), and the `iss` we send.
   issuer: config.courier.url,
@@ -116,7 +117,7 @@ app.use(
     provider,
     issuerUrl,
     scopesSupported: [...ALL_SCOPES],
-    serviceDocumentationUrl: new URL("/developers", issuerUrl),
+    serviceDocumentationUrl: new URL("/for-shops", issuerUrl),
     clientRegistrationOptions: { clientSecretExpirySeconds: 0 },
   }),
 );
@@ -141,8 +142,15 @@ app.get("/", (req, res) => {
   res.send(landingPage(currentHuman(req)));
 });
 
-app.get("/developers", (req, res) => {
-  res.send(developersPage(currentHuman(req)));
+app.get("/for-shops", (req, res) => {
+  res.send(forShopsPage(currentHuman(req)));
+});
+app.get("/install", (req, res) => {
+  res.send(installPage(currentHuman(req)));
+});
+/* Older links and metadata point here. */
+app.get("/developers", (_req, res) => {
+  res.redirect(301, "/for-shops#install");
 });
 
 app.get("/healthz", (_req, res) => {
