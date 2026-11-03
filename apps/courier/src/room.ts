@@ -26,9 +26,20 @@ import {
   withStore,
 } from "./agent.ts";
 import { mintAccessToken, mintShopConnectionToken } from "./auth/oauth.ts";
+import {
+  collecting,
+  collectShares,
+  type GroupRun,
+  type GroupTicket,
+  groupRun,
+  quoteChipIn,
+  shareIntent,
+  splitText,
+  usd,
+} from "./chip-in.ts";
 import { anyShop, type Connection, type Courier, db, effectiveStatus, type Human, remainingBudget } from "./db.ts";
 import { demoClientId, firstName } from "./pages/shared.ts";
-import { type Contact, contactCourier, contactLine, contactsOf, findContacts, planSplit } from "./people.ts";
+import { contactLine, contactsOf } from "./people.ts";
 import { addStamp, issueErrand, revokeVisa } from "./visas.ts";
 
 /**
@@ -77,14 +88,7 @@ export type ChatEvent =
       items: Record<string, unknown>[];
       receipt_url: string | null;
     }
-  | {
-      t: "group";
-      group_id: string;
-      shop: string;
-      item: Record<string, unknown>;
-      total: string;
-      payers: { name: string; courier: string; cents: number; paid: boolean; you?: boolean }[];
-    }
+  | GroupTicket
   | { t: "ask"; approval_id: string; reason: string; items: string[]; answered?: "ok" | "no" }
   | { t: "no"; reason: string };
 
@@ -107,19 +111,6 @@ export interface RoomChat extends AgentMemory {
   rev: number;
   createdAt: string;
   updatedAt: string;
-}
-
-/** One item split with contacts. The person pays first; then each contact's courier pays their share. */
-interface GroupRun {
-  groupId: string;
-  orderId: string;
-  shopSlug: string;
-  item: Record<string, unknown>;
-  priceCents: number;
-  mineCents: number;
-  shares: { contactId: string; name: string; courier: string; cents: number }[];
-  /** Set once the contacts have been asked to pay, so a second look at the order can't ask again. */
-  collected?: boolean;
 }
 
 /** Chats with a turn running. Those are the only copies; the database catches up as they change. */
@@ -376,68 +367,8 @@ function settled(chat: RoomChat, card: Extract<ChatEvent, { t: "pay" }>, order: 
 
 /* ---------------- chipping in ---------------- */
 
-const usd = (cents: number) => `$${(cents / 100).toFixed(2).replace(/\.00$/, "")}`;
-
-/** A contact's courier pays their share: its own errand and token, their own saved PayPal. */
-async function payShare(owner: Human, run: GroupRun, share: GroupRun["shares"][number]): Promise<boolean> {
-  const contact = db.get<Contact>("contacts", share.contactId);
-  const human = contact && db.get<Human>("humans", contact.humanId);
-  const courier = contact && contactCourier(contact);
-  const shop = SHOPS.find((s) => s.slug === run.shopSlug);
-  if (!contact || contact.ownerId !== owner.id || !human || !courier || !shop) return false;
-  const clientId = demoClientId(courier.id);
-  const visa = issueErrand({
-    connection: { clientId, scopes: [...ALL_SCOPES] },
-    human,
-    courierName: courier.name,
-    what: `Chip in with ${firstName(owner) ?? "a friend"} on ${run.item.title}`,
-    budget: Math.ceil(share.cents / 100),
-    auto: false,
-  });
-  let paid = false;
-  try {
-    const { token } = await mintAccessToken(visa, human, clientId, { expiresInSeconds: 60, audience: shop.resource });
-    const out = await askShop(shop, token, courier, "request_purchase", {
-      item_ids: [run.item.id],
-      share: { cents: share.cents, group_id: run.groupId },
-    });
-    paid = out.data.status === "paid";
-    if (!paid) console.warn(`[errand] ${contact.name}'s share didn't go through: ${out.text.slice(0, 200)}`);
-  } catch (error) {
-    console.warn(`[errand] ${contact.name}'s share failed`, error);
-  }
-  // Its one job is done either way.
-  const fresh = db.get<Visa>("visas", visa.id);
-  if (paid && fresh) db.put<Visa>("visas", visa.id, { ...fresh, status: "expired", revokeReason: "Done" });
-  else await revokeVisa(visa.id, "The share didn't go through");
-  return paid;
-}
-
-/** Groups whose contacts are being asked right now, so two looks at the same order can't ask twice. */
-const collecting = new Set<string>();
-/** Chats waiting on those, which the window shows as busy. */
+/** Chats waiting on their contacts to pay, which the window shows as busy. */
 const gathering = new Set<string>();
-
-async function collectShares(
-  owner: Human,
-  courier: Courier,
-  run: GroupRun,
-): Promise<Extract<ChatEvent, { t: "group" }>> {
-  const paid: boolean[] = [];
-  for (const share of run.shares) paid.push(await payShare(owner, run, share));
-  run.collected = true;
-  return {
-    t: "group",
-    group_id: run.groupId,
-    shop: SHOPS.find((s) => s.slug === run.shopSlug)?.name ?? run.shopSlug,
-    item: run.item,
-    total: (run.priceCents / 100).toFixed(2),
-    payers: [
-      { name: "You", courier: courier.name, cents: run.mineCents, paid: true, you: true },
-      ...run.shares.map((s, i) => ({ name: s.name, courier: s.courier, cents: s.cents, paid: paid[i]! })),
-    ],
-  };
-}
 
 /** After the person paid their share on PayPal's page: the others pay, and the chat gets the ticket. */
 async function othersPay(chatId: string, groupId: string): Promise<void> {
@@ -449,7 +380,7 @@ async function othersPay(chatId: string, groupId: string): Promise<void> {
   collecting.add(groupId);
   gathering.add(chatId);
   try {
-    const ticket = await collectShares(owner, courier, run);
+    const ticket = await collectShares(owner, courier.name, run);
     // A turn may have started meanwhile; write to the copy that's current now.
     const live = running.get(chatId) ?? db.get<RoomChat>("room_chats", chatId);
     if (!live) return;
@@ -656,39 +587,25 @@ function roomTools(human: Human, courier: Courier, chat: RoomChat, message: stri
       // Shares come from the shop's price and each contact's courier, here in code. The model only names the item and people.
       case "chip_in": {
         if (!shop) return noShop(args.shop);
-        const { found, unknown } = findContacts(human, args.with);
-        if (unknown.length || !found.length)
-          return {
-            text: `${unknown.length ? `${unknown.join(", ")} isn't one of their contacts. ` : ""}They can chip in with: ${contactLine(contactsOf(human))}.`,
-            isError: true,
-          };
         const itemId = String(args.item_id ?? "");
-        const item = await browse(shop, "get_item", { item_id: itemId });
-        if (item.isError || !item.data.price)
-          return { text: `${shop.name} has no item ${itemId}. Search the shop for its id.`, isError: true };
-        if (!item.data.in_stock) return { text: `${item.data.title} is sold out.`, isError: true };
-        const priceCents = Math.round(Number(item.data.price) * 100);
-        const split = planSplit(priceCents, found);
+        const quote = await quoteChipIn(human, shop, itemId, args.with, async (item_id) => {
+          const found = await browse(shop, "get_item", { item_id });
+          return found.isError ? null : found.data;
+        });
+        if ("problem" in quote) return { text: quote.problem, isError: true };
+        const { split, contacts: found } = quote;
         const names = found.map((c) => c.name).join(" and ");
         const key = `chip|${shop.name}|${itemId}|${found
           .map((c) => c.name)
           .sort()
           .join("+")}`;
         // Covering for someone is always asked first, and so is an item the person didn't name.
-        const sure = key === offeredBefore || (!split.coverCents && itemNamedIn(String(item.data.title), message));
+        const sure = key === offeredBefore || (!split.coverCents && itemNamedIn(String(quote.item.title), message));
         if (!sure) {
           chat.offered = key;
           chat.confirm = true;
-          const short = split.shares.filter((x) => x.short);
           return {
-            text:
-              `${item.data.title} is ${usd(priceCents)}. ` +
-              short
-                .map((x) => `${x.contact.courierName} says ${x.contact.name} can put in ${usd(x.cents)}. `)
-                .join("") +
-              `Their share would be ${usd(split.mineCents)}${split.coverCents ? `, covering ${usd(split.coverCents)} more than an even split` : ""}; ` +
-              split.shares.map((x) => `${x.contact.name} pays ${usd(x.cents)}`).join(", ") +
-              ". Tell them the split in one or two short sentences and ask if that's OK, then stop.",
+            text: `${splitText(quote)} Tell them the split in one or two short sentences and ask if that's OK, then stop.`,
             data: { needs_ok: true },
           };
         }
@@ -699,7 +616,7 @@ function roomTools(human: Human, courier: Courier, chat: RoomChat, message: stri
         const what =
           String(args.what ?? "")
             .trim()
-            .slice(0, 120) || `${item.data.title}, with ${names}`;
+            .slice(0, 120) || shareIntent(quote);
         const visa = startErrand(human, courier, chat, what, dollars);
         touch(chat);
         const { token } = await mintAccessToken(visa, human, clientId, {
@@ -714,32 +631,12 @@ function roomTools(human: Human, courier: Courier, chat: RoomChat, message: stri
           await revokeVisa(visa.id, "The share didn't go through");
           return { text: `That didn't go through: ${out.text}`, isError: true };
         }
-        const run: GroupRun = {
-          groupId: out.data.group_id,
-          orderId: out.data.order_id,
-          shopSlug: shop.slug,
-          item: {
-            id: itemId,
-            title: item.data.title,
-            artist: item.data.artist,
-            category: item.data.category,
-            hue: item.data.hue,
-            price: item.data.price,
-          },
-          priceCents,
-          mineCents: split.mineCents,
-          shares: split.shares.map((x) => ({
-            contactId: x.contact.id,
-            name: x.contact.name,
-            courier: x.contact.courierName,
-            cents: x.cents,
-          })),
-        };
+        const run = groupRun(quote, out.data.group_id, out.data.order_id);
         chat.groups = [...(chat.groups ?? []), run];
         const data = { ...out.data, errand_id: visa.id };
         if (out.data.status === "paid") {
           collecting.add(run.groupId);
-          const ticket = await collectShares(human, courier, run).finally(() => collecting.delete(run.groupId));
+          const ticket = await collectShares(human, courier.name, run).finally(() => collecting.delete(run.groupId));
           return {
             text: `Paid their share with their saved PayPal, and ${names} paid theirs. Say so in one short sentence.`,
             data: { ...data, group_ticket: ticket },

@@ -1240,6 +1240,62 @@ await step("The daily cap counts what Claude started itself; a used-up budget en
   assert.equal(structured(await tool("start_errand", { what: "More socks", budget: 5 })).decision, "needs_ticket");
 });
 
+await step(
+  "Claude chips in with the person's contacts: they hear the split first, and limits stay private",
+  async () => {
+    const listed = await tool("list_contacts");
+    const { contacts } = structured(listed);
+    assert.deepEqual(
+      contacts.find((c: any) => c.name === "Leo"),
+      { name: "Leo", relation: "brother", courier: "Otto" },
+    );
+    assert.deepEqual(contacts.map((c: any) => c.name).sort(), ["Leo", "Noor", "Priya"]);
+    assert.doesNotMatch(JSON.stringify(listed), /\d|limit/i, "what each can put in is their courier's to know");
+    const stranger = await tool("chip_in", { shop: "Mike", item_id: "mk-006", with: ["Bob"] });
+    assert.match(stranger.content[0].text, /Bob isn't one of their contacts.*Leo \(brother/);
+
+    // The day's cap is spent, so the person's share couldn't be paid now, and nobody is asked.
+    const capped = await tool("chip_in", { shop: "Mike", item_id: "mk-006", with: ["Noor"] });
+    assert.equal(structured(capped).error, "needs_person", JSON.stringify(capped));
+    await person.req(`${flow.courier}/app/settings/cap`, { form: { cap_errand: "60", cap_day: "200" } });
+
+    // Noor can put in $25 of an even $27.50, so the person would cover $2.50. Nothing is bought until they say yes.
+    const ask = { shop: "Mike", item_id: "mk-006", with: ["my flatmate"] };
+    const offer = await tool("chip_in", ask);
+    const terms = structured(offer);
+    assert.equal(terms.needs_ok, true, JSON.stringify(offer));
+    assert.equal(terms.your_share, "30.00");
+    assert.equal(terms.covering, "2.50");
+    assert.deepEqual(terms.shares, [{ name: "Noor", amount: "25.00" }]);
+    const code = offer.content[0].text.match(/confirm="([^"]+)"/)[1];
+    assert.equal(structured(await tool("chip_in", { ...ask, confirm: "made-up" })).needs_ok, true);
+    const other = await tool("chip_in", { ...ask, with: ["Noor", "Leo"] });
+    const otherCode = other.content[0].text.match(/confirm="([^"]+)"/)[1];
+    assert.equal(
+      structured(await tool("chip_in", { ...ask, confirm: otherCode })).needs_ok,
+      true,
+      "a code only confirms the split it was made for",
+    );
+
+    const done = await tool("chip_in", { ...ask, confirm: code });
+    const sc = structured(done);
+    assert.equal(sc.status, "paid", JSON.stringify(done));
+    assert.equal(sc.complete, true);
+    assert.equal(sc.group_ticket.total, "55.00");
+    assert.deepEqual(
+      sc.group_ticket.payers.map((p: any) => [p.name, p.cents, p.paid]),
+      [
+        ["You", 3000, true],
+        ["Noor", 2500, true],
+      ],
+    );
+    assert.ok((await fetch(sc.receipt_url)).ok);
+    assert.equal(structured(await tool("chip_in", { ...ask, confirm: code })).needs_ok, true, "a code works once");
+    const merchant = await (await fetch(`${STORE}/merchant`)).text();
+    assert.doesNotMatch(merchant, /Malik|Noor|Maya|Leo\b/, "shops never learn who chipped in");
+  },
+);
+
 await step("The home page shows logos and errands; calling back and disconnecting end everything", async () => {
   const home = await (await person.req(`${flow.courier}/app`)).text();
   assert.match(home, /class="slogo/);
