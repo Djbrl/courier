@@ -60,6 +60,14 @@ export interface Desk {
 }
 
 type View = "home" | "errands" | "shops" | "people" | "couriers" | "settings";
+const LABEL: Record<View, string> = {
+  home: "Home",
+  errands: "Errands",
+  shops: "Shops",
+  people: "People",
+  couriers: "Couriers",
+  settings: "Settings",
+};
 
 const ICON: Record<View, string> = {
   home: '<svg viewBox="0 0 20 20"><path d="M3 9.2 10 3l7 6.2V17h-5v-4.5H8V17H3z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>',
@@ -87,6 +95,7 @@ export function shell(
   const out = d.visas.filter(isOut).length;
   const item = (v: View, label: string, href: string, n?: number, hot = false) =>
     html`<a href="${href}" data-tour="rail-${v}" ${view === v ? raw('aria-current="page"') : ""}>${raw(ICON[v])}${label}${n ? html`<span class="n ${hot ? "hot" : ""}">${n}</span>` : ""}</a>`;
+  const here = view ? LABEL[view] : "Menu";
   return courierLayout({
     title: `${title} · Courier`,
     bodyClass: "app-page",
@@ -94,6 +103,10 @@ export function shell(
     body: html`<div class="app">
       <aside class="rail">
         <a class="rail-logo" href="/" aria-label="Courier">${LOGO}</a>
+        <button type="button" class="rail-menu" aria-expanded="false" aria-controls="rail-drawer" aria-label="Menu: ${here}">
+          <span>${here}</span>${d.approvals.length ? html`<i class="rail-dot" aria-hidden="true"></i>` : ""}<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 5.5h14M3 10h14M3 14.5h14"/></svg>
+        </button>
+        <div class="rail-drawer" id="rail-drawer">
         <nav aria-label="Courier">
           ${item("home", "Home", "/app", d.approvals.length, true)}
           ${item("errands", "Errands", "/app/errands", out)}
@@ -103,6 +116,7 @@ export function shell(
           ${item("settings", "Settings", "/app/settings")}
         </nav>
         <div class="rail-who">${avatar()}<span><b>${firstName(d.human) ?? "You"}</b>${d.human.simulated ? SIMULATED : VERIFIED}</span><a class="fine" ${signOut(d)}>Sign out</a></div>
+        </div>
       </aside>
       <main class="pane">${main}</main>
     </div>`,

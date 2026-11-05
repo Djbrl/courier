@@ -12,6 +12,11 @@
   const bar = $("#budget");
   const runBox = $("#run");
   const inviteBox = $("#invites");
+  const runBody = $(".run-body", runBox);
+  const room = $(".rm");
+  const toast = $("#toast");
+  /** On a phone the room is three tabs; on a wide screen everything is in view at once. */
+  const narrow = matchMedia("(max-width: 900px)");
   const esc = (s) =>
     String(s ?? "").replace(
       /[&<>"']/g,
@@ -184,6 +189,14 @@
         <div class="invite-l"><code class="inp code sm">${esc(e.url)}</code><button type="button" class="btn sm" data-copy="${esc(e.url)}">Copy</button></div>
         <p class="fine">Send it to anyone. They sign in with their own PayPal, or as a demo person, and their courier joins this chat.</p></div>`,
     run: (e) => `<div class="tk-mark run-mark"><span class="tk-line">${esc(e.text)}</span></div>`,
+    ended: (e) => `<div class="tk-mark end-mark"><span class="tk-line"><b>Ended</b> ${esc(e.text)}</span></div>`,
+    // The amount comes from the courier; only the person's yes, here or in words, makes it the budget.
+    offer: (e) =>
+      `<div class="offer ${e.answered ? "done" : ""}"><span><b>${e.change ? "Change the budget to" : "Budget"} $${esc(e.dollars)}</b><small>${e.cents !== e.dollars * 100 ? `Covers ${usd(e.cents)}. ` : ""}${esc(e.what)}</small></span>${
+        e.answered
+          ? `<span class="st">${e.answered === "ok" ? "Set ✓" : "Not set"}</span>`
+          : `<button type="button" class="btn sm" data-say="Yes, $${esc(e.dollars)}">Set $${esc(e.dollars)}</button>`
+      }</div>`,
     no: (e) =>
       `<div class="nocard"><b>That’s over your budget.</b>${esc(e.reason)} Change the budget above, and I’ll try again. It’s checked in code, so no one can talk me past it.</div>`,
   };
@@ -204,21 +217,95 @@
   /* ---------------- the run: the couriers' own thread ---------------- */
 
   const who = (m) =>
-    `<li class="${m.you ? "you" : ""}"><b>${esc(m.you ? "You" : m.name)}</b><small>${esc(m.courier)}</small><span class="st st-${esc(m.state)}">${m.state === "paid" ? `Paid $${esc(m.total)}` : m.state === "ordered" ? `$${esc(m.total)} to pay` : "Choosing"}</span></li>`;
+    `<li class="${m.you ? "you" : ""} ${m.left ? "gone" : ""}"><b>${esc(m.you ? "You" : m.name)}</b><small>${esc(m.courier)}</small><span class="st st-${esc(m.state)}">${m.state === "paid" ? `Paid $${esc(m.total)}` : m.state === "ordered" ? `$${esc(m.total)} to pay` : m.left ? "Left" : "Choosing"}</span></li>`;
 
   function runLine(l) {
     const by = `<b>${esc(l.courier)}</b>`;
-    if (l.t === "say") return `<li class="${l.you ? "you" : ""}">${by}<span>${esc(l.text)}</span></li>`;
+    if (l.t === "say")
+      return `<li class="${l.you ? "you" : ""}"><span class="by">${by}<small>${l.you ? "your courier" : `${esc(l.name)}’s courier`}</small></span><span>${esc(l.text)}</span></li>`;
     if (l.t === "joined") return `<li class="sys">${esc(l.name)} joined, with ${esc(l.courier)}.</li>`;
     if (l.t === "order")
       return `<li class="sys">${esc(l.name)} ordered ${esc((l.items || []).join(", "))}, $${esc(l.total)}.</li>`;
     if (l.t === "paid") return `<li class="sys">${esc(l.name)} paid $${esc(l.total)}.</li>`;
+    if (l.t === "left") return `<li class="sys">${esc(l.you ? "You" : l.name)} left the run.</li>`;
     return "";
+  }
+
+  /** A run line in a few words, for a notification. */
+  function runNews(l) {
+    if (l.t === "say") return `${l.courier}: ${l.text}`;
+    if (l.t === "joined") return `${l.name} joined the run.`;
+    if (l.t === "paid") return `${l.name} paid $${l.total}.`;
+    if (l.t === "left") return `${l.name} left the run.`;
+    return "";
+  }
+
+  /* ---------------- tabs on a phone, and what happened elsewhere ---------------- */
+
+  function setView(view) {
+    if (view === "run" && !chat.run) view = "chat";
+    room.dataset.view = view;
+    for (const b of $(".rm-tabs").children) {
+      const on = b.dataset.view === view;
+      b.toggleAttribute("aria-current", on);
+      if (on) $(".dot", b).hidden = true;
+    }
+    if (view === "run") {
+      const t = $(".run-t", runBox);
+      if (t) t.scrollTop = t.scrollHeight;
+    }
+    if (view === "chat") requestAnimationFrame(() => (log.scrollTop = log.scrollHeight));
+  }
+
+  /** Whether that part of the room is on screen now. */
+  const inView = (view) => !narrow.matches || room.dataset.view === view;
+
+  let toastTimer = 0;
+  let toastGo = null;
+  /** A note about something the person isn't looking at. A tap takes them there. */
+  function notify(text, view, go) {
+    if (view) {
+      const dot = $(`.rm-tabs [data-view="${view}"] .dot`);
+      if (dot && !inView(view)) dot.hidden = false;
+    }
+    toast.innerHTML = `<button type="button">${esc(text.length > 110 ? `${text.slice(0, 108)}…` : text)}</button>`;
+    toast.hidden = false;
+    toastGo = go || (() => setView(view));
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => (toast.hidden = true), 6000);
+  }
+  toast.addEventListener("click", () => {
+    toast.hidden = true;
+    toastGo?.();
+  });
+  $(".rm-tabs").addEventListener("click", (e) => {
+    const b = e.target.closest("[data-view]");
+    if (b) setView(b.dataset.view);
+  });
+
+  /** Compares what came in with what's on screen, and says what changed out of sight. */
+  function news(before, after, listBefore) {
+    if (before && after && before.id === after.id) {
+      const said = after.events.slice(before.events.length).filter((e) => e.t === "say");
+      if (said.length && !inView("chat"))
+        notify(`${C.name}: ${said.at(-1).text.replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")}`, "chat");
+      const was = before.run && after.run && before.run.id === after.run.id ? before.run.lines.length : null;
+      const fresh = was === null ? [] : after.run.lines.slice(was).filter((l) => !l.you);
+      if (fresh.length && !inView("run")) notify(runNews(fresh.at(-1)), "run");
+    }
+    const old = new Map(listBefore.map((t) => [t.id, t]));
+    for (const t of list) {
+      const prev = old.get(t.id);
+      // Other chats only say they're done: their courier finished a turn, or something new landed while idle.
+      if (t.id === chat.id || !prev || t.working || (prev.rev === t.rev && !prev.working)) continue;
+      notify(`${C.name} replied in “${t.title || "an errand"}”`, "list", () => open(t.id));
+    }
   }
 
   /** A friend asked this person to their run. Joining is a page of its own, where they pick who goes. */
   function drawInvites() {
     inviteBox.hidden = !invites.length;
+    if (invites.length && !inView("list")) $('.rm-tabs [data-view="list"] .dot').hidden = false;
     inviteBox.innerHTML = invites
       .map(
         (i) =>
@@ -231,16 +318,19 @@
   function drawRun() {
     const r = chat.run;
     runBox.hidden = !r;
+    room.classList.toggle("has-run", Boolean(r));
+    $('.rm-tabs [data-view="run"]').hidden = !r;
     if (!r) {
       runDrawn = "";
+      if (room.dataset.view === "run") setView("chat");
       return;
     }
     const key = `${r.id}.${r.rev}`;
     if (key === runDrawn) return;
     runDrawn = key;
     const alone = r.members.length < 2;
-    runBox.innerHTML = `<header><b>Run</b><span>${esc(r.what)}${r.shop && !r.what.includes(r.shop) ? ` · ${esc(r.shop)}` : ""}</span>
-        ${r.open && !r.full ? `<button type="button" class="link fine" data-copy="${esc(r.url)}">Copy invite link</button>` : ""}</header>
+    runBody.innerHTML = `<header><b>Run</b><span>${esc(r.what)}${r.shop && !r.what.includes(r.shop) ? ` · ${esc(r.shop)}` : ""}</span>
+        ${r.open && !r.full && !chat.ended ? `<button type="button" class="link fine" data-copy="${esc(r.url)}">Copy invite link</button>` : ""}</header>
       <ul class="run-who">${r.members.map(who).join("")}${(r.invited || []).map((n) => `<li class="asked"><b>${esc(n)}</b><span class="st">Invited</span></li>`).join("")}</ul>
       <ol class="run-t" aria-live="polite">${
         alone
@@ -256,33 +346,43 @@
   function tabLabel(t) {
     const e = t.errand;
     if (t.working) return `<span class="tk-busy"><i></i><i></i><i></i></span>`;
-    if (!e) return "";
-    if (t.toPay) return `<span>to pay</span>`;
-    return `<span>${e.spentCents ? `${usd(e.spentCents)} of ` : "up to "}${usd(e.limitCents)}${e.open ? "" : " ✓"}</span>`;
+    const together = t.together ? "Together · " : "";
+    if (t.ended) return `<span>${together}Ended</span>`;
+    if (!e) return t.together ? `<span>Together</span>` : "";
+    if (t.toPay) return `<span>${together}to pay</span>`;
+    return `<span>${together}${e.spentCents ? `${usd(e.spentCents)} of ` : "up to "}${usd(e.limitCents)}${e.open ? "" : " ✓"}</span>`;
   }
 
   function drawTabs() {
-    // A chat with nothing in it yet isn't in the list. It still gets a chip, so a new errand looks like its own place.
+    // A chat with nothing in it yet isn't in the list. It's still shown, so a new errand looks like its own place.
     const shown = list.some((t) => t.id === chat.id) ? list : [{ id: chat.id, title: "", fresh: true }, ...list];
     tabs.innerHTML = shown
       .map(
         (t) =>
-          `<span class="tk ${t.id === chat.id ? "on" : ""}"><button type="button" class="tk-go" data-chat="${esc(t.id)}" ${t.id === chat.id ? 'aria-current="true"' : ""}><b>${esc(t.title || "New errand")}</b>${t.fresh ? "" : tabLabel(t)}</button>${t.fresh ? "" : `<button type="button" class="tk-x" data-delete="${esc(t.id)}" aria-label="Delete the chat ${esc(t.title)}">×</button>`}</span>`,
+          `<li class="tk ${t.id === chat.id ? "on" : ""} ${t.ended ? "over" : ""}"><button type="button" class="tk-go" data-chat="${esc(t.id)}" ${t.id === chat.id ? 'aria-current="true"' : ""}><b>${esc(t.title || "New errand")}</b>${t.fresh ? "<span>Empty</span>" : tabLabel(t)}</button>${t.fresh ? "" : `<button type="button" class="tk-x" data-delete="${esc(t.id)}" aria-label="Delete the chat ${esc(t.title)}">×</button>`}</li>`,
       )
       .join("");
-    tabs.hidden = false;
   }
 
   function drawBudget() {
     if ($(".tk-edit", bar)) return;
     const e = chat.errand;
+    const end =
+      chat.events.length && !chat.ended
+        ? `<button type="button" class="btn ghost sm rm-end-btn" data-end>${chat.run ? "Leave run" : "End errand"}</button>`
+        : chat.ended
+          ? `<span class="over-tag">Ended</span>`
+          : "";
+    let line = "";
     if (e) {
-      bar.innerHTML = e.open
-        ? `<b>${esc(e.what)}</b><span>${e.spentCents ? `${usd(e.spentCents)} of ` : "up to "}${usd(e.limitCents)}</span><button type="button" class="link fine" data-edit="${esc(e.id)}">Change budget</button><a class="link fine" href="/app/errands?e=${esc(e.id)}">Steps</a>`
-        : `<b>${esc(e.what)}</b><span>${usd(e.spentCents)} of ${usd(e.limitCents)} · done</span><a class="link fine" href="/app/errands?e=${esc(e.id)}">Steps</a>`;
+      line =
+        e.open && !chat.ended
+          ? `<b>${esc(e.what)}</b><span>${e.spentCents ? `${usd(e.spentCents)} of ` : "up to "}${usd(e.limitCents)}</span><button type="button" class="link fine" data-edit="${esc(e.id)}">Change budget</button><a class="link fine" href="/app/errands?e=${esc(e.id)}">Steps</a>`
+          : `<b>${esc(e.what)}</b><span>${usd(e.spentCents)} of ${usd(e.limitCents)} · done</span><a class="link fine" href="/app/errands?e=${esc(e.id)}">Steps</a>`;
     } else if (chat.pendingBudgetCents) {
-      bar.innerHTML = `<b>Budget</b><span>${usd(chat.pendingBudgetCents)}</span><button type="button" class="link fine" data-edit="">Change budget</button>`;
-    } else bar.innerHTML = "";
+      line = `<b>Budget</b><span>${usd(chat.pendingBudgetCents)}</span><button type="button" class="link fine" data-edit="">Change budget</button>`;
+    } else if (chat.events.length) line = `<b>${esc(chat.title || "Errand")}</b>`;
+    bar.innerHTML = line ? `<div class="bar-l">${line}</div>${end}` : "";
     bar.hidden = !bar.innerHTML;
   }
 
@@ -290,15 +390,19 @@
   function drawFree() {
     const over = left <= 0;
     $("#left").textContent = over ? "" : `${left} of ${boot.free} free messages left.`;
-    $("#demo-end").hidden = !over;
-    $("#compose").hidden = over;
-    $(".rm").classList.toggle("ended", over);
+    $("#demo-end").hidden = !over || chat.ended;
+    $("#over").hidden = !chat.ended;
+    $("#compose").hidden = over || chat.ended;
+    $("#run-say").hidden = over || chat.ended;
+    room.classList.toggle("ended", over);
+    room.classList.toggle("chat-over", Boolean(chat.ended));
+    room.classList.toggle("blank", !chat.events.length);
   }
 
   function drawSugs() {
     // Ideas are for an empty chat. After that the only suggestions are answers to what the courier just asked.
     const fresh = !chat.events.length;
-    sugs.hidden = chat.working || left <= 0 || !(fresh || chat.confirm);
+    sugs.hidden = chat.working || left <= 0 || chat.ended || !(fresh || chat.confirm);
     if (sugs.hidden) return;
     sugs.innerHTML = chat.confirm
       ? `<button type="button" class="several" data-say="Go ahead">Go ahead</button><button type="button" data-say="No thanks">No thanks</button>`
@@ -317,21 +421,27 @@
   }
 
   function take(out) {
+    const listBefore = list;
     if (out.list) list = out.list;
     if (out.left !== undefined) left = out.left;
     if (out.invites && JSON.stringify(out.invites) !== JSON.stringify(invites)) {
+      const known = new Set(invites.map((i) => i.url));
+      const fresh = out.invites.find((i) => !known.has(i.url));
       invites = out.invites;
       drawInvites();
+      if (fresh) notify(`${fresh.from} invited you: ${fresh.what}`, "list", () => (location.href = fresh.url));
     }
     if (out.chat && out.chat.id === chat.id) {
+      const before = chat;
       const changed = out.chat.rev !== chat.rev || out.chat.working !== chat.working;
       chat = out.chat;
       if (changed) {
         drawLog();
         drawRun();
-      }
+        news(before, chat, listBefore);
+      } else news(null, null, listBefore);
       drawSugs();
-    }
+    } else news(null, null, listBefore);
     drawTabs();
     drawBudget();
     drawFree();
@@ -344,8 +454,9 @@
     left = out.left;
     history.replaceState(null, "", `/errand?c=${encodeURIComponent(C.id)}&chat=${encodeURIComponent(id)}`);
     draw();
+    setView("chat");
     checkCards();
-    input.focus();
+    if (!narrow.matches) input.focus();
   }
 
   /* ---------------- keeping up ---------------- */
@@ -454,31 +565,63 @@
     if (pick) send(pick.dataset.say);
   });
 
+  async function remove(id) {
+    const yes = await window.courierConfirm({
+      title: "Delete this chat?",
+      body: "Anything unpaid in it is called back. The errand stays in your records.",
+      yes: "Delete chat",
+    });
+    if (!yes) return;
+    try {
+      const out = await api("delete", { chat: id });
+      list = out.list;
+      if (id === chat.id) await open(out.next);
+      else drawTabs();
+    } catch (err) {
+      chat.events = [...chat.events, { t: "dim", text: err.message }];
+      draw();
+    }
+  }
+
+  async function newChat() {
+    const out = await api("chats", {});
+    await open(out.chat.id);
+  }
+
   tabs.addEventListener("click", async (e) => {
     const go = e.target.closest("[data-chat]");
-    if (go && go.dataset.chat !== chat.id) return open(go.dataset.chat);
+    if (go) return go.dataset.chat === chat.id ? setView("chat") : open(go.dataset.chat);
     const del = e.target.closest("[data-delete]");
-    if (del) {
-      const id = del.dataset.delete;
-      const yes = await window.courierConfirm({
-        title: "Delete this chat?",
-        body: "Anything unpaid in it is called back. The errand stays in your records.",
-        yes: "Delete chat",
-      });
-      if (!yes) return;
-      try {
-        const out = await api("delete", { chat: id });
-        list = out.list;
-        if (id === chat.id) await open(out.next);
-        else drawTabs();
-      } catch (err) {
-        chat.events = [...chat.events, { t: "dim", text: err.message }];
-        draw();
-      }
-    }
+    if (del) remove(del.dataset.delete);
   });
 
+  $("#over").addEventListener("click", (e) => {
+    if (e.target.closest("[data-new]")) newChat();
+    if (e.target.closest("[data-delete-this]")) remove(chat.id);
+  });
+
+  /** Ending is the person's own button. In a run, it's leaving: the others see they've gone. */
+  async function end() {
+    const yes = await window.courierConfirm({
+      title: chat.run ? "Leave the run?" : "End this errand?",
+      body: chat.run
+        ? "The others see that you left. Anything you haven’t paid is called back, and this chat stays here to read."
+        : "Anything unpaid is called back, and this chat stays here to read. Anything else is a new errand.",
+      yes: chat.run ? "Leave run" : "End errand",
+    });
+    if (!yes) return;
+    try {
+      take(await api("end", { chat: chat.id }));
+      drawBudget();
+      drawFree();
+    } catch (err) {
+      chat.events = [...chat.events, { t: "dim", text: err.message }];
+      drawLog();
+    }
+  }
+
   bar.addEventListener("click", (e) => {
+    if (e.target.closest("[data-end]")) return end();
     const edit = e.target.closest("[data-edit]");
     if (edit) {
       const errand = edit.dataset.edit;
@@ -516,6 +659,14 @@
     input.value = "";
     send(text);
   });
+  // From the run tab on a phone: it goes to their own courier, who answers in the chat and passes it on.
+  $("#run-say").addEventListener("submit", (e) => {
+    e.preventDefault();
+    const field = $("input", e.currentTarget);
+    const text = field.value;
+    field.value = "";
+    send(text);
+  });
   document.querySelector(".rm-shops").addEventListener("click", (e) => {
     const b = e.target.closest("button[data-say]");
     if (b) send(b.dataset.say);
@@ -524,10 +675,7 @@
     const b = e.target.closest("button[data-say]");
     if (b) send(b.dataset.say);
   });
-  $("#new-chat").addEventListener("click", async () => {
-    const out = await api("chats", {});
-    await open(out.chat.id);
-  });
+  $("#new-chat").addEventListener("click", newChat);
 
   /* ---------------- hello ---------------- */
 
@@ -537,5 +685,6 @@
   tick();
   // Sent here from the People page: the message is ready, for them to read and send.
   if (boot.draft && !chat.events.length) input.value = boot.draft;
-  input.focus();
+  // On a phone, the keyboard would cover the chat before anyone asked for it.
+  if (!narrow.matches) input.focus();
 })();

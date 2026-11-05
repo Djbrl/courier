@@ -92,14 +92,15 @@ export function friendPage(owner: Human, viewer: Human | null, already: boolean)
     `Add ${name}`,
     viewer,
     html`<main class="wiz-page"><div class="wiz wiz2">
-      <div class="wiz2-l">
-        <p class="wiz-n">On Courier</p>
-        <div class="wiz-body">
-          <h1 class="big">${already ? `You and ${name} are connected.` : `Add ${name}.`}</h1>
-          <p class="lead">Your couriers can then ask each other to errands: drinks, a gift, a shop you both use.</p>
-          <p class="fine">You each see the other’s first name and courier. Nothing about your PayPal or your limits is shared.</p>
-        </div>
-        <div class="wiz-foot run-foot">${foot}</div>
+      <div class="wiz2-l friend-l">
+        <p class="wiz-n">${name} sent you their link</p>
+        <h1 class="big">${already ? `You and ${name} are connected.` : `Add ${name} to your people.`}</h1>
+        <ul class="perks">
+          <li><b>Ask each other by name.</b> “Ask ${name} if they want a coffee” lands in ${name}’s own Courier${courier ? `, with ${courier.name}` : ""}.</li>
+          <li><b>Each pays their own.</b> Your own PayPal, your own receipt.</li>
+          <li><b>Only first names are shared,</b> and each other’s courier. Never your PayPal or your limits.</li>
+        </ul>
+        <div class="friend-act">${foot}</div>
       </div>
       <div class="wiz2-r cstage">${dots()}<div class="wiz-id">${courier ? idCard(courierLook(owner, courier), name) : ""}</div></div>
     </div></main>`,

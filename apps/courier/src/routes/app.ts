@@ -51,7 +51,9 @@ import {
   chatWithOrder,
   checkOrder,
   deleteChat,
+  endChat,
   findChat,
+  isWorking,
   joinRun,
   messagesLeft,
   sendMessage,
@@ -507,6 +509,10 @@ api.post("/chat", (req, res) => {
     res.status(400).json({ error: "Say something first." });
     return;
   }
+  if (ctx.chat.endedAt) {
+    res.status(409).json({ error: "This errand is over. Start a new one for anything else." });
+    return;
+  }
   if (!spendMessage(ctx.human)) {
     res.status(429).json({ error: "Your free messages are used up.", left: 0 });
     return;
@@ -539,6 +545,18 @@ api.post("/callback", async (req, res) => {
     res.status(409).json({ error: problem });
     return;
   }
+  answer(res, ctx);
+});
+
+/** The person's own button: the errand closes, anything unpaid is called back, and in a run they leave it. */
+api.post("/end", async (req, res) => {
+  const ctx = chatFor(req, res, req.body?.chat);
+  if (!ctx) return;
+  if (isWorking(ctx.chat)) {
+    res.status(409).json({ error: `${ctx.courier.name} is still working in that chat.` });
+    return;
+  }
+  await endChat(ctx.human, ctx.courier, ctx.chat);
   answer(res, ctx);
 });
 

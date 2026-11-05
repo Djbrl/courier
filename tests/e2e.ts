@@ -581,6 +581,7 @@ await step("Runs: friends are asked by name, couriers pass things on, and each p
     return {
       browser,
       id,
+      url,
       view,
       until,
       blank: async () => ((await (await browser.req(url("chats"), { json: {} })).json()) as any).chat.id as string,
@@ -665,6 +666,24 @@ await step("Runs: friends are asked by name, couriers pass things on, and each p
   const again = await sam.req(`${flow.courier}${runPath}`);
   assert.equal(chatIn(again.headers.get("location")), chatIn(samIn.headers.get("location")));
   assert.equal((await maya.view(mine)).chat.run.members.length, 3);
+
+  // Luna is done: she leaves, the others hear so, and her chat takes nothing more.
+  const ended = (await (await luna.browser.req(luna.url("end"), { json: { chat: lunaChat } })).json()) as any;
+  assert.equal(ended.chat.ended, true);
+  assert.ok(ended.chat.events.some((e: any) => e.t === "ended"));
+  const heard = await maya.until(mine, (o) =>
+    o.chat.events.some((e: any) => e.t === "run" && /Luna left/.test(e.text)),
+  );
+  assert.deepEqual(
+    heard.chat.run.members.map((m: any) => [m.name, m.left]),
+    [
+      ["Maya", false],
+      ["Luna", true],
+      ["Sam", false],
+    ],
+  );
+  assert.equal((await luna.browser.req(luna.url("chat"), { json: { chat: lunaChat, message: "hello?" } })).status, 409);
+  assert.equal(ended.list.find((t: any) => t.id === lunaChat).ended, true);
 });
 
 await step("Under-18 PayPal account is refused", async () => {

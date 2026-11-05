@@ -92,3 +92,20 @@ document.addEventListener("click", async (e) => {
   const { sure: title, sureBody: body, sureYes: yes } = link.dataset;
   if (await window.courierConfirm({ title, body, yes })) location.href = link.href;
 });
+
+// On a phone the sidebar folds into a menu under the top bar.
+{
+  const rail = document.querySelector(".rail");
+  const button = rail?.querySelector(".rail-menu");
+  if (button) {
+    const set = (open) => {
+      rail.classList.toggle("open", open);
+      button.setAttribute("aria-expanded", String(open));
+    };
+    button.addEventListener("click", () => set(!rail.classList.contains("open")));
+    document.addEventListener("keydown", (e) => e.key === "Escape" && set(false));
+    document.addEventListener("click", (e) => {
+      if (rail.classList.contains("open") && !rail.contains(e.target)) set(false);
+    });
+  }
+}

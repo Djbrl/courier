@@ -253,8 +253,10 @@ const TOOLS: Anthropic.Tool[] = [
   },
   {
     name: "end_errand",
-    description: "End one open errand when the person asks to.",
-    input_schema: { type: "object", properties: { errand_id: { type: "string" } }, required: ["errand_id"] },
+    description:
+      "End this chat when the person says they're done with it, or asks to end, close or leave it. Its errands close, anything " +
+      "unpaid is called back, and in a run they leave it. Anything after that is a new errand. Only when they ask.",
+    input_schema: { type: "object", properties: {} },
   },
 ];
 
@@ -363,6 +365,14 @@ export async function runScriptedAgent(
         ? `I’ve asked ${friends.join(" and ")}. Anyone else can join with the link.`
         : "Here’s the link. Send it to anyone, and their courier joins this errand.",
     );
+  }
+  if (
+    /^(end|close|leave|finish)( (it|this|the errand|this errand|the chat|this chat|the run))?\b|\b(we'?re|i'?m) done\b/i.test(
+      message.trim(),
+    )
+  ) {
+    await call("end_errand", {});
+    return done("Done. I’ve ended this errand. Start a new one for anything else.");
   }
   const pass = /^(tell|ask) (them|everyone|the others?)\b[,:]?\s*(.+)$/i.exec(message.trim());
   if (pass && run.run) {
@@ -513,10 +523,12 @@ export async function runClaudeAgent(
         "or a confirmation: call start_errand once with those items, then call buy right away, all at once, one buy per shop. If they " +
         "tell you to choose ('grab some shoes for me'), pick the best match and include it in items. If they only name a kind of thing " +
         "('a burger'), show them what you found and ask which they'd like. A budget they name still counts: pass it to start_errand. " +
-        "If start_errand returns needs_budget, ask their budget in one short line and stop: you can't set one. Never tell them to " +
-        "rephrase a budget. If a tool says a budget isn't allowed, tell them what it says, keeping any link. Each new request is a new " +
+        "If start_errand returns needs_budget, ask their budget in one short line and stop: you can't set one. To propose an amount " +
+        "they haven't typed, such as a total you worked out, pass it as budget to start_errand or change_budget: they get a button " +
+        "for it, and a plain yes sets it. Never ask them to type or repeat a number, and never explain how budgets are checked. " +
+        "If a tool says a budget isn't allowed, tell them what it says, keeping any link. Each new request is a new " +
         "errand; 'add socks too' stays on the same one. Just browsing needs no errand. If they change their mind about a purchase, " +
-        "call call_back; end_errand is for an errand they're done with.\n" +
+        "call call_back. When they're done with this chat, or want to end, close or leave it, call end_errand.\n" +
         "They can split one item with people from their contacts, each paying their own share: use chip_in when they want to " +
         "chip in, split or go in on something with someone. If they haven't picked the item, search, suggest one with its price, " +
         "and let chip_in ask them. Their contacts' limits are private: say only what each courier offers.\n" +

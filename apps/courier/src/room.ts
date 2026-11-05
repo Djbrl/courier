@@ -57,6 +57,7 @@ import {
   member,
   memberOf,
   newRun,
+  present,
   RUN_LINE_MAX,
   type Run,
   runOpen,
@@ -119,7 +120,19 @@ export type ChatEvent =
   /** The link to a run, for the person to send to whoever they're doing it with. */
   | { t: "invite"; what: string; shop: string | null; url: string }
   /** Someone joined, or paid, in a run this chat is part of. */
-  | { t: "run"; text: string };
+  | { t: "run"; text: string }
+  /** An amount the courier worked out, for the person to set as the budget with a tap or a yes. */
+  | { t: "offer"; dollars: number; cents: number; what: string; change?: boolean; answered?: "ok" | "no" }
+  /** The chat is over: it stays to read, and anything new is a new errand. */
+  | { t: "ended"; text: string };
+
+/** A budget the courier proposed. Only the person's own yes, in their next message or on its card, sets it. */
+interface BudgetOffer {
+  dollars: number;
+  cents: number;
+  what: string;
+  errandId?: string;
+}
 
 /**
  * Something said in a run, on its way to one member's courier. It takes a turn like a message does, but it isn't the
@@ -150,6 +163,11 @@ export interface RoomChat extends AgentMemory {
   groups?: GroupRun[];
   /** Goes up with every change to the events, so a window only redraws when it must. */
   rev: number;
+  /** When the person ended it. Nothing more happens in it, and in a run, they've left. */
+  endedAt?: string;
+  /** The courier was asked to end it, which happens once its reply is in. */
+  ending?: boolean;
+  offer?: BudgetOffer;
   createdAt: string;
   updatedAt: string;
 }
@@ -248,15 +266,20 @@ function errandView(chat: RoomChat) {
     : null;
 }
 
+/** Whether the courier is in the middle of a turn in this chat. */
+export const isWorking = (chat: RoomChat) => running.has(chat.id) || gathering.has(chat.id);
+
 /** One chat in the row of chats. */
 function chatTab(chat: RoomChat) {
   const errand = errandView(chat);
   return {
     id: chat.id,
     title: chat.title,
-    working: running.has(chat.id) || gathering.has(chat.id),
+    working: isWorking(chat),
     toPay: chat.events.some((e) => e.t === "pay" && e.status === "open"),
     together: Boolean(chat.runId),
+    rev: chat.rev,
+    ended: Boolean(chat.endedAt),
     errand,
   };
 }
@@ -462,7 +485,7 @@ const liveChat = (id: string) => running.get(id) ?? db.get<RoomChat>("room_chats
 
 /** Hands something said in a run to every other member's courier, after whatever each is doing now. */
 function relay(run: Run, fromHumanId: string, item: Relay): void {
-  for (const m of run.members) {
+  for (const m of present(run)) {
     if (m.humanId === fromHumanId) continue;
     const chat = liveChat(m.chatId);
     const human = db.get<Human>("humans", m.humanId);
@@ -487,7 +510,7 @@ function inviteTo(human: Human, courier: Courier, chat: RoomChat, what: string, 
 /** Someone opened the link and chose a courier: they get a chat of their own in the run, and the others hear of it. */
 export function joinRun(human: Human, courier: Courier, run: Run): RoomChat {
   const already = memberOf(run, human.id);
-  const theirs = already && liveChat(already.chatId);
+  const theirs = already && !already.leftAt && liveChat(already.chatId);
   if (theirs) return theirs;
   const host = run.members.find((m) => m.host) ?? run.members[0]!;
   const shop = runShop(run);
@@ -538,7 +561,8 @@ function inRun(chat: RoomChat, kind: "order" | "paid", total: string, items: Rec
     notice: true,
   });
   const paid = new Set(after.lines.filter((l) => l.t === "paid").map((l) => l.by));
-  if (after.members.length > 1 && after.members.every((m) => paid.has(m.humanId)))
+  const still = present(after);
+  if (still.length > 1 && still.every((m) => paid.has(m.humanId)))
     relay(after, "", { relay: "Everyone’s paid. Each of you has your own receipt.", from: "", notice: true });
 }
 
@@ -596,6 +620,72 @@ export async function deleteChat(human: Human, courier: Courier, chat: RoomChat)
   for (const visa of openErrands(chat)) await revokeVisa(visa.id, "The chat was deleted");
   db.delete("room_chats", chat.id);
   return null;
+}
+
+/**
+ * Ending a chat closes its errands and calls back anything unpaid. It stays, to read or to delete, and anything new is a
+ * new errand. In a run, the person leaves it, and the others hear so.
+ */
+export async function endChat(human: Human, courier: Courier, chat: RoomChat): Promise<void> {
+  chat.ending = undefined;
+  if (chat.endedAt) return;
+  for (const event of chat.events)
+    if (event.t === "pay" && event.status === "open") await callOff(human, courier, chat, event).catch(() => false);
+  for (const visa of openErrands(chat)) await revokeVisa(visa.id, "You ended the errand");
+  chat.endedAt = new Date().toISOString();
+  chat.offer = undefined;
+  chat.awaiting = undefined;
+  chat.pendingBudget = undefined;
+  chat.confirm = false;
+  chat.amounts = false;
+  const run = getRun(chat.runId);
+  const me = run && memberOf(run, human.id);
+  if (run && me && !me.leftAt) {
+    const at = new Date().toISOString();
+    const after = changeRun(run.id, (r) => {
+      const m = memberOf(r, human.id);
+      if (m) m.leftAt = at;
+      r.lines.push({ t: "left", by: human.id, at });
+    });
+    if (after) relay(after, human.id, { relay: `${me.name} left the run.`, from: me.courierName, notice: true });
+  }
+  push(chat, { t: "ended", text: run ? "You left the run, and this errand is over." : "This errand is over." });
+}
+
+/** Holds an amount the courier worked out, for the person to say yes to. Their cap still applies. */
+function offerBudget(human: Human, chat: RoomChat, amount: number, what: string, errandId?: string): string | null {
+  const cents = Math.round(amount * 100);
+  const dollars = Math.ceil(cents / 100);
+  const problem = budgetProblem(human, dollars);
+  if (problem) return problem;
+  chat.offer = { dollars, cents, what: withoutBudget(what).slice(0, 160), ...(errandId ? { errandId } : {}) };
+  return null;
+}
+
+/** Shows the offer as a card once the courier's reply is in, so it reads in order. Older ones go quiet. */
+function showOffer(chat: RoomChat): void {
+  const offer = chat.offer;
+  if (!offer) return;
+  for (const e of chat.events) if (e.t === "offer" && !e.answered) e.answered = "no";
+  push(chat, {
+    t: "offer",
+    dollars: offer.dollars,
+    cents: offer.cents,
+    what: offer.what,
+    ...(offer.errandId ? { change: true } : {}),
+  });
+}
+
+/** A plain yes, to whatever the courier just proposed. */
+const AGREE =
+  /^(?:yes|yep|yeah|yup|ya|ok(?:ay)?|sure|confirm(?:ed)?|go ahead|go for it|do it|sounds good|perfect|great|deal|fine|please do|that works|set it|let'?s do it)\b/i;
+
+function agrees(message: string, offer: BudgetOffer): boolean {
+  const text = message.trim();
+  if (!AGREE.test(text)) return false;
+  // "Yes, but make it 60" is a different amount, which the person's own number covers.
+  const amounts = [...text.matchAll(/\d[\d,]*(?:\.\d+)?/g)].map((m) => Number(m[0].replace(/,/g, "")));
+  return amounts.every((n) => Math.ceil(n) === offer.dollars || Math.round(n * 100) === offer.cents);
 }
 
 /* ---------------- tools ---------------- */
@@ -678,6 +768,15 @@ function roomTools(human: Human, courier: Courier, chat: RoomChat, message: stri
           chat.pendingBudget = quote.dollars;
           chat.offered = undefined;
         }
+        if (!chat.pendingBudget && typeof args.budget === "number" && args.budget > 0) {
+          const problem = offerBudget(human, chat, args.budget, what);
+          if (problem) return { text: problem, isError: true };
+          chat.awaiting = { what };
+          return {
+            text: `They haven't set $${chat.offer!.dollars} themselves, so they now see a button for it. Tell them in one short line that a yes or a tap sets it, then stop.`,
+            data: { needs_ok: true },
+          };
+        }
         if (!chat.pendingBudget) {
           chat.awaiting = { what };
           return {
@@ -696,8 +795,17 @@ function roomTools(human: Human, courier: Courier, chat: RoomChat, message: stri
       }
       case "change_budget": {
         const dollars = budgetFromCourier(args.budget, message);
-        if (!dollars)
-          return { text: "The person hasn't written that amount. Ask them what it should be.", isError: true };
+        if (!dollars) {
+          const visa = errand(args.errand_id);
+          if (!visa || typeof args.budget !== "number" || args.budget <= 0)
+            return { text: "Ask them what the budget should be.", isError: true };
+          const problem = offerBudget(human, chat, args.budget, visa.intent, visa.id);
+          if (problem) return { text: problem, isError: true };
+          return {
+            text: `They haven't set $${chat.offer!.dollars} themselves, so they now see a button for it. Tell them in one short line that a yes or a tap sets it, then stop.`,
+            data: { needs_ok: true },
+          };
+        }
         const problem = changeBudget(human, chat, String(args.errand_id), dollars);
         if (problem) return { text: problem, isError: true };
         touch(chat);
@@ -858,12 +966,14 @@ function roomTools(human: Human, courier: Courier, chat: RoomChat, message: stri
         };
       }
       case "end_errand": {
-        const visa = errand(args.errand_id);
-        if (!visa) return { text: "That errand isn't open.", isError: true };
-        for (const e of chat.events)
-          if (e.t === "pay" && e.status === "open" && e.errand_id === visa.id) await callOff(human, courier, chat, e);
-        await revokeVisa(visa.id, "Ended from the errand room");
-        return { text: "The errand has ended, and anything unpaid on it is called back.", data: { ended: true } };
+        chat.ending = true;
+        return {
+          text:
+            "This chat ends once you've replied: anything unpaid is called back" +
+            (chat.runId ? ", and the others in the run hear that they left" : "") +
+            ". Say so in one short line. Anything else is a new errand.",
+          data: { ended: true },
+        };
       }
       default:
         return { text: `Unknown tool ${name}.`, isError: true };
@@ -1010,14 +1120,32 @@ async function roomTurn(human: Human, courier: Courier, chat: RoomChat, message:
   if (courier.revokedAt)
     return say(`I’ve been revoked. You can restore me on the [Couriers](${config.courier.url}/app/couriers) page.`);
 
+  let resume: { what: string; errandId: string } | undefined;
+  // A yes to an amount the courier proposed sets it, as if they'd typed it. Anything else lets the offer go.
+  const offer = chat.offer;
+  chat.offer = undefined;
+  if (offer) {
+    const yes = agrees(message, offer);
+    for (const e of chat.events) if (e.t === "offer" && !e.answered) e.answered = yes ? "ok" : "no";
+    if (yes) {
+      const visa = offer.errandId ? openErrands(chat).find((v) => v.id === offer.errandId) : undefined;
+      const problem = visa
+        ? changeBudget(human, chat, visa.id, offer.dollars)
+        : (budgetProblem(human, offer.dollars) ?? (offer.errandId ? "That errand has ended." : null));
+      if (problem) return say(problem);
+      const errandId = visa?.id ?? startErrand(human, courier, chat, offer.what, offer.dollars).id;
+      chat.awaiting = undefined;
+      resume = { what: visa?.intent ?? offer.what, errandId };
+    }
+  }
+
   // In a chat about shopping, a bare number is dollars, whether or not the courier got round to asking.
-  const named = parseBudget(message, true);
+  const named = resume ? null : parseBudget(message, true);
   const problem = named && budgetProblem(human, named.dollars);
   if (problem) {
     if (!named.only) chat.awaiting = { what: withoutBudget(message) };
     return say(problem, Boolean(chat.awaiting));
   }
-  let resume: { what: string; errandId: string } | undefined;
   if (named?.only) {
     if (chat.awaiting) {
       const { what } = chat.awaiting;
@@ -1052,8 +1180,18 @@ async function roomTurn(human: Human, courier: Courier, chat: RoomChat, message:
     !chat.confirm &&
     !out.steps.some((s) => s.tool === "buy" || s.data?.errand_id);
   if (asked && !openErrands(chat).length) chat.awaiting ??= { what: message };
-  chat.amounts = Boolean(out.needsBudget || (asked && chat.awaiting));
+  // A courier that names the amount in its question ("Shall I set $76.50?") gets a card for it, as the tools would.
+  const amounts = [
+    ...new Set([...out.reply.matchAll(/\$\s?(\d[\d,]*(?:\.\d{1,2})?)/g)].map((m) => m[1]!.replace(/,/g, ""))),
+  ];
+  if (!chat.offer && /\bbudget\b/i.test(out.reply) && /\?/.test(out.reply) && amounts.length === 1) {
+    const current = openErrands(chat).at(-1);
+    offerBudget(human, chat, Number(amounts[0]), current?.intent ?? chat.awaiting?.what ?? message, current?.id);
+  }
+  chat.amounts = Boolean(!chat.offer && (out.needsBudget || (asked && chat.awaiting)));
   report(chat, out.steps, out.reply);
+  showOffer(chat);
+  if (chat.ending) await endChat(human, courier, chat);
   touch(chat);
 }
 
@@ -1096,6 +1234,7 @@ async function drain(human: Human, courier: Courier, chat: RoomChat): Promise<vo
  * who moves on has left the purchase standing, so the time to call it back ends here.
  */
 export function sendMessage(human: Human, courier: Courier, chat: RoomChat, message: string, quiet = false): void {
+  if (chat.endedAt) return;
   for (const event of chat.events) if (event.t === "pay") event.callBackUntil = 0;
   if (!quiet) chat.events.push({ t: "me", text: message });
   if (!chat.title) chat.title = withoutBudget(message).slice(0, 60);

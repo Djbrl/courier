@@ -5170,59 +5170,6 @@ html:has(body.app-page) {
   height: 34px;
   border-radius: 10px;
 }
-.rm-new {
-  flex: none;
-  margin-left: 8px;
-  border: 0;
-  background: none;
-  padding: 0;
-  cursor: pointer;
-}
-.rm-tickets {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-  padding: 10px 20px;
-  background: var(--paper);
-  border-bottom: 1px solid var(--line);
-}
-.rm-tickets[hidden] {
-  display: none;
-}
-.tk {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  max-width: 100%;
-  height: 36px;
-  padding: 0 12px;
-  border: 0;
-  border-radius: 10px;
-  background: #fff;
-  box-shadow: inset 0 0 0 1px var(--line);
-  font: inherit;
-  font-size: 14px;
-  cursor: pointer;
-}
-.tk:hover {
-  box-shadow: inset 0 0 0 1.5px var(--ink);
-}
-.tk b {
-  overflow: hidden;
-  max-width: 220px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.tk span {
-  flex: none;
-  color: var(--soft);
-  font-weight: 600;
-}
-.tk i {
-  font-style: normal;
-  color: var(--mute);
-}
 .tk-edit {
   display: inline-flex;
   flex-wrap: wrap;
@@ -5366,25 +5313,10 @@ html:has(body.app-page) {
   }
 }
 @media (max-width: 560px) {
-  .rm-h {
-    flex-wrap: wrap;
-    padding: 12px 14px;
-  }
-  .rm-new {
-    margin-left: auto;
-  }
-  .rm-shops {
-    order: 3;
-    width: 100%;
-    margin-left: 0;
-  }
   .rm-log,
   .rm-foot {
     padding-left: 14px;
     padding-right: 14px;
-  }
-  .rm-tickets {
-    padding: 8px 14px;
   }
   /* One swipeable row, so suggestions never push the chat off a phone. */
   .rm-foot .sugs {
@@ -5415,54 +5347,6 @@ html:has(body.app-page) {
   }
 }
 /* ---- errand chats ---- */
-.rm-tickets {
-  flex-wrap: nowrap;
-  overflow-x: auto;
-}
-.tk {
-  flex: none;
-  position: relative;
-  gap: 0;
-  padding: 0;
-  cursor: default;
-}
-.tk:hover {
-  box-shadow: inset 0 0 0 1px var(--line);
-}
-.tk.on {
-  box-shadow: inset 0 0 0 1.5px var(--ink);
-}
-.tk-go {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  height: 100%;
-  padding: 0 12px;
-  border: 0;
-  background: none;
-  font: inherit;
-  cursor: pointer;
-}
-.tk .tk-x {
-  width: 0;
-  overflow: hidden;
-  height: 100%;
-  padding: 0;
-  border: 0;
-  background: none;
-  color: var(--mute);
-  font: inherit;
-  font-size: 16px;
-  cursor: pointer;
-}
-.tk:hover .tk-x,
-.tk:focus-within .tk-x,
-.tk.on .tk-x {
-  width: 26px;
-}
-.tk .tk-x:hover {
-  color: var(--red);
-}
 .tk-busy {
   display: inline-flex;
   gap: 3px;
@@ -5877,7 +5761,6 @@ html:has(body.app-page) {
   color: var(--green);
 }
 .run-t {
-  max-height: 132px;
   margin: 0;
   padding: 0;
   overflow-y: auto;
@@ -6011,13 +5894,17 @@ html:has(body.app-page) {
 }
 .friends {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 12px;
   margin-bottom: 32px;
 }
 .friends h2,
 .sett > h2 {
-  margin: 0;
+  margin-block: 0;
   font-size: 20px;
+}
+.sett > h2 {
+  margin-bottom: 8px;
 }
 .friends .lead {
   margin: 0;
@@ -6025,12 +5912,550 @@ html:has(body.app-page) {
 .friends .invite-l code.inp {
   max-width: 460px;
 }
-.friends .folk form {
-  margin-left: 4px;
+.friends .folk {
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
 }
 .friends .folk form button {
   padding: 0;
   border: 0;
   background: none;
   cursor: pointer;
+}
+
+/* ---- the errand room, side by side: the courier and its errands, then the chat. On a phone, tabs. ---- */
+.rm {
+  position: relative;
+}
+.rm-side,
+.rm-main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+.rm-side {
+  background: var(--paper);
+}
+.rm-side .rm-h {
+  padding: 14px 16px;
+}
+.rm-side .rm-new {
+  margin-left: auto;
+}
+.rm-tickets {
+  display: grid;
+  align-content: start;
+  gap: 4px;
+  flex: 1 1 auto;
+  min-height: 0;
+  margin: 0;
+  padding: 8px;
+  overflow-y: auto;
+  list-style: none;
+}
+.tk {
+  display: flex;
+  align-items: center;
+  border-radius: 12px;
+}
+.tk:hover {
+  background: #fff;
+}
+.tk.on {
+  background: #fff;
+  box-shadow: inset 0 0 0 1.5px var(--ink);
+}
+.tk-go {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+  padding: 10px 12px;
+  border: 0;
+  background: none;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.tk-go b {
+  overflow: hidden;
+  font-size: 14.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tk-go span {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--soft);
+}
+.tk.over b {
+  color: var(--soft);
+}
+.tk-x {
+  flex: none;
+  width: 32px;
+  height: 32px;
+  margin-right: 6px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: var(--mute);
+  font: inherit;
+  font-size: 18px;
+  cursor: pointer;
+  opacity: 0;
+}
+.tk:hover .tk-x,
+.tk.on .tk-x,
+.tk-x:focus-visible {
+  opacity: 1;
+}
+.tk-x:hover {
+  color: var(--red);
+}
+.rm-side .rm-invites {
+  padding: 10px 16px;
+}
+.rm-invites .inv {
+  flex-wrap: wrap;
+}
+/* The run fills what the list leaves, and its thread scrolls on its own. */
+.rm-run {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 0;
+  min-height: 0;
+  padding: 12px 16px;
+  border-top: 1px solid var(--line);
+  border-bottom: 0;
+}
+.rm.has-run .rm-tickets {
+  flex: 0 1 auto;
+  max-height: 34%;
+}
+.rm-run .run-who {
+  display: grid;
+  gap: 4px;
+}
+.rm-run .run-who li {
+  justify-content: space-between;
+  border-radius: 10px;
+}
+.rm-run .run-who li small {
+  margin-right: auto;
+}
+.run-who li.gone {
+  opacity: 0.55;
+}
+.run-t {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+.run-t li:not(.sys) {
+  flex-direction: column;
+  gap: 2px;
+  margin: 6px 0;
+  padding: 8px 12px;
+  border-radius: 12px;
+  background: #fff;
+}
+.run-t li.you:not(.sys) {
+  background: var(--al);
+}
+.rm-main .rm-budget {
+  gap: 10px;
+  min-height: 56px;
+  padding: 8px 20px;
+  flex-wrap: nowrap;
+}
+.bar-l {
+  display: flex;
+  flex: 1;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 12px;
+  min-width: 0;
+}
+.bar-l b {
+  overflow: hidden;
+  max-width: 100%;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rm-end-btn {
+  flex: none;
+}
+.over-tag {
+  flex: none;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--paper);
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--soft);
+}
+.rm-main .rm-shops {
+  flex: none;
+  margin-left: 0;
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--line);
+}
+.rm-over {
+  padding: 14px 16px;
+  border-radius: 14px;
+  background: var(--paper);
+}
+.rm-over[hidden] {
+  display: none;
+}
+.rm-over p {
+  margin: 4px 0 12px;
+}
+.rm-over .after {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.rm.chat-over .rm-main .rm-shops {
+  display: none;
+}
+.offer {
+  align-self: flex-start;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  max-width: min(88%, 460px);
+  padding: 12px 14px 12px 16px;
+  border: 1.5px solid var(--ink);
+  border-radius: 16px;
+  background: #fff;
+}
+.offer small {
+  display: block;
+  color: var(--soft);
+}
+.offer .btn,
+.offer .st {
+  flex: none;
+  margin-left: auto;
+}
+.offer .st {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--soft);
+}
+.offer.done {
+  border-color: var(--line);
+}
+.rm-tabs {
+  display: none;
+}
+.rm-tabs .dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-left: 6px;
+  border-radius: 50%;
+  background: var(--red);
+  vertical-align: 2px;
+}
+.rm-tabs .dot[hidden] {
+  display: none;
+}
+/* Something happened out of sight: a tap goes there. */
+.rm-toast {
+  position: absolute;
+  z-index: 5;
+  top: 12px;
+  right: 12px;
+  width: min(380px, calc(100% - 24px));
+  animation: toast-in 0.25s var(--ease);
+}
+.rm-toast[hidden] {
+  display: none;
+}
+.rm-toast button {
+  width: 100%;
+  padding: 12px 16px;
+  border: 0;
+  border-radius: 14px;
+  background: var(--ink);
+  color: #fff;
+  font: inherit;
+  font-size: 14.5px;
+  font-weight: 600;
+  line-height: 1.35;
+  text-align: left;
+  box-shadow: 0 10px 30px rgb(0 0 0 / 0.22);
+  cursor: pointer;
+}
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+}
+@media (min-width: 901px) {
+  .rm {
+    display: grid;
+    grid-template-columns: 300px minmax(0, 1fr);
+  }
+  .rm-side {
+    border-right: 1px solid var(--line);
+  }
+}
+@media (max-width: 900px) {
+  .rm-tabs {
+    flex: none;
+    display: grid;
+    grid-auto-columns: 1fr;
+    grid-auto-flow: column;
+    gap: 4px;
+    padding: 6px;
+    border-bottom: 1px solid var(--line);
+    background: var(--paper);
+  }
+  .rm-tabs button {
+    height: 40px;
+    padding: 0 8px;
+    border: 0;
+    border-radius: 10px;
+    background: none;
+    font: inherit;
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--soft);
+    cursor: pointer;
+  }
+  .rm-tabs button[aria-current] {
+    background: #fff;
+    color: var(--ink);
+    box-shadow: inset 0 0 0 1.5px var(--ink);
+  }
+  .rm-tabs button[hidden] {
+    display: none;
+  }
+  .rm-side,
+  .rm-main {
+    flex: 1;
+  }
+  .rm[data-view="chat"] .rm-side,
+  .rm:not([data-view="chat"]) .rm-main,
+  .rm[data-view="list"] .rm-run,
+  .rm[data-view="run"] .rm-side > :not(.rm-run) {
+    display: none;
+  }
+  .rm[data-view="run"] .rm-run {
+    border-top: 0;
+  }
+  .rm[data-view="list"] .rm-tickets {
+    max-height: none;
+  }
+  .rm-side {
+    background: #fff;
+  }
+  .rm-side .rm-h {
+    border-bottom: 1px solid var(--line);
+  }
+  .rm-tickets {
+    padding: 8px 10px;
+  }
+  .tk {
+    background: var(--paper);
+  }
+  .tk-x {
+    opacity: 1;
+  }
+  .rm-run {
+    padding: 12px 14px;
+    background: #fff;
+  }
+  .run-t li:not(.sys) {
+    background: var(--paper);
+  }
+  /* On a phone, the shop row is for starting out: once a chat is going, the chat gets the room. */
+  .rm:not(.blank) .rm-main .rm-shops {
+    display: none;
+  }
+  .rm-main .rm-budget {
+    min-height: 52px;
+    padding: 8px 14px;
+  }
+  .bar-l .link {
+    font-size: 13px;
+  }
+  .rm-toast {
+    top: 58px;
+    left: 12px;
+    width: auto;
+  }
+}
+.run-body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+.run-t .by {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+.run-t .by small {
+  color: var(--mute);
+  font-size: 12.5px;
+}
+.rm-run .run-say {
+  flex: none;
+  padding: 10px 0 0;
+}
+.rm-run .run-say[hidden] {
+  display: none;
+}
+@media (min-width: 901px) {
+  .rm-run .run-say {
+    display: none;
+  }
+}
+@media (max-width: 900px) {
+  .rm-run .run-who li {
+    background: var(--paper);
+  }
+  .rm-run .run-who .st {
+    padding: 3px 9px;
+    border-radius: 999px;
+    background: #fff;
+  }
+}
+@media (max-width: 560px) {
+  .friends .folk {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+  }
+  .friends .folk .btn {
+    grid-column: 2 / -1;
+    justify-self: start;
+  }
+  .friends .folk form {
+    grid-row: 1;
+    grid-column: 3;
+  }
+}
+/* A friend's link: what adding them does, then the one thing to do, right under it. */
+.friend-l {
+  justify-content: center;
+  gap: 18px;
+}
+.friend-l .wiz-n {
+  margin: 0;
+}
+.perks {
+  display: grid;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  color: var(--soft);
+}
+.perks li {
+  padding-left: 18px;
+  border-left: 3px solid var(--ac);
+  line-height: 1.4;
+}
+.perks b {
+  color: var(--ink);
+}
+.friend-act {
+  display: grid;
+  justify-items: start;
+  gap: 10px;
+  margin-top: 6px;
+}
+.friend-act:has(.try-demo) {
+  justify-items: stretch;
+}
+@media (max-width: 900px) {
+  /* On a phone the button comes first; the card is the picture underneath. */
+  .wiz2:has(.friend-l, .run-foot) .wiz2-r {
+    order: 2;
+  }
+}
+/* ---- the sidebar on a phone: a bar with a menu, not a row that scrolls sideways ---- */
+.rail-menu {
+  display: none;
+}
+.rail-drawer {
+  display: contents;
+}
+@media (max-width: 900px) {
+  .rail {
+    justify-content: space-between;
+    overflow: visible;
+  }
+  .rail-menu {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    height: 40px;
+    padding: 0 12px 0 14px;
+    border: 0;
+    border-radius: 12px;
+    background: rgb(255 255 255 / 0.14);
+    color: #fff;
+    font: inherit;
+    font-size: 15px;
+    font-weight: 700;
+    cursor: pointer;
+  }
+  .rail-menu svg {
+    width: 20px;
+    height: 20px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2;
+    stroke-linecap: round;
+  }
+  .rail.open .rail-menu {
+    background: #fff;
+    color: var(--ink);
+  }
+  .rail-dot {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: var(--hivis);
+    box-shadow: 0 0 0 2px var(--cobalt);
+  }
+  .rail-drawer {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    display: none;
+    flex-direction: column;
+    gap: 12px;
+    padding: 8px 12px 16px;
+    background: var(--cobalt);
+    border-radius: 0 0 20px 20px;
+    box-shadow: 0 18px 40px rgb(0 0 0 / 0.25);
+  }
+  .rail.open .rail-drawer {
+    display: flex;
+  }
+  .rail .rail-drawer nav {
+    flex-direction: column;
+  }
+  .rail .rail-drawer nav a {
+    height: 48px;
+    padding: 0 14px;
+    font-size: 16px;
+  }
+  .rail .rail-drawer .rail-who {
+    display: grid;
+  }
 }

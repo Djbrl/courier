@@ -18,6 +18,8 @@
   function place() {
     const el = target();
     if (!el) return;
+    // On a phone the sidebar is a folded menu: open it while a step points into it.
+    document.querySelector(".rail")?.classList.toggle("open", innerWidth <= 900 && Boolean(el.closest(".rail-drawer")));
     const r = el.getBoundingClientRect();
     const pad = 6;
     Object.assign(hole.style, {
@@ -70,6 +72,7 @@
 
   function end() {
     hole.remove();
+    document.querySelector(".rail")?.classList.remove("open");
     box.remove();
     removeEventListener("resize", place);
     removeEventListener("scroll", place, true);

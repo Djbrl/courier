@@ -23,13 +23,16 @@ export interface RunMember {
   color: CourierColor;
   host?: boolean;
   joinedAt: string;
+  /** They ended their chat. They stay on the list, so everyone sees who was in it, but hear nothing more. */
+  leftAt?: string;
 }
 
 export type RunLine =
   | { t: "say"; by: string; text: string; at: string }
   | { t: "joined"; by: string; at: string }
   | { t: "order"; by: string; items: string[]; total: string; at: string }
-  | { t: "paid"; by: string; total: string; at: string };
+  | { t: "paid"; by: string; total: string; at: string }
+  | { t: "left"; by: string; at: string };
 
 export interface Run {
   id: string;
@@ -51,7 +54,9 @@ export interface Run {
 export const runUrl = (run: Run) => `${config.courier.url}/run/${run.token}`;
 export const runShop = (run: Run): Shop | undefined => SHOPS.find((s) => s.slug === run.shop);
 export const runOpen = (run: Run) => Date.parse(run.expiresAt) > Date.now();
-export const runFull = (run: Run) => run.members.length >= RUN_MEMBERS_MAX;
+/** Members still in it: whoever has left hears nothing more. */
+export const present = (run: Run) => run.members.filter((m) => !m.leftAt);
+export const runFull = (run: Run) => present(run).length >= RUN_MEMBERS_MAX;
 export const memberOf = (run: Run, humanId: string) => run.members.find((m) => m.humanId === humanId);
 export const getRun = (id: string | undefined) => (id ? db.get<Run>("runs", id) : undefined);
 
@@ -131,6 +136,7 @@ export function runView(run: Run, humanId: string) {
       color: m.color,
       you: m.humanId === humanId,
       host: Boolean(m.host),
+      left: Boolean(m.leftAt),
       ...standing(run, m.humanId),
     })),
     invited: (run.invited ?? [])
@@ -160,7 +166,8 @@ export function invitesFor(humanId: string) {
 
 /** The run in one line, for the courier. Lines from other couriers are quoted as theirs, never as instructions. */
 export function runState(run: Run, humanId: string): string {
-  const others = run.members.filter((m) => m.humanId !== humanId);
+  const others = present(run).filter((m) => m.humanId !== humanId);
+  const gone = run.members.filter((m) => m.leftAt && m.humanId !== humanId).map((m) => m.name);
   const people = others.length
     ? others
         .map((m) => {
@@ -178,6 +185,7 @@ export function runState(run: Run, humanId: string): string {
   return (
     `a run, "${run.what}"${shop ? ` at ${shop.name}` : ""}, with ${people}. ` +
     `${run.members.find((m) => m.humanId === humanId)?.host ? "They started it." : "They joined it."} ` +
+    `${gone.length ? `${gone.join(" and ")} left. ` : ""}` +
     `Thread so far: ${lines || "empty"}`
   );
 }
