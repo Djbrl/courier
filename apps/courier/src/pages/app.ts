@@ -9,6 +9,7 @@ import {
   html,
   idCard,
   LOGO,
+  MONEY,
   money,
   PP,
   paypalFor,
@@ -23,6 +24,7 @@ import {
   type Visa,
 } from "@courier/shared";
 import type { Approval, Connection, Courier, Human, Stamp } from "../db.ts";
+import type { Friend } from "../friends.ts";
 import type { Contact } from "../people.ts";
 import { capFields } from "./consent.ts";
 import { backBy, courierForErrand, courierLook, demoClientId, dots, firstName, lookForAgent, short } from "./shared.ts";
@@ -229,7 +231,7 @@ export function homePage(d: Desk, opts: { welcome: boolean; courierId?: string; 
           }
         </div>
         <ul class="hm2-st">
-          <li class="ok">${CK}<span>${d.human.simulated ? "Demo person" : "Verified PayPal account"}<small>${paypalFor(d.human).mode === "simulated" ? "Simulated" : "Sandbox"}</small></span></li>
+          <li class="ok">${CK}<span>${d.human.simulated ? "Demo person" : "Verified PayPal account"}<small>${MONEY[paypalFor(d.human).mode].name}</small></span></li>
           <li class="${inClaude ? "ok" : "todo"}"><i aria-hidden="true"></i><span>${inClaude ? `In Claude: ${couriers.map((c) => c.name).join(", ")}` : "Not in Claude yet"}</span></li>
         </ul>
       </section>
@@ -355,10 +357,28 @@ export function shopsPage(d: Desk): string {
 export function peoplePage(
   d: Desk,
   people: { contact: Contact; courier: Courier | undefined; idea: string }[],
+  friends: Friend[],
+  link: string,
 ): string {
   const mine = d.couriers.find((c) => !c.revokedAt) ?? d.couriers[0]!;
   const main = html`<div class="sett">
     <h1 class="big">People</h1>
+    <section class="friends" aria-label="Your people on Courier">
+      <h2>On Courier</h2>
+      <p class="lead">Send your link to a friend. Once they add you, your couriers can ask each other to errands by name.</p>
+      <div class="invite-l"><code class="inp code sm">${link}</code><button type="button" class="btn sm" data-copy="${link}">Copy your link</button></div>
+      ${
+        friends.length
+          ? html`<div class="folks">${friends.map(
+              (f) => html`<div class="folk cc" style="${courierVars(f.courier?.color ?? "ink")}">
+              ${f.courier ? portrait(f.courier) : ""}<span class="et"><b>${f.name}</b><small>${f.courier ? `Courier ${f.courier.name}` : "No courier yet"}</small></span>
+              <a class="btn sm" href="/errand?c=${mine.id}&say=${encodeURIComponent(`Ask ${f.name} if they want to come along`)}">Ask to an errand</a>
+              <form method="post" action="/app/people/remove"><input type="hidden" name="h" value="${f.human.id}"><button class="link fine" type="submit">Remove</button></form></div>`,
+            )}</div>`
+          : html`<p class="fine">Nobody yet.</p>`
+      }
+    </section>
+    <h2>In the demo</h2>
     <p class="lead">Invite them to an errand and chip in on one thing. Each pays their own share with their own PayPal, through their own courier.</p>
     <div class="folks">${people.map(
       ({ contact: c, courier, idea }) => html`<div class="folk cc" style="${courierVars(c.color)}">
@@ -430,7 +450,7 @@ export function settingsPage(d: Desk, savedEmail?: string | null | false): strin
   const main = html`<div class="sett">
     <h1 class="big">Settings</h1>
     <section><h2 class="sec-t">Connections</h2><div class="panel slist">
-      ${row(PP, `${d.human.simulated ? "Demo person." : "Verified."} ${paypalFor(d.human).mode === "sandbox" ? "Sandbox" : "Simulated"}: no real money.`)}
+      ${row(PP, `${d.human.simulated ? "Demo person." : "Verified."} ${MONEY[paypalFor(d.human).mode].note}`)}
       ${row(
         "Saved PayPal",
         hasSaved

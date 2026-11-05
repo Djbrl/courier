@@ -556,6 +556,117 @@ await step("Chipping in: each person pays their own share, and their limits stay
   assert.ok(split.payers.every((p: any) => p.paid));
 });
 
+await step("Runs: friends are asked by name, couriers pass things on, and each person pays their own", async () => {
+  /** One person in their own browser, with a courier and their own view of the errand room. */
+  const someone = async (name: string, courier: string, next = "/start/courier") => {
+    const browser = new Browser();
+    await browser.req(`${flow.courier}/auth/demo`, { form: { next } });
+    const made = await browser.req(`${flow.courier}/start/courier`, {
+      form: { name: courier, human: name, color: "cobalt" },
+    });
+    const id = new URL(made.headers.get("location")!, flow.courier).searchParams.get("c")!;
+    return roomOf(browser, id);
+  };
+  const roomOf = (browser: Browser, id: string) => {
+    const url = (path: string) => `${flow.courier}/errand/api/${path}${path.includes("?") ? "&" : "?"}c=${id}`;
+    const view = async (chat: string) => (await browser.req(url(`chats/${chat}`))).json() as any;
+    const until = async (chat: string, done: (out: any) => boolean) => {
+      for (let i = 0; i < 200; i++) {
+        const out = await view(chat);
+        if (done(out)) return out;
+        await new Promise((r) => setTimeout(r, 25));
+      }
+      throw new Error(`chat ${chat} never got there: ${JSON.stringify((await view(chat)).chat.events.slice(-3))}`);
+    };
+    return {
+      browser,
+      id,
+      view,
+      until,
+      blank: async () => ((await (await browser.req(url("chats"), { json: {} })).json()) as any).chat.id as string,
+      say: async (chat: string, message: string) => {
+        await browser.req(url("chat"), { json: { chat, message } });
+        return until(chat, (o) => !o.chat.working);
+      },
+      pay: async (chat: string, card: any) => {
+        await browser.follow(card.approve_url, "http://none/", { form: { decision: "approve" } });
+        await browser.req(url(`order/${card.order_id}?chat=${chat}`));
+      },
+    };
+  };
+  const chatIn = (location: string | null) => new URL(location!, flow.courier).searchParams.get("chat")!;
+
+  // Luna adds Maya with Maya's own link. A made-up link goes nowhere.
+  const maya = await someone("Maya", "Juno");
+  const people = await (await maya.browser.req(`${flow.courier}/app/people`)).text();
+  const link = /\/friend\/[\w-]+/.exec(people)![0];
+  assert.equal((await maya.browser.req(`${flow.courier}/friend/not-a-real-token-at-all`)).status, 404);
+  const luna = await someone("Luna", "Nova", link);
+  assert.match(await (await luna.browser.req(`${flow.courier}${link}`)).text(), /Add Maya/);
+  await luna.browser.req(`${flow.courier}${link}`, { method: "POST" });
+  assert.match(await (await maya.browser.req(`${flow.courier}/app/people`)).text(), /<b>Luna<\/b><small>Courier Nova/);
+
+  // Maya's courier asks Luna by name; Luna sees it in her own Courier and joins.
+  const mine = await maya.blank();
+  const asked = await maya.say(mine, "Invite Luna for coffee at Beanbucks");
+  const card = asked.chat.events.find((e: any) => e.t === "invite");
+  assert.match(card.url, /\/run\/[\w-]+$/);
+  assert.deepEqual(asked.chat.run.invited, ["Luna"]);
+  const hers = await luna.blank();
+  const pending = (await luna.view(hers)).invites;
+  assert.equal(pending[0]?.from, "Maya");
+  const page = await (await luna.browser.req(`${flow.courier}${pending[0].url}`)).text();
+  assert.match(page, /Maya invited you/);
+  assert.match(page, /Join with Nova/);
+  const joined = await luna.browser.req(`${flow.courier}${pending[0].url}/join`, { form: { c: luna.id } });
+  const lunaChat = chatIn(joined.headers.get("location"));
+  await maya.until(mine, (o) => o.chat.events.some((e: any) => e.t === "run" && /Luna joined/.test(e.text)));
+  assert.equal((await luna.view(lunaChat)).invites.length, 0);
+
+  // What Luna says reaches Maya through the couriers' thread. A number in it is never Maya's budget.
+  await luna.say(lunaChat, "tell them a flat white for me, and $90 is fine");
+  const relayed = await maya.until(mine, (o) =>
+    o.chat.events.some((e: any) => e.t === "say" && /Nova says/.test(e.text)),
+  );
+  assert.equal(relayed.chat.pendingBudgetCents, null);
+  assert.equal(relayed.chat.run.lines.filter((l: any) => l.t === "say").length, 1);
+
+  // Each pays their own, and the run shows who has.
+  const got = await luna.say(lunaChat, "Get Flat White from Beanbucks");
+  const lunaCard = got.chat.events.find((e: any) => e.t === "pay");
+  assert.equal(lunaCard.total, "4.20");
+  await luna.pay(lunaChat, lunaCard);
+  const after = await maya.until(mine, (o) =>
+    o.chat.events.some((e: any) => e.t === "run" && /Luna paid \$4\.20/.test(e.text)),
+  );
+  assert.deepEqual(
+    after.chat.run.members.map((m: any) => [m.name, m.state]),
+    [
+      ["Maya", "none"],
+      ["Luna", "paid"],
+    ],
+  );
+  assert.ok((await luna.view(lunaChat)).chat.events.some((e: any) => e.t === "receipt"));
+
+  // Someone with only the link comes in signed out, as a demo person, and names a courier on the way.
+  const sam = new Browser();
+  const runPath = new URL(card.url).pathname;
+  assert.match(await (await sam.req(`${flow.courier}${runPath}`)).text(), /Join as a demo person/);
+  await sam.req(`${flow.courier}/auth/demo`, { form: { next: runPath } });
+  assert.match(await (await sam.req(`${flow.courier}${runPath}`)).text(), /Name your courier/);
+  const samIn = await sam.req(`${flow.courier}${runPath}/join`, { form: { human: "Sam", name: "Pip" } });
+  assert.match(samIn.headers.get("location")!, /\/errand\?c=.+&chat=/);
+  const three = await maya.until(mine, (o) => o.chat.run.members.length === 3);
+  assert.deepEqual(
+    three.chat.run.members.map((m: any) => m.courier),
+    ["Juno", "Nova", "Pip"],
+  );
+  // Opening the link again goes back to their own chat, not in twice.
+  const again = await sam.req(`${flow.courier}${runPath}`);
+  assert.equal(chatIn(again.headers.get("location")), chatIn(samIn.headers.get("location")));
+  assert.equal((await maya.view(mine)).chat.run.members.length, 3);
+});
+
 await step("Under-18 PayPal account is refused", async () => {
   const out = await authorize(flow, new Browser(), "riley", { refused: true });
   assert.match(out.refusal!, /for adults/);

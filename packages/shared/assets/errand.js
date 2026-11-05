@@ -10,6 +10,8 @@
   const sugs = $("#sugs");
   const tabs = $("#tickets");
   const bar = $("#budget");
+  const runBox = $("#run");
+  const inviteBox = $("#invites");
   const esc = (s) =>
     String(s ?? "").replace(
       /[&<>"']/g,
@@ -19,6 +21,7 @@
 
   let chat = boot.chat;
   let list = boot.list;
+  let invites = boot.invites || [];
   let left = boot.left;
   let drawn = -1;
   /** Orders with their PayPal window open, and the chat each belongs to. */
@@ -120,7 +123,7 @@
         ${lines(e.items)}
         <div class="tot"><span>${esc(e.shop_name)}</span><b>$${esc(e.total)}</b></div>
         <div class="slot">${slot}</div>
-        ${`<p class="fine pay-foot">${canCallBack ? `<button type="button" class="link fine" data-callback="${esc(e.order_id)}" data-until="${e.callBackUntil}">Call back · <span>${clock(e.callBackUntil)}</span></button><br>` : ""}${boot.paypal === "sandbox" ? "PayPal sandbox: log in with a sandbox buyer account." : "Simulated PayPal: no real money."}</p>`}
+        ${`<p class="fine pay-foot">${canCallBack ? `<button type="button" class="link fine" data-callback="${esc(e.order_id)}" data-until="${e.callBackUntil}">Call back · <span>${clock(e.callBackUntil)}</span></button><br>` : ""}${boot.paypal === "live" ? "Live PayPal: real money." : boot.paypal === "sandbox" ? "PayPal sandbox: log in with a sandbox buyer account." : "Simulated PayPal: no real money."}</p>`}
       </div>`;
   }
 
@@ -176,6 +179,11 @@
         <div class="ns">${esc(e.reason || "It isn’t quite what you asked for.")}</div>
         <div class="acts"><button type="button" class="ap" data-approval="${esc(e.approval_id)}" ${e.answered ? "disabled" : ""}>${e.answered === "ok" ? "Approved ✓" : "Approve"}</button><button type="button" class="dn" data-approval="${esc(e.approval_id)}" ${e.answered ? "disabled" : ""}>${e.answered === "no" ? "Denied" : "Deny"}</button></div>
       </div>`,
+    invite: (e) =>
+      `<div class="invite"><b>Invite link</b><small>${esc(e.what)}${e.shop && !e.what.includes(e.shop) ? ` · ${esc(e.shop)}` : ""}</small>
+        <div class="invite-l"><code class="inp code sm">${esc(e.url)}</code><button type="button" class="btn sm" data-copy="${esc(e.url)}">Copy</button></div>
+        <p class="fine">Send it to anyone. They sign in with their own PayPal, or as a demo person, and their courier joins this chat.</p></div>`,
+    run: (e) => `<div class="tk-mark run-mark"><span class="tk-line">${esc(e.text)}</span></div>`,
     no: (e) =>
       `<div class="nocard"><b>That’s over your budget.</b>${esc(e.reason)} Change the budget above, and I’ll try again. It’s checked in code, so no one can talk me past it.</div>`,
   };
@@ -191,6 +199,56 @@
     log.innerHTML = hello + chat.events.map((e) => DRAW[e.t]?.(e) ?? "").join("") + (chat.working ? typing() : "");
     if (atEnd || grew) requestAnimationFrame(() => (log.scrollTop = log.scrollHeight));
     drawn = chat.id;
+  }
+
+  /* ---------------- the run: the couriers' own thread ---------------- */
+
+  const who = (m) =>
+    `<li class="${m.you ? "you" : ""}"><b>${esc(m.you ? "You" : m.name)}</b><small>${esc(m.courier)}</small><span class="st st-${esc(m.state)}">${m.state === "paid" ? `Paid $${esc(m.total)}` : m.state === "ordered" ? `$${esc(m.total)} to pay` : "Choosing"}</span></li>`;
+
+  function runLine(l) {
+    const by = `<b>${esc(l.courier)}</b>`;
+    if (l.t === "say") return `<li class="${l.you ? "you" : ""}">${by}<span>${esc(l.text)}</span></li>`;
+    if (l.t === "joined") return `<li class="sys">${esc(l.name)} joined, with ${esc(l.courier)}.</li>`;
+    if (l.t === "order")
+      return `<li class="sys">${esc(l.name)} ordered ${esc((l.items || []).join(", "))}, $${esc(l.total)}.</li>`;
+    if (l.t === "paid") return `<li class="sys">${esc(l.name)} paid $${esc(l.total)}.</li>`;
+    return "";
+  }
+
+  /** A friend asked this person to their run. Joining is a page of its own, where they pick who goes. */
+  function drawInvites() {
+    inviteBox.hidden = !invites.length;
+    inviteBox.innerHTML = invites
+      .map(
+        (i) =>
+          `<div class="inv"><span><b>${esc(i.from)} invited you</b> ${esc(i.what)}${i.shop && !i.what.includes(i.shop) ? ` · ${esc(i.shop)}` : ""}${i.note ? `<small>“${esc(i.note)}”</small>` : ""}</span><a class="btn sm" href="${esc(i.url)}">See it</a></div>`,
+      )
+      .join("");
+  }
+
+  let runDrawn = "";
+  function drawRun() {
+    const r = chat.run;
+    runBox.hidden = !r;
+    if (!r) {
+      runDrawn = "";
+      return;
+    }
+    const key = `${r.id}.${r.rev}`;
+    if (key === runDrawn) return;
+    runDrawn = key;
+    const alone = r.members.length < 2;
+    runBox.innerHTML = `<header><b>Run</b><span>${esc(r.what)}${r.shop && !r.what.includes(r.shop) ? ` · ${esc(r.shop)}` : ""}</span>
+        ${r.open && !r.full ? `<button type="button" class="link fine" data-copy="${esc(r.url)}">Copy invite link</button>` : ""}</header>
+      <ul class="run-who">${r.members.map(who).join("")}${(r.invited || []).map((n) => `<li class="asked"><b>${esc(n)}</b><span class="st">Invited</span></li>`).join("")}</ul>
+      <ol class="run-t" aria-live="polite">${
+        alone
+          ? `<li class="sys">Nobody has joined yet. Once someone does, the couriers talk here.</li>`
+          : r.lines.map(runLine).join("") || `<li class="sys">The couriers talk here.</li>`
+      }</ol>`;
+    const t = $(".run-t", runBox);
+    t.scrollTop = t.scrollHeight;
   }
 
   /* ---------------- the row of chats, and this chat's budget ---------------- */
@@ -249,6 +307,8 @@
   }
 
   function draw() {
+    drawInvites();
+    drawRun();
     drawTabs();
     drawBudget();
     drawSugs();
@@ -259,11 +319,16 @@
   function take(out) {
     if (out.list) list = out.list;
     if (out.left !== undefined) left = out.left;
+    if (out.invites && JSON.stringify(out.invites) !== JSON.stringify(invites)) {
+      invites = out.invites;
+      drawInvites();
+    }
     if (out.chat && out.chat.id === chat.id) {
       const changed = out.chat.rev !== chat.rev || out.chat.working !== chat.working;
       chat = out.chat;
       if (changed) {
         drawLog();
+        drawRun();
       }
       drawSugs();
     }
@@ -290,7 +355,8 @@
     try {
       take(await api(`chats/${encodeURIComponent(chat.id)}`));
     } catch {}
-    const busy = chat.working || list.some((t) => t.working);
+    // In a run, other people's couriers can speak at any moment, so the window keeps listening closely.
+    const busy = chat.working || list.some((t) => t.working) || (chat.run?.open && chat.run.members.length > 1);
     quiet = busy ? 0 : quiet + 1;
     setTimeout(tick, busy ? 700 : Math.min(5000, 1500 + quiet * 500));
   }

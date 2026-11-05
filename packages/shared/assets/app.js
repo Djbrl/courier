@@ -25,6 +25,20 @@ document.querySelectorAll("code.copy").forEach((el) => {
   });
 });
 
+// Buttons that copy a link, including ones drawn later (the errand room draws its own).
+document.addEventListener("click", async (e) => {
+  const button = e.target.closest?.("[data-copy]");
+  if (!button) return;
+  try {
+    await navigator.clipboard.writeText(button.dataset.copy);
+    const before = button.textContent;
+    button.textContent = "Copied";
+    setTimeout(() => (button.textContent = before), 1500);
+  } catch {
+    window.prompt("Copy the link:", button.dataset.copy);
+  }
+});
+
 // A subtle ink-roughness filter for stamps.
 if (document.querySelector(".stamp")) {
   const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");

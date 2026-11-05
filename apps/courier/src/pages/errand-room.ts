@@ -1,7 +1,21 @@
-import { ARROW, config, courierVars, html, LOGO, PP, paypalFor, portrait, raw, SHOPS, shopLogo } from "@courier/shared";
+import {
+  ARROW,
+  config,
+  courierVars,
+  html,
+  LOGO,
+  MONEY,
+  PP,
+  paypalFor,
+  portrait,
+  raw,
+  SHOPS,
+  shopLogo,
+} from "@courier/shared";
 import type { Courier } from "../db.ts";
 import { contactsOf } from "../people.ts";
 import { FREE_MESSAGES, messagesLeft } from "../room.ts";
+import { invitesFor } from "../runs.ts";
 import { type Desk, shell } from "./app.ts";
 import { courierLook, firstName } from "./shared.ts";
 
@@ -36,6 +50,7 @@ export function errandRoom(d: Desk, courier: Courier, chat: unknown, list: unkno
     draft: draft ?? "",
     chat,
     list,
+    invites: invitesFor(d.human.id),
     portrait: portrait(look).value,
     receiptParts: {
       logo: LOGO.value,
@@ -50,8 +65,10 @@ export function errandRoom(d: Desk, courier: Courier, chat: unknown, list: unkno
         </div>
         <button type="button" class="link fine rm-new" id="new-chat">New errand</button>
       </header>
+      <div class="rm-invites" id="invites" aria-live="polite" hidden></div>
       <div class="rm-tickets" id="tickets" aria-label="Your errand chats" hidden></div>
       <div class="rm-budget" id="budget" hidden></div>
+      <section class="rm-run" id="run" aria-label="The run, with the other couriers" hidden></section>
       <div class="log rm-log" id="log" aria-live="polite"></div>
       <div class="rm-foot">
         <div class="sugs rm-sugs" id="sugs"></div>
@@ -62,7 +79,7 @@ export function errandRoom(d: Desk, courier: Courier, chat: unknown, list: unkno
           <p>You’ve used your ${FREE_MESSAGES} free messages. Your chats and receipts stay here. To keep going, connect Courier to your own agent.</p>
           <div class="after"><a class="btn sm" href="${connect}">Connect to Claude${ARROW}</a><a class="btn ghost sm" href="/install">Use another agent</a></div>
         </div>
-        <p class="demo-tag">${config.anthropicConfigured ? `${look.name} runs on Claude.` : `A scripted stand-in for Claude, using the real shop tools.`} ${paypalFor(d.human).mode === "simulated" ? "Simulated PayPal: no real money." : "PayPal sandbox: no real money."} <span id="left"></span></p>
+        <p class="demo-tag">${config.anthropicConfigured ? `${look.name} runs on Claude.` : `A scripted stand-in for Claude, using the real shop tools.`} ${MONEY[paypalFor(d.human).mode].note} <span id="left"></span></p>
       </div>
     </section>
     ${raw(`<script type="application/json" id="boot">${JSON.stringify(boot).replace(/</g, "\\u003c")}</script>`)}`;

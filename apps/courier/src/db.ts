@@ -31,6 +31,8 @@ export interface Human {
   messagesSent?: number;
   /** When they were shown around the dashboard, so it only happens once. */
   touredAt?: string;
+  /** The secret in their own link, which adds them as a friend. Made the first time they share it. */
+  friendToken?: string;
   createdAt: string;
   lastLoginAt: string;
 }

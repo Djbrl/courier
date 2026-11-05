@@ -17,6 +17,7 @@ import {
   type Stamp,
   saveCourier,
 } from "../db.ts";
+import { areFriends, befriend, friendsOf, friendToken, humanByFriendToken, unfriend } from "../friends.ts";
 import {
   claudeSetupPage,
   connectingPage,
@@ -27,8 +28,11 @@ import {
   deleteAccountPage,
   errandRoom,
   errandsPage,
+  errorPage,
+  friendPage,
   homePage,
   peoplePage,
+  runInvitePage,
   settingsPage,
   shopsPage,
   signInPage,
@@ -48,11 +52,13 @@ import {
   checkOrder,
   deleteChat,
   findChat,
+  joinRun,
   messagesLeft,
   sendMessage,
   setNextBudget,
   spendMessage,
 } from "../room.ts";
+import { invitesFor, memberOf, runByToken, runFull, runOpen } from "../runs.ts";
 import { decideApproval, parseCap, savedPayPal } from "../visas.ts";
 
 /**
@@ -264,7 +270,47 @@ appRouter.get("/app/people", (req, res) => {
     courier: contactCourier(contact),
     idea: ideaFor(contact),
   }));
-  res.send(peoplePage(d, people));
+  res.send(peoplePage(d, people, friendsOf(d.human.id), `${config.courier.url}/friend/${friendToken(d.human)}`));
+});
+
+appRouter.post("/app/people/remove", (req, res) => {
+  const human = requireHuman(req, res);
+  if (!human) return;
+  if (typeof req.body.h === "string") unfriend(human.id, req.body.h);
+  res.redirect(303, "/app/people");
+});
+
+/* ---------------- friends: a link that adds you ---------------- */
+
+function friendBehind(req: express.Request, res: express.Response) {
+  const owner = humanByFriendToken(String(req.params.token ?? ""));
+  if (!owner)
+    res.status(404).send(errorPage(currentHuman(req), "This link doesn't work", "Ask them for their link again."));
+  return owner;
+}
+
+appRouter.get("/friend/:token", (req, res) => {
+  const owner = friendBehind(req, res);
+  if (!owner) return;
+  const viewer = currentHuman(req);
+  if (viewer?.id === owner.id) {
+    res.redirect(302, "/app/people");
+    return;
+  }
+  res.send(friendPage(owner, viewer, Boolean(viewer && areFriends(viewer.id, owner.id))));
+});
+
+appRouter.post("/friend/:token", (req, res) => {
+  const owner = friendBehind(req, res);
+  if (!owner) return;
+  const viewer = currentHuman(req);
+  if (!viewer) {
+    res.redirect(303, `/friend/${owner.friendToken}`);
+    return;
+  }
+  befriend(viewer, owner);
+  // Someone new still needs a courier before anyone can ask them to an errand.
+  res.redirect(303, findCourier(viewer.id) ? "/app/people" : "/start/courier");
 });
 
 appRouter.get("/app/couriers", (req, res) => {
@@ -307,6 +353,80 @@ appRouter.get("/app/api/status", (req, res) => {
     approvals: d.approvals.length,
     errandRoom: config.anthropicConfigured ? "claude" : "demo",
   });
+});
+
+/* ---------------- runs: errands with other people ---------------- */
+
+/** The run behind a link, or a page saying why it can't be joined. A member is sent straight to their chat. */
+function openRun(req: express.Request, res: express.Response) {
+  const human = currentHuman(req);
+  const run = runByToken(String(req.params.token ?? ""));
+  if (!run || !runOpen(run)) {
+    res.status(404).send(errorPage(human, "This invite has ended", "Ask whoever sent it for a new link."));
+    return null;
+  }
+  const mine = human && memberOf(run, human.id);
+  if (mine) {
+    res.redirect(303, `/errand?c=${encodeURIComponent(mine.courierId)}&chat=${encodeURIComponent(mine.chatId)}`);
+    return null;
+  }
+  if (runFull(run)) {
+    res.status(409).send(errorPage(human, "This run is full", "Everyone who can join already has."));
+    return null;
+  }
+  return { human, run };
+}
+
+const activeCouriers = (human: Human) => listCouriers(human.id).filter((c) => !c.revokedAt);
+
+appRouter.get("/run/:token", (req, res) => {
+  const found = openRun(req, res);
+  if (found) res.send(runInvitePage(found.run, found.human, found.human ? activeCouriers(found.human) : []));
+});
+
+/** Joins with a courier the person has, or makes their first one here, so the link is the whole way in. */
+appRouter.post("/run/:token/join", (req, res) => {
+  const found = openRun(req, res);
+  if (!found) return;
+  const { run, human } = found;
+  if (!human) {
+    res.redirect(303, `/run/${run.token}`);
+    return;
+  }
+  let courier = typeof req.body.c === "string" ? findCourier(human.id, req.body.c) : undefined;
+  if (courier?.revokedAt) courier = undefined;
+  if (!courier) {
+    if (activeCouriers(human).length) {
+      res.redirect(303, `/run/${run.token}`);
+      return;
+    }
+    const name = String(req.body.name ?? "").trim();
+    const humanName = String(req.body.human ?? "")
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, 24);
+    if (!humanName || !isCourierName(name)) {
+      const error = !humanName ? "Tell your courier your first name." : `That name won't work. ${COURIER_NAME_HINT}`;
+      res.status(400).send(runInvitePage(run, human, [], error));
+      return;
+    }
+    // A person's first courier uses their id, which is how errand sessions find it.
+    courier = {
+      id: human.id,
+      humanId: human.id,
+      name,
+      color: "tang",
+      model: "Claude",
+      idNo: courierIdNo(human.id, name, human.id),
+      mode: "demo",
+      createdAt: new Date().toISOString(),
+    };
+    saveCourier(courier);
+    db.put("humans", human.id, { ...human, displayName: humanName });
+  }
+  const fresh = db.get<Human>("humans", human.id) ?? human;
+  const chat = joinRun(fresh, courier, run);
+  res.redirect(303, `/errand?c=${encodeURIComponent(courier.id)}&chat=${encodeURIComponent(chat.id)}`);
 });
 
 /* ---------------- the errand room ---------------- */
@@ -358,7 +478,13 @@ function chatFor(req: express.Request, res: express.Response, id: unknown) {
 }
 
 const answer = (res: express.Response, ctx: NonNullable<ReturnType<typeof chatFor>>, extra = {}) =>
-  res.json({ ...extra, chat: chatView(ctx.chat), list: chatTabs(ctx.courier), left: messagesLeft(ctx.human) });
+  res.json({
+    ...extra,
+    chat: chatView(ctx.chat),
+    list: chatTabs(ctx.courier),
+    left: messagesLeft(ctx.human),
+    invites: invitesFor(ctx.human.id),
+  });
 
 api.post("/chats", (req, res) => {
   const ctx = roomFor(req, res);

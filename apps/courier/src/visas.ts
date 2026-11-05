@@ -225,6 +225,20 @@ export async function deleteAccount(human: Human): Promise<boolean> {
   for (const courier of listCouriers(human.id)) db.delete("clients", demoClientId(courier.id));
   db.deleteWhere("couriers", theirs);
   db.deleteWhere("visas", theirs);
+  // Friends and runs name them to other people, so they leave those too.
+  db.deleteWhere<{ a: string; b: string }>("friends", (f) => f.a === human.id || f.b === human.id);
+  for (const run of db.list<{
+    id: string;
+    members: { humanId: string }[];
+    invited?: string[];
+    lines: { by: string }[];
+  }>("runs", (r) => r.members.some((m) => m.humanId === human.id) || Boolean(r.invited?.includes(human.id)), Infinity))
+    db.put("runs", run.id, {
+      ...run,
+      members: run.members.filter((m) => m.humanId !== human.id),
+      invited: run.invited?.filter((id) => id !== human.id),
+      lines: run.lines.filter((l) => l.by !== human.id),
+    });
   // Last, so a crash part-way leaves an account the person can still sign in to and delete.
   db.delete("humans", human.id);
   return true;
