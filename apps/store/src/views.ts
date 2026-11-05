@@ -166,9 +166,11 @@ export function receiptPage(order: Order | undefined): string {
 }
 
 const paypalNote = (order?: Order) =>
-  paypalFor(order).mode === "sandbox"
-    ? "PayPal sandbox: no real money moved."
-    : "Simulated PayPal: no real money moved.";
+  ({
+    live: "Live PayPal: real money moved.",
+    sandbox: "PayPal sandbox: no real money moved.",
+    simulated: "Simulated PayPal: no real money moved.",
+  })[paypalFor(order).mode];
 
 /** A stable colour for a courier the shop only knows by name. */
 function colorFor(name: string): CourierColor {
@@ -287,7 +289,7 @@ function orderRow(order: Order): RawHtml {
         <dt>Person</dt><dd>${personLine(order)} · <code>${order.sub.slice(0, 14)}…</code></dd>
         <dt>Limits</dt><dd>$${visa.spend_limit.value} in total · $${visa.per_purchase_limit.value} each</dd>
         ${intent ? html`<dt>Check</dt><dd>${intent.model ?? "?"}${intent.probability !== undefined ? ` (${Math.round(intent.probability * 100)}%)` : ""}: ${intent.reason ?? ""}</dd>` : ""}
-        <dt>Paid at</dt><dd>${demo ? "PayPal simulator: no money moved" : "PayPal sandbox: test money only"}</dd>
+        <dt>Paid at</dt><dd>${demo ? "PayPal simulator: no money moved" : paypalFor(order).mode === "live" ? "Live PayPal: real money" : "PayPal sandbox: test money only"}</dd>
         <dt>Pass</dt><dd><code>${visa.id}</code></dd>
       </dl>
       <form method="post" action="/merchant/report/${visa.id}"><button class="btn danger sm" type="submit" title="Suspends this courier's pass and claims its bond, if any">Report this courier</button></form>

@@ -6,6 +6,7 @@ import {
   JUNIPER,
   money,
   newId,
+  paypal,
   paypalFor,
   RECEIPT_CARD,
   RECEIPT_CARD_MIME,
@@ -446,7 +447,7 @@ export function createMcpServer(shop: Shop): McpServer {
         `hold_item or request_purchase. If Courier needs the user, it asks them itself (a dialog in this app, or a link to ` +
         `give them; then retry with the approval_id). request_purchase only spends inside the limits the user set in Courier: if they ` +
         `saved PayPal there, it pays straight away and returns a receipt; otherwise it returns a PayPal link for them to ` +
-        `pay (sandbox, no real money). Browsing works without a budget; if there's none yet, pass ticket_hint with what ` +
+        `pay${paypal.mode === "live" ? " (live PayPal: real money)" : " (sandbox, no real money)"}. Browsing works without a budget; if there's none yet, pass ticket_hint with what ` +
         `they asked for: if they named an amount, put it in ticket_hint.max_total to fill in the form for them. hold_item and ` +
         `request_purchase get the budget from the user themselves. If they return needs_ticket, follow what it says: ` +
         `you can't set a budget, so point the user to the card or link, then call wait_for_budget until it's set and ` +

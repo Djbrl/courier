@@ -11,6 +11,7 @@
   ],
   "scripts": {
     "dev": "node scripts/dev.mjs",
+    "live-recording": "PAYPAL_LIVE=real-money COURIER_URL=http://localhost:4000 STORE_URL=http://localhost:4100 DATA_DIR=data/live node --env-file=.env.live scripts/dev.mjs",
     "demo": "PAYPAL_MODE=simulated COURIER_URL=http://localhost:4000 STORE_URL=http://localhost:4100 DATA_DIR=data/demo node scripts/dev.mjs",
     "start": "node scripts/dev.mjs --no-watch",
     "test": "npm run test:unit && npm run test:e2e",

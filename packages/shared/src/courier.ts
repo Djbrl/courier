@@ -5,7 +5,7 @@
 import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import { ROOT_DIR } from "./config.ts";
+import { config, ROOT_DIR } from "./config.ts";
 import { escapeHtml, html, type RawHtml, raw } from "./html.ts";
 
 /** An address that changes with the file, so a deploy never meets a browser's cached copy. */
@@ -176,6 +176,7 @@ ${opts.head ? opts.head.value : ""}
 </head>
 <body class="${escapeHtml(opts.bodyClass ?? "")}">
 ${SPRITE}
+${config.paypal.mode === "live" ? `<div class="live-money" role="status">Live PayPal: real money moves here. A local copy, for one recording.</div>` : ""}
 ${opts.nav ? opts.nav.value : ""}
 ${opts.body.value}
 <script src="${APP_JS_URL}" defer></script>

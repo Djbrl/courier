@@ -10,6 +10,7 @@ import {
   courierVars,
   html,
   idCard,
+  MONEY,
   PP,
   paypal,
   paypalButton,
@@ -68,7 +69,7 @@ export function signInStepPage(): string {
         <div class="wiz-body">
           <h1 class="big">Let’s get your courier.</h1>
           <p class="lead">PayPal checks you’re real. Shops never learn who you are.</p>
-          <p class="fine">${paypal.mode === "sandbox" ? "PayPal sandbox. Use a sandbox buyer account, no real money." : "Simulated PayPal. No real money."}</p>
+          <p class="fine">${paypal.mode === "sandbox" ? "PayPal sandbox. Use a sandbox buyer account, no real money." : MONEY[paypal.mode].note}</p>
         </div>
         <div class="wiz-foot">${paypalButton("/auth/paypal/start?next=/start/courier")}${tryDemo({ next: "/start/courier" })}</div>`,
       blankCard(),

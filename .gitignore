@@ -3,6 +3,7 @@ node_modules/
 
 # Secrets and local configuration
 .env
+.env.live
 .claude/
 
 # Local data (SQLite databases and the dev signing key)

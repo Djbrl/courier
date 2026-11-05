@@ -14,7 +14,7 @@ import { type Connection, type Courier, courierIdNo, db, type Human, listCourier
 
 /** Skips signing in with a throwaway person. With no credentials, the PayPal button is already the simulator. */
 export function tryDemo(where: { req?: string; next?: string }): RawHtml | string {
-  if (paypal.mode !== "sandbox") return "";
+  if (paypal.mode === "simulated") return "";
   return html`<form method="post" action="/auth/demo" class="try-demo">
     ${where.req ? html`<input type="hidden" name="req" value="${where.req}">` : ""}
     ${where.next ? html`<input type="hidden" name="next" value="${where.next}">` : ""}

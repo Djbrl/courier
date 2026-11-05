@@ -58,7 +58,7 @@ export interface SavedPayPal {
 }
 
 export interface PayPalGateway {
-  readonly mode: "sandbox" | "simulated";
+  readonly mode: "live" | "sandbox" | "simulated";
   loginUrl(params: { redirectUri: string; state: string }): string;
   exchangeLoginCode(code: string, redirectUri: string): Promise<PayPalIdentity>;
   createOrder(input: CreateOrderInput, idempotencyKey: string): Promise<OrderSummary>;
@@ -132,8 +132,17 @@ async function loginJson(res: Response, stage: string): Promise<Record<string, u
 /* Real PayPal sandbox                                                  */
 /* ------------------------------------------------------------------ */
 
+/** Live mode is the same API at PayPal's live address; it refuses any one payment over the live cap. */
+function underLiveCap(amountCents: number) {
+  if (config.paypal.mode === "live" && amountCents > config.paypal.liveCapCents)
+    throw new PayPalError(
+      `Live PayPal is capped at $${(config.paypal.liveCapCents / 100).toFixed(2)} a payment for this recording.`,
+      400,
+    );
+}
+
 class SandboxPayPal implements PayPalGateway {
-  readonly mode = "sandbox" as const;
+  readonly mode = config.paypal.mode === "live" ? ("live" as const) : ("sandbox" as const);
   private appToken: { value: string; expiresAt: number } | null = null;
 
   private basicAuth(): string {
@@ -282,6 +291,7 @@ class SandboxPayPal implements PayPalGateway {
   }
 
   async createOrder(input: CreateOrderInput, idempotencyKey: string): Promise<OrderSummary> {
+    underLiveCap(input.amountCents);
     const value = (input.amountCents / 100).toFixed(2);
     const unit: Record<string, unknown> = {
       custom_id: input.customId,
@@ -399,6 +409,7 @@ class SandboxPayPal implements PayPalGateway {
     vaultId: string,
     idempotencyKey: string,
   ) {
+    underLiveCap(input.amountCents);
     const value = (input.amountCents / 100).toFixed(2);
     const unit: Record<string, unknown> = {
       custom_id: input.customId,
@@ -539,8 +550,15 @@ class SimulatedPayPal implements PayPalGateway {
 
 const simulatedPayPal = new SimulatedPayPal();
 
-export const paypal: PayPalGateway = config.paypal.mode === "sandbox" ? new SandboxPayPal() : simulatedPayPal;
+export const paypal: PayPalGateway = config.paypal.mode === "simulated" ? simulatedPayPal : new SandboxPayPal();
 
 /** A demo person's money only ever reaches the simulator, whatever the server's mode. */
+/** How a page says which PayPal is behind a payment. */
+export const MONEY: Record<PayPalGateway["mode"], { name: string; note: string }> = {
+  live: { name: "Live", note: "Live PayPal: real money." },
+  sandbox: { name: "Sandbox", note: "PayPal sandbox: no real money." },
+  simulated: { name: "Simulated", note: "Simulated PayPal: no real money." },
+};
+
 export const paypalFor = (who: { simulated?: boolean } | null | undefined): PayPalGateway =>
   who?.simulated ? simulatedPayPal : paypal;
