@@ -41,7 +41,7 @@ export const AVATARS = [
   "specs",
   "bun",
   "cap",
-  "eye",
+  "wrap",
   "beard",
   "afro",
   "smile",

@@ -4,6 +4,7 @@ import {
   type CourierLook,
   courierLayout,
   html,
+  isAvatar,
   LOGO,
   money,
   paypal,
@@ -46,7 +47,7 @@ export function courierLook(human: Human | null, courier?: Courier | null): Cour
     return {
       name: courier.name,
       color: courier.color,
-      avatar: courier.avatar ?? avatarFor(courier.name),
+      avatar: isAvatar(courier.avatar) ? courier.avatar : avatarFor(courier.name),
       model: courier.model,
       idNo: courier.idNo,
       simulated,

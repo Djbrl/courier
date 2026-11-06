@@ -25,7 +25,7 @@
     const c = COL[k];
     return `--ac:${c.ac};--at:${c.at};--as:${c.as};--ad:${c.ad};--al:${c.al}`;
   };
-  const AV = "split profile specs bun cap eye beard afro smile bob hood shades ponytail phones curl beanie".split(" ");
+  const AV = "split profile specs bun cap wrap beard afro smile bob hood shades ponytail phones curl beanie".split(" ");
   const pt = (a) => {
     let h = 0;
     for (const ch of a.n) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
