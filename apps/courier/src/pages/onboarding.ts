@@ -95,6 +95,8 @@ export function courierSetupPage(
     : {
         ...courierLook(human),
         name: opts.adding ? "" : "Juno",
+        // A second courier gets a face from its name, not Juno's.
+        avatar: opts.adding ? undefined : ("shades" as const),
         color: (opts.adding ? COLORS.find((c) => !used.has(c)) : undefined) ?? "cobalt",
       };
   if (opts.name !== undefined) look.name = opts.name;

@@ -55,6 +55,7 @@ export function courierLook(human: Human | null, courier?: Courier | null): Cour
   return {
     name: "Juno",
     color: "cobalt",
+    avatar: "shades",
     model: "Claude",
     idNo: human ? courierIdNo(human.id, "Juno") : "CR-0000-JU",
     simulated,

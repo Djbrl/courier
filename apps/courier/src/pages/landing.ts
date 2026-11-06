@@ -41,7 +41,7 @@ function assetUrl(file: string): string {
 }
 
 /** Juno hangs in the hero and turns over to show what a shop gets; the closing screen shows three couriers side by side. */
-const JUNO: CourierLook = { name: "Juno", color: "cobalt", model: "Claude", idNo: "CR-7Q3F-JR" };
+const JUNO: CourierLook = { name: "Juno", color: "cobalt", avatar: "shades", model: "Claude", idNo: "CR-7Q3F-JR" };
 const CREW: { look: CourierLook; sentBy: string; white?: boolean }[] = [
   { look: JUNO, sentBy: "Maya Chen" },
   { look: { name: "Otto", color: "hivis", model: "ChatGPT", idNo: "CR-8KD2-OT" }, sentBy: "Sam Reed" },
@@ -85,7 +85,7 @@ export function landingPage(human: Human | null): string {
       return `<script type="application/json" id="shops-data">${JSON.stringify(shops).replace(/</g, "\\u003c")}</script>`;
     })
     .replaceAll("{{faces}}", () => {
-      const faces = Object.fromEntries(FACE_NAMES.map((n) => [n, avatarFor(n)]));
+      const faces = Object.fromEntries(FACE_NAMES.map((n) => [n, n === JUNO.name ? JUNO.avatar : avatarFor(n)]));
       return `<script type="application/json" id="faces-data">${JSON.stringify(faces).replace(/</g, "\\u003c")}</script>`;
     })
     .replaceAll("{{pass}}", () => String(html`<div>${idCard(JUNO, "Maya Chen")}</div><div>${passBack(JUNO)}</div>`))
