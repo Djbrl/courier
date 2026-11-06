@@ -1052,29 +1052,26 @@ body {
   letter-spacing: -0.03em;
 }
 .s-pt {
-  position: relative;
   flex: none;
-  display: grid;
-  place-items: center;
   overflow: hidden;
   width: 40px;
   height: 40px;
   border-radius: 10px;
-  font:
-    italic 900 21px "Archivo",
-    sans-serif;
 }
-.s-pt svg {
-  position: absolute;
-  inset: 0;
+.s-pt img {
+  display: block;
   width: 100%;
   height: 100%;
 }
-.s-pt b {
-  position: relative;
-  margin: 0;
-  font: inherit;
-  color: inherit;
+.s-id {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.s-who .s-pt {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
 }
 .s-them > b {
   display: flex;
@@ -1086,7 +1083,6 @@ body {
   width: 20px;
   height: 20px;
   border-radius: 5px;
-  font-size: 11px;
 }
 .s-share {
   display: flex;
@@ -1153,6 +1149,9 @@ body {
 }
 .s-row3 .s-white .mark {
   fill: var(--paper);
+}
+.s-row3 .s-white .ph {
+  background: var(--paper);
 }
 footer {
   border-top: 1px solid var(--line);
@@ -1367,7 +1366,14 @@ footer .ppl {
     width: 28px;
     height: 28px;
     border-radius: 7px;
-    font-size: 15px;
+  }
+  .s-who .s-pt {
+    width: 34px;
+    height: 34px;
+    border-radius: 9px;
+  }
+  .s-id {
+    gap: 9px;
   }
   .s-closegrid {
     display: block;

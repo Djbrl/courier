@@ -353,6 +353,20 @@ a {
   height: 8.5em;
   fill: color-mix(in srgb, var(--bb) 82%, #fff);
 }
+/* The courier's face, set like the photo on an ID: top right of the coloured body, clear of the name. */
+.idc .ph {
+  position: absolute;
+  right: 1.25em;
+  top: 1.25em;
+  padding: 0.3em;
+  border-radius: 1.3em;
+  background: #fff;
+  line-height: 0;
+}
+.idc .ph .pt {
+  --s: 9.6em;
+  border-radius: 1em;
+}
 /* The name reads up the side; fitText measures it along that length, so it still shrinks to fit. */
 .idc .sn {
   position: absolute;
@@ -958,6 +972,9 @@ a {
 }
 .idc.blank :is(.sb, .vt) {
   opacity: 0.5;
+}
+.idc.blank .ph {
+  opacity: 0.45;
 }
 
 .form {

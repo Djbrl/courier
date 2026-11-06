@@ -1,6 +1,16 @@
 import { randomUUID } from "node:crypto";
 import path from "node:path";
-import { config, findShop, internalFetch, JUNIPER, paypal, ROOT_DIR, SHOPS, type Shop } from "@courier/shared";
+import {
+  config,
+  findShop,
+  internalFetch,
+  JUNIPER,
+  paypal,
+  ROOT_DIR,
+  SHOPS,
+  type Shop,
+  SITE_ICONS,
+} from "@courier/shared";
 import type { AuthInfo } from "@modelcontextprotocol/sdk/server/auth/types.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { isInitializeRequest } from "@modelcontextprotocol/sdk/types.js";
@@ -30,6 +40,12 @@ app.use(
     maxAge: process.env.NODE_ENV === "production" ? "1h" : 0,
   }),
 );
+// Browsers, phones and Claude's connector list look for the logo at the root, not under /assets.
+for (const file of SITE_ICONS) {
+  app.get(`/${file}`, (_req, res) =>
+    res.sendFile(path.join(ROOT_DIR, "packages/shared/assets", file), { maxAge: "1d" }),
+  );
+}
 
 /* ---------------- OAuth Protected Resource Metadata (RFC 9728) ---------------- */
 

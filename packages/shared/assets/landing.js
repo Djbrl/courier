@@ -26,11 +26,19 @@
     return `--ac:${c.ac};--at:${c.at};--as:${c.as};--ad:${c.ad};--al:${c.al}`;
   };
   const AV = "split profile specs bun cap wrap beard afro smile bob hood shades ponytail phones curl beanie".split(" ");
-  const pt = (a) => {
+  /* The server sends each name's face (the one on its pass); the hash is only a fallback for a name it didn't list. */
+  let FACES = {};
+  try {
+    FACES = JSON.parse($("#faces-data")?.textContent || "{}");
+  } catch {}
+  const face = (n) => {
+    if (FACES[n]) return FACES[n];
     let h = 0;
-    for (const ch of a.n) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
-    return `<span class="pt" aria-hidden="true"><img src="/assets/avatars/${AV[h % AV.length]}.svg" alt=""></span>`;
+    for (const ch of n) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+    return AV[h % AV.length];
   };
+  const img = (n) => `<img src="/assets/avatars/${face(n)}.svg" alt="">`;
+  const pt = (a) => `<span class="pt" aria-hidden="true">${img(a.n)}</span>`;
   const mini = (a) =>
     `<span class="gci"><span class="mini cc" style="${colourVars(a.c)}"><span class="mb">${LOGO}</span><span class="mr">${pt(a)}<span><span class="mn">${a.n}</span><span class="mv">${CK}${PP}</span></span></span></span></span>`;
 
@@ -317,14 +325,14 @@
     return { start, stop, still, redraw, setKnown };
   })();
 
-  window.courierGlobe = { globe, halftone, mini };
+  window.courierGlobe = { globe, halftone, mini, img };
 })();
 
 /* The story: each screen moves through its steps as you scroll, and goes back on the way up. */
 (() => {
   const $$ = (s, r = document) => [...r.querySelectorAll(s)];
   const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
-  const { globe, halftone, mini } = window.courierGlobe;
+  const { globe, halftone, mini, img } = window.courierGlobe;
   /* The same shops the app has, sent with the page. */
   const SHOPS = JSON.parse(document.getElementById("shops-data").textContent);
   const CK =
@@ -341,17 +349,10 @@
     const [pc, lc, sh] = SHAPE[c];
     e.innerHTML = mini({ n, L: n[0], c, pc, lc, sh }).replace('class="gci"', 'style="display:block"');
   });
-  /* Square courier pictures for the group chat. */
-  const SHP = [
-    '<circle cx="68" cy="34" r="24" fill="#fff" opacity=".35"/>',
-    '<path d="M90 10 90 56 48 10z" fill="#141414" opacity=".2"/>',
-    '<rect x="48" y="12" width="40" height="20" rx="10" fill="#fff" opacity=".3"/>',
-  ];
-  const pic = ([l, bg, fg, sh]) =>
-    `<span class="s-pt" style="background:${bg};color:${fg}" aria-hidden="true"><svg viewBox="0 0 100 100">${SHP[sh]}</svg><b>${l}</b></span>`;
-  $$("[data-pt]").forEach((e) => (e.outerHTML = pic(e.dataset.pt.split("|"))));
-  const PICS = { Juno: "J|#3D3AF5|#fff|0", Otto: "O|#D6FF2E|#141414|1", Mika: "M|#141414|#fff|2" };
-  $$("#group .s-them > b").forEach((b) => b.insertAdjacentHTML("afterbegin", pic(PICS[b.textContent].split("|"))));
+  /* Courier portraits for the group chat and the shop's order. */
+  const pic = (n) => `<span class="s-pt" aria-hidden="true">${img(n)}</span>`;
+  $$("[data-pt]").forEach((e) => (e.outerHTML = pic(e.dataset.pt)));
+  $$("#group .s-them > b").forEach((b) => b.insertAdjacentHTML("afterbegin", pic(b.textContent)));
 
   /* An uneven cluster: lopsided outline, nudged positions, mixed sizes, and shops popping up at random. The seed keeps it the same on every load. */
   let seed = 11;

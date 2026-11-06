@@ -12,6 +12,7 @@ import {
   ROOT_DIR,
   randomToken,
   type Scope,
+  SITE_ICONS,
   type Visa,
 } from "@courier/shared";
 import { createOAuthMetadata, mcpAuthRouter } from "@modelcontextprotocol/sdk/server/auth/router.js";
@@ -85,6 +86,12 @@ app.use(
     maxAge: process.env.NODE_ENV === "production" ? "1h" : 0,
   }),
 );
+// Browsers, phones and Claude's connector list look for the logo at the root, not under /assets.
+for (const file of SITE_ICONS) {
+  app.get(`/${file}`, (_req, res) =>
+    res.sendFile(path.join(ROOT_DIR, "packages/shared/assets", file), { maxAge: "1d" }),
+  );
+}
 
 /* ---------------- OAuth 2.1 authorization server ---------------- */
 

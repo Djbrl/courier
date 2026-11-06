@@ -62,7 +62,7 @@ end of this section.
 
 | Feature            | What it does                                                                                                    |
 | ------------------ | --------------------------------------------------------------------------------------------------------------- |
-| Demo shops         | Amazoo, Floor Dash, Lord Knight, Mike and Juniper Records, pretend shops shown as a grid of logos               |
+| Demo shops         | Amazoo, Floor Dash, Forknite, Mike and Juniper Records, pretend shops shown as a grid of logos                  |
 | What the shop sees | Who's shopping, their orders, signed proof of what each was allowed to do, and a button to report a bad courier |
 | Release the bots   | Eight attacks on the shop, like fake IDs and overspending, that you can watch get stopped live                  |
 

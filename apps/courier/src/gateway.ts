@@ -2,6 +2,7 @@ import {
   ALL_SCOPES,
   COURIER_RESOURCE,
   config,
+  mcpIcons,
   money,
   newId,
   RECEIPT_CARD,
@@ -164,7 +165,13 @@ function errandRequest(
 
 function createGateway(connection: Connection, human: Human): McpServer {
   const server = new McpServer(
-    { name: "courier", title: "Courier", version: "0.2.0" },
+    {
+      name: "courier",
+      title: "Courier",
+      version: "0.2.0",
+      icons: mcpIcons(config.courier.url),
+      websiteUrl: config.courier.url,
+    },
     {
       instructions:
         "Courier is one connector to many shops. The user's couriers shop for them, each errand with its own budget. " +

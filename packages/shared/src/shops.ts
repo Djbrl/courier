@@ -52,7 +52,7 @@ export const SHOPS: Shop[] = [
   },
   {
     slug: "lord-knight",
-    name: "Lord Knight",
+    name: "Forknite",
     sells: "Game currency and skins",
     keywords: "game gaming knight bucks currency skin cosmetic battle pass",
     resource: address("lord-knight"),

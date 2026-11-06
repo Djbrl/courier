@@ -18,6 +18,9 @@
     card.setAttribute("style", vars[color]);
     card.querySelector('[data-f="name"]').textContent = name;
     card.querySelector('[data-f="human"]').textContent = human;
+    const face = form.querySelector('input[name="avatar"]:checked')?.value;
+    const img = card.querySelector('[data-f="face"] img');
+    if (face && img) img.src = `/assets/avatars/${face}.svg`;
     window.fitText?.(preview);
   }
   form.addEventListener("input", update);

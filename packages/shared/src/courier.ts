@@ -19,6 +19,20 @@ const APP_JS_URL = versioned("app.js");
 const atVersion = (url: string) =>
   url.startsWith("/assets/") && !url.includes("?") ? versioned(url.slice("/assets/".length)) : url;
 
+/* ---------------- logo ---------------- */
+
+/** The logo files each site serves at its root (made from assets/courier-icon.svg). */
+export const SITE_ICONS = ["favicon.ico", "apple-touch-icon.png", "icon-192.png", "icon-512.png"] as const;
+
+/** The logo for an MCP server's info, so Claude shows it beside the connector. */
+export function mcpIcons(baseUrl: string) {
+  return [
+    { src: `${baseUrl}/icon-512.png`, mimeType: "image/png", sizes: ["512x512"] },
+    { src: `${baseUrl}/icon-192.png`, mimeType: "image/png", sizes: ["192x192"] },
+    { src: `${baseUrl}/assets/courier-icon.svg`, mimeType: "image/svg+xml", sizes: ["any"] },
+  ];
+}
+
 /* ---------------- colours ---------------- */
 
 /** Each courier's own colour: band, text on band, slash, deep (lines, dots), light tint. */
@@ -142,7 +156,7 @@ export function idCard(c: CourierLook, sentBy: string | null, opts: { id?: strin
       role="img" aria-label="Courier ID: ${c.name}, runs on ${c.model}, ${c.idNo}${sentBy ? `, sent by ${sentBy}` : ""}, ${c.simulated ? "demo, simulated PayPal" : "verified by PayPal"}">
     <div class="idf">
       <div class="tab"><div class="tr">${LOGO}<span class="idn">${c.idNo}</span></div><span class="sb">${avatar()}<span>Sent by <b data-f="human">${sentBy ?? "you"}</b></span></span></div>
-      <div class="bd">${CROPPED_MARK}<div class="sn"><div class="nm" data-f="name" data-fit>${c.name}</div></div>${c.simulated ? SIMULATED : VERIFIED}</div>
+      <div class="bd">${CROPPED_MARK}<span class="ph" data-f="face">${portrait(c)}</span><div class="sn"><div class="nm" data-f="name" data-fit>${c.name}</div></div>${c.simulated ? SIMULATED : VERIFIED}</div>
       <i class="pf"></i><i class="slot"></i>
     </div>
   </div>`;
@@ -193,7 +207,13 @@ export function courierLayout(opts: CourierLayoutOptions): string {
 <link href="https://fonts.googleapis.com/css2?family=Archivo:ital,wdth,wght@0,62..125,100..900;1,62..125,100..900&family=Instrument+Sans:ital,wdth,wght@0,75..100,400..700;1,75..100,400..700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="${CSS_URL}">
 ${(opts.styles ?? []).map((s) => `<link rel="stylesheet" href="${escapeHtml(atVersion(s))}">`).join("\n")}
+<link rel="icon" href="/favicon.ico" sizes="48x48">
 <link rel="icon" href="/assets/courier-icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<meta property="og:site_name" content="Courier">
+<meta property="og:title" content="${escapeHtml(opts.title)}">
+<meta property="og:image" content="${config.courier.url}/icon-512.png">
+<meta name="twitter:card" content="summary">
 ${opts.head ? opts.head.value : ""}
 </head>
 <body class="${escapeHtml(opts.bodyClass ?? "")}">

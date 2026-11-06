@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/images/landing.png" alt="Courier landing page: Give your agent an ID" width="100%">
+  <img src="docs/images/landing.png" alt="Courier landing page: Give your agent a face" width="100%">
 </p>
 
 <h1 align="center">Courier</h1>

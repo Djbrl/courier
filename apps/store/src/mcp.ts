@@ -4,6 +4,7 @@ import {
   findShop,
   internalFetch,
   JUNIPER,
+  mcpIcons,
   money,
   newId,
   paypal,
@@ -439,7 +440,7 @@ async function checkWithPerson(
 export function createMcpServer(shop: Shop): McpServer {
   const shelf = shelfOf(shop.slug);
   const server = new McpServer(
-    { name: shop.slug, title: `Courier · ${shop.name}`, version: "0.1.0" },
+    { name: shop.slug, title: `Courier · ${shop.name}`, version: "0.1.0", icons: mcpIcons(config.store.url) },
     {
       instructions:
         `${shop.name} (${shop.sells}) is a shop reached through the user's Courier: a PayPal-verified errand ` +

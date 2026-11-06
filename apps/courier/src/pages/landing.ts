@@ -4,6 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
+  avatarFor,
   CK,
   type CourierLook,
   config,
@@ -48,6 +49,9 @@ const CREW: { look: CourierLook; sentBy: string; white?: boolean }[] = [
   { look: { name: "Mika", color: "ink", model: "Llama", idNo: "CR-4HT9-MK" }, sentBy: "Ana Chen", white: true },
 ];
 
+/** Every courier name the page shows, including the globe's (landing.js), so each gets the same face as on its pass. */
+const FACE_NAMES = ["Juno", "Otto", "Mika", "Rémy", "Pip", "Lou", "Ivy", "Bo", "Kit", "Nell", "Ari", "Zed"];
+
 const MARK = raw(
   '<svg class="mark" viewBox="-2 0 42 20" aria-hidden="true"><path d="M15 0h25l-7 20H8z"/><path d="M5 0h6L4 20h-6z"/></svg>',
 );
@@ -80,6 +84,10 @@ export function landingPage(human: Human | null): string {
       const shops = SHOPS.map(({ slug, name, tile, mark }) => ({ slug, name, tile, mark }));
       return `<script type="application/json" id="shops-data">${JSON.stringify(shops).replace(/</g, "\\u003c")}</script>`;
     })
+    .replaceAll("{{faces}}", () => {
+      const faces = Object.fromEntries(FACE_NAMES.map((n) => [n, avatarFor(n)]));
+      return `<script type="application/json" id="faces-data">${JSON.stringify(faces).replace(/</g, "\\u003c")}</script>`;
+    })
     .replaceAll("{{pass}}", () => String(html`<div>${idCard(JUNO, "Maya Chen")}</div><div>${passBack(JUNO)}</div>`))
     .replaceAll("{{passes}}", () =>
       String(
@@ -87,8 +95,10 @@ export function landingPage(human: Human | null): string {
       ),
     );
   return courierLayout({
-    title: "Courier · Give your agent an ID",
-    head: raw('<meta name="description" content="PayPal verifies you. Your agent gets its own ID.">'),
+    title: "Courier · Give your agent a face",
+    head: raw(
+      '<meta name="description" content="Your agent gets a face shops recognise. PayPal vouches for the person behind it.">',
+    ),
     body: raw(body),
     styles: [assetUrl("landing.css")],
     scripts: [assetUrl("landing.js")],

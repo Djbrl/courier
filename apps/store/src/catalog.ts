@@ -537,7 +537,7 @@ const SHELVES: Record<string, Item[]> = {
     item(
       "lk-001",
       "500 Knight Bucks",
-      "Lord Knight",
+      "Forknite",
       "currency",
       "game currency bucks",
       499,
@@ -547,7 +547,7 @@ const SHELVES: Record<string, Item[]> = {
     item(
       "lk-002",
       "1,000 Knight Bucks",
-      "Lord Knight",
+      "Forknite",
       "currency",
       "game currency bucks",
       799,
@@ -557,7 +557,7 @@ const SHELVES: Record<string, Item[]> = {
     item(
       "lk-003",
       "2,800 Knight Bucks",
-      "Lord Knight",
+      "Forknite",
       "currency",
       "game currency bucks",
       1999,
@@ -567,7 +567,7 @@ const SHELVES: Record<string, Item[]> = {
     item(
       "lk-004",
       "Ember Paladin Skin",
-      "Lord Knight",
+      "Forknite",
       "skin",
       "game skin cosmetic",
       1200,
@@ -577,7 +577,7 @@ const SHELVES: Record<string, Item[]> = {
     item(
       "lk-005",
       "Frost Squire Skin",
-      "Lord Knight",
+      "Forknite",
       "skin",
       "game skin cosmetic",
       800,
@@ -587,7 +587,7 @@ const SHELVES: Record<string, Item[]> = {
     item(
       "lk-006",
       "Season Banner Pass",
-      "Lord Knight",
+      "Forknite",
       "pass",
       "game battle pass",
       950,

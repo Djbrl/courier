@@ -53,7 +53,7 @@ export function welcomePage(): string {
     wizardCard(
       html`<div class="wiz-body">
           <h1 class="big">Welcome to Courier.</h1>
-          <p class="lead">Give your AI agent an idea and let it shop on your behalf. You set the budget, and it can’t go over.</p>
+          <p class="lead">Give your AI agent a face and let it shop on your behalf. You set the budget, and it can’t go over.</p>
         </div>
         <div class="wiz-foot"><a class="btn" href="/start/sign-in">Get started</a></div>`,
       idCard({ ...courierLook(null), idNo: "CR-0000-JU" }, null),
