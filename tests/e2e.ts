@@ -441,8 +441,14 @@ await step("The errand room: chats side by side, at any shop, and only the perso
   assert.match(over.fresh.at(-1).text, /over your \$40 cap per errand.*Settings/);
   assert.equal(over.chat.errand, null);
 
-  // A past errand opens its chat. Deleting the chat ends its errand; the record stays.
-  assert.match(await (await person.req(`${flow.courier}/app/errands?tab=past`)).text(), new RegExp(`chat=${burgers}`));
+  // A past errand opens its chat from its page. Deleting the chat ends its errand; the record stays.
+  const history = await (await person.req(`${flow.courier}/app/errands`)).text();
+  const pages = [...history.matchAll(/href="(\/app\/errands\?e=[^"]+)"/g)].map((m) => m[1]!);
+  const opened = await Promise.all(pages.map(async (p) => (await person.req(`${flow.courier}${p}`)).text()));
+  assert.ok(
+    opened.some((p) => p.includes(`chat=${burgers}`)),
+    "a past errand links to its chat",
+  );
   const gone = await api("delete", { chat: several.chat.id });
   assert.equal(gone.status, 200);
   assert.equal((await person.req(url(`chats/${several.chat.id}`))).status, 404);
@@ -884,9 +890,8 @@ await step("Courier names work like usernames: bad names are refused", async () 
 
 await step("Courier home shows the errand; its detail shows every step", async () => {
   const home = await (await browser.req(`${flow.courier}/app`)).text();
-  assert.match(home, /Verified PayPal account/);
   assert.match(home, /Jazz records for my dad/);
-  assert.match(home, /In Claude: Juno/);
+  assert.match(home, /In any Claude chat/, "connected, so home says where to ask instead of offering to connect");
   const detail = await (await browser.req(`${flow.courier}/app/errands?e=${visaId}`)).text();
   assert.match(detail, /Bought Saltwater Standards/);
 });
@@ -1232,7 +1237,7 @@ await step(
     assert.match(landing, /<h3>Shared<\/h3>/);
     for (const field of ["Name", "Email", "PayPal ID"])
       assert.match(landing, new RegExp(`<dt>${field}</dt><dd><i aria-hidden="true"></i></dd>`), `${field} is withheld`);
-    for (const href of ["/#why", "/for-shops", "/install"]) assert.ok(landing.includes(`href="${href}"`), href);
+    for (const href of ["/for-shops", "/install", "/start"]) assert.ok(landing.includes(`href="${href}"`), href);
 
     const forShops = await fetch(`${flow.courier}/for-shops`);
     assert.equal(forShops.status, 200);

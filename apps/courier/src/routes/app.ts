@@ -1,4 +1,13 @@
-import { COURIER_NAME_HINT, config, isCourierColor, isCourierName, parseBudget, type Visa } from "@courier/shared";
+import {
+  avatarFor,
+  COURIER_NAME_HINT,
+  config,
+  isAvatar,
+  isCourierColor,
+  isCourierName,
+  parseBudget,
+  type Visa,
+} from "@courier/shared";
 import express, { Router } from "express";
 import { findAuthRequest } from "../auth/oauth.ts";
 import { currentHuman } from "../auth/session.ts";
@@ -148,6 +157,7 @@ appRouter.post("/start/courier", (req, res) => {
     .trim()
     .slice(0, 24);
   const color = isCourierColor(req.body.color) ? req.body.color : "cobalt";
+  const avatar = isAvatar(req.body.avatar) ? req.body.avatar : (editing?.avatar ?? avatarFor(name));
   const taken = listCouriers(human.id).some((c) => c.id !== editing?.id && c.name.toLowerCase() === name.toLowerCase());
   if (!isCourierName(name) || taken || !humanName) {
     const error = !humanName
@@ -169,6 +179,7 @@ appRouter.post("/start/courier", (req, res) => {
     humanId: human.id,
     name,
     color,
+    avatar,
     model: "Claude",
     idNo: courierIdNo(human.id, name, id),
     mode: editing?.mode ?? "demo",

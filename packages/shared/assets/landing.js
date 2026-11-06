@@ -25,8 +25,12 @@
     const c = COL[k];
     return `--ac:${c.ac};--at:${c.at};--as:${c.as};--ad:${c.ad};--al:${c.al}`;
   };
-  const pt = (a) =>
-    `<span class="pt" style="--pc:${a.pc};--lc:${a.lc}" aria-hidden="true"><svg viewBox="0 0 100 100">${a.sh}</svg><b>${a.L}</b></span>`;
+  const AV = "split profile specs bun cap eye beard afro smile bob hood shades ponytail phones curl beanie".split(" ");
+  const pt = (a) => {
+    let h = 0;
+    for (const ch of a.n) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+    return `<span class="pt" aria-hidden="true"><img src="/assets/avatars/${AV[h % AV.length]}.svg" alt=""></span>`;
+  };
   const mini = (a) =>
     `<span class="gci"><span class="mini cc" style="${colourVars(a.c)}"><span class="mb">${LOGO}</span><span class="mr">${pt(a)}<span><span class="mn">${a.n}</span><span class="mv">${CK}${PP}</span></span></span></span></span>`;
 

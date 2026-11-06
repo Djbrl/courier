@@ -34,21 +34,36 @@ export function isCourierColor(value: unknown): value is CourierColor {
   return typeof value === "string" && value in COURIER_COLORS;
 }
 
-/** The portrait tile that goes with each colour (shapes from the landing page's Juno, Otto, Mika and Rémy). */
-const PORTRAITS: Record<CourierColor, { pc: string; lc: string; sh: string }> = {
-  cobalt: { pc: "#141414", lc: "#FFFFFF", sh: '<circle cx="68" cy="34" r="24" fill="#D6FF2E"/>' },
-  tang: {
-    pc: "#FFC629",
-    lc: "#141414",
-    sh: '<rect x="48" y="12" width="40" height="20" rx="10" fill="#141414"/><rect x="48" y="38" width="40" height="20" rx="10" fill="#141414"/>',
-  },
-  ink: { pc: "#3D3AF5", lc: "#F2EFE9", sh: '<path d="M90 10 90 56 48 10z" fill="#D6FF2E"/>' },
-  hivis: {
-    pc: "#E8352A",
-    lc: "#141414",
-    sh: '<path d="M46 12a22 22 0 0 0 44 0z" fill="#FFFFFF"/><circle cx="82" cy="58" r="7" fill="#FFC629"/>',
-  },
-};
+/** The portraits a courier can wear (assets/avatars). */
+export const AVATARS = [
+  "split",
+  "profile",
+  "specs",
+  "bun",
+  "cap",
+  "eye",
+  "beard",
+  "afro",
+  "smile",
+  "bob",
+  "hood",
+  "shades",
+  "ponytail",
+  "phones",
+  "curl",
+  "beanie",
+] as const;
+export type Avatar = (typeof AVATARS)[number];
+
+export function isAvatar(value: unknown): value is Avatar {
+  return typeof value === "string" && (AVATARS as readonly string[]).includes(value);
+}
+
+/** A steady portrait for a courier that hasn't picked one, so the same name always gets the same face. */
+export function avatarFor(name: string): Avatar {
+  const n = createHash("sha256").update(name.trim().toLowerCase()).digest().readUInt32BE(0);
+  return AVATARS[n % AVATARS.length]!;
+}
 
 export function courierVars(color: CourierColor): string {
   const c = COURIER_COLORS[color];
@@ -60,6 +75,8 @@ export function courierVars(color: CourierColor): string {
 export interface CourierLook {
   name: string;
   color: CourierColor;
+  /** Its portrait; a steady one from the name when unset. */
+  avatar?: Avatar;
   /** The model it runs on, a small detail (e.g. "Claude"). */
   model: string;
   idNo: string;
@@ -95,12 +112,17 @@ export function avatar(bg = "#FFC629"): RawHtml {
   );
 }
 
-export function portrait(c: Pick<CourierLook, "name" | "color">): RawHtml {
-  const p = PORTRAITS[c.color];
-  const letter = [...c.name.trim()][0]?.toUpperCase() ?? "C";
-  return raw(
-    `<span class="pt" style="--pc:${p.pc};--lc:${p.lc}" aria-hidden="true"><svg viewBox="0 0 100 100">${p.sh}</svg><b>${escapeHtml(letter)}</b></span>`,
-  );
+export function portrait(c: Pick<CourierLook, "name" | "avatar">): RawHtml {
+  const a = c.avatar && isAvatar(c.avatar) ? c.avatar : avatarFor(c.name);
+  return raw(`<span class="pt" aria-hidden="true"><img src="/assets/avatars/${a}.svg" alt=""></span>`);
+}
+
+/** The 16 portraits as radio buttons, for the card editor. */
+export function avatarPicker(current: Avatar): RawHtml {
+  return html`<div class="fld"><span>Portrait</span><div class="avp">${AVATARS.map(
+    (a) =>
+      html`<label><input type="radio" name="avatar" value="${a}" ${a === current ? raw("checked") : ""} aria-label="${a}"><img src="/assets/avatars/${a}.svg" alt=""></label>`,
+  )}</div></div>`;
 }
 
 /** "Continue with PayPal" style button (PayPal-yellow, text lockup only). */

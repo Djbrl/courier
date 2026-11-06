@@ -1,6 +1,7 @@
 import { createHmac } from "node:crypto";
 import {
   ALL_SCOPES,
+  type Avatar,
   COURIER_RESOURCE,
   type CourierColor,
   config,
@@ -48,6 +49,8 @@ export interface Courier {
   humanId: string;
   name: string;
   color: CourierColor;
+  /** Its portrait; unset on couriers made before there was a choice. */
+  avatar?: Avatar;
   /** The model it runs on, shown as a small detail. */
   model: string;
   idNo: string;

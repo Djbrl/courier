@@ -1,12 +1,13 @@
 import {
-  ARROW,
   avatar,
+  avatarFor,
   type CourierLook,
   courierLayout,
   html,
   LOGO,
   money,
   paypal,
+  paypalButton,
   type RawHtml,
   raw,
 } from "@courier/shared";
@@ -41,7 +42,15 @@ export function courierForClient(humanId: string, clientId: string): Courier | u
 /** A courier's look, or the default (Juno, cobalt) before the person has set one up. */
 export function courierLook(human: Human | null, courier?: Courier | null): CourierLook {
   const simulated = human?.simulated;
-  if (courier) return { name: courier.name, color: courier.color, model: courier.model, idNo: courier.idNo, simulated };
+  if (courier)
+    return {
+      name: courier.name,
+      color: courier.color,
+      avatar: courier.avatar ?? avatarFor(courier.name),
+      model: courier.model,
+      idNo: courier.idNo,
+      simulated,
+    };
   return {
     name: "Juno",
     color: "cobalt",
@@ -98,17 +107,28 @@ export function dots(): RawHtml {
   return raw(dotsSvg);
 }
 
-/** The site's links, the same on the landing page and every page around it. */
+/** The site's links, the same on the landing page and every page around it. Sign in opens in place. */
 export function navLinks(human: Human | null, here = ""): RawHtml {
   const name = firstName(human);
   const link = (href: string, label: string) =>
     html`<a class="hide-sm" href="${href}" ${href === here ? raw('aria-current="page"') : ""}>${label}</a>`;
-  return html`${link("/#why", "How it works")}${link("/for-shops", "For shops")}${link("/install", "Install")}
+  return html`${link("/for-shops", "For shops")}${link("/install", "Install")}
       ${
         human
           ? html`<a class="who" href="/app">${avatar()}${name ?? "My Courier"}</a>`
-          : html`<a class="hide-sm signin" href="/app">Sign in</a><a class="btn sm" href="/start">Try the demo${ARROW}</a>`
+          : html`<button type="button" class="signin" popovertarget="signin">Sign in</button><a class="try" href="/start">Try the demo</a>${signInBox()}`
       }`;
+}
+
+/** Sign in: PayPal, or the demo. Nothing else to choose. */
+export function signInBox(): RawHtml {
+  return html`<div popover id="signin" class="signin-pop" role="dialog" aria-labelledby="signin-t">
+    <button type="button" class="x" popovertarget="signin" popovertargetaction="hide" aria-label="Close">×</button>
+    <h2 class="big" id="signin-t">Open your Courier.</h2>
+    <p>Sign in with PayPal. Shops never see your name.</p>
+    ${paypalButton("/auth/paypal/start?login=1")}
+    ${tryDemo({}) || html`<a class="link fine" href="/start">Try the demo instead</a>`}
+  </div>`;
 }
 
 export function cnav(human: Human | null, here = ""): RawHtml {

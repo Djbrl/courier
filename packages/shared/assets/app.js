@@ -85,6 +85,18 @@ window.courierConfirm = ({ title, body, yes }) =>
     dialog.showModal();
   });
 
+// Forms that ask first: removing a friend, revoking a courier, ending an errand.
+document.addEventListener("submit", async (e) => {
+  const form = e.target.closest?.("form[data-sure]");
+  if (!form || form.dataset.sureOk) return;
+  e.preventDefault();
+  const { sure: title, sureBody: body, sureYes: yes } = form.dataset;
+  if (await window.courierConfirm({ title, body, yes })) {
+    form.dataset.sureOk = "1";
+    form.requestSubmit();
+  }
+});
+
 document.addEventListener("click", async (e) => {
   const link = e.target.closest("a[data-sure]");
   if (!link) return;

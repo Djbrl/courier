@@ -65,11 +65,8 @@ test("the dashboard counts simulator orders as demo, never as PayPal sandbox mon
       },
     ],
   );
-  assert.match(page, /<b>0<\/b><small>sandbox couriers/);
-  assert.match(page, /<b>2<\/b><small>demo couriers/);
-  assert.match(page, /<b>\$0\.00<\/b><small>paid in PayPal sandbox/);
-  assert.match(page, /<b>\$30\.00<\/b><small>simulated, not money/);
-  assert.match(page, /Demo orders <span>2<\/span>/);
-  assert.ok(!page.includes("Sandbox orders <span>"));
+  assert.match(page, /\$0\.00 in PayPal sandbox/);
+  assert.match(page, /\$30\.00 simulated/);
+  assert.equal(page.match(/class="mo2 mo-demo"/g)?.length, 2, "both orders are marked demo");
   assert.ok(page.includes('action="/merchant/report/visa_o1"'), "reporting still works from a demo order");
 });

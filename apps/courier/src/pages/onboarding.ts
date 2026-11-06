@@ -1,5 +1,7 @@
 import {
   ARROW,
+  avatarFor,
+  avatarPicker,
   COURIER_COLORS,
   COURIER_NAME_HINT,
   COURIER_NAME_MAX,
@@ -114,6 +116,7 @@ export function courierSetupPage(
         <label class="fld"><span>Your first name</span><input class="inp" name="human" value="${you ?? ""}" maxlength="24" required autocomplete="given-name" data-live="human" ${you ? "" : raw("autofocus")}></label>
         <label class="fld"><span>Courier name</span><input class="inp" name="name" value="${look.name}" placeholder="e.g. Otto" minlength="2" maxlength="${COURIER_NAME_MAX}" pattern="${COURIER_NAME_PATTERN}" title="${COURIER_NAME_HINT}" required autocomplete="off" autocapitalize="words" spellcheck="false" data-live="name"></label>
         <small class="hint" id="name-hint">${COURIER_NAME_HINT}</small>
+        ${avatarPicker(look.avatar ?? avatarFor(look.name || "Juno"))}
         <div class="fld wiz-sw"><span>Its colour</span><div class="sw">${swatch("cobalt", "Cobalt")}${swatch("tang", "Orange")}${swatch("ink", "Ink")}${swatch("hivis", "Hi-vis")}</div></div>
       </div>
       <div class="wiz-foot">
