@@ -1226,7 +1226,7 @@ await step("Twenty shops through one connector, each browsable with no errand an
 });
 
 await step(
-  "The public pages: the landing shows the same shops, the badge back is fields, For shops and Install",
+  "The public pages: the landing shows the same shops, the badge back says what is shared and withheld, For shops and Install",
   async () => {
     const { shops } = structured(await tool("list_shops"));
     const landing = await (await fetch(`${flow.courier}/`)).text();
@@ -1235,8 +1235,7 @@ await step(
     const shown = JSON.parse(data[1]!) as { slug: string }[];
     assert.deepEqual(shown.map((s) => s.slug).sort(), shops.map((s: any) => s.shop).sort());
     assert.match(landing, /<h3>Shared<\/h3>/);
-    for (const field of ["Name", "Email", "PayPal ID"])
-      assert.match(landing, new RegExp(`<dt>${field}</dt><dd><i aria-hidden="true"></i></dd>`), `${field} is withheld`);
+    assert.match(landing, /<h3>Withheld<\/h3><p>Your personal data<\/p>/, "the back says personal data stays back");
     for (const href of ["/for-shops", "/install", "/start"]) assert.ok(landing.includes(`href="${href}"`), href);
 
     const forShops = await fetch(`${flow.courier}/for-shops`);

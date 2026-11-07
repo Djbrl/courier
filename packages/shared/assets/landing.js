@@ -409,7 +409,10 @@
   const screens = $$("main > section");
   const why = document.getElementById("why");
   const open = document.getElementById("open");
+  const close = document.getElementById("close");
   const flip = document.getElementById("flip");
+  /* A pointer turns the pass on hover (in the CSS); on a touch screen a tap turns it and leaves it turned. */
+  flip.addEventListener("click", () => matchMedia("(hover: none)").matches && hang.classList.toggle("turned"));
   let globeOn = false;
 
   function frame() {
@@ -460,12 +463,21 @@
       angle += speed;
       hang.style.transform = `rotate(${angle.toFixed(2)}deg)`;
     }
-    /* Turns over in the middle of the hero, then holds on its back before the next screen. */
+    /* The hero in three steps: the line-up parts and Juno rises, Juno turns over, then the caption says what the back is. */
     const or = open.getBoundingClientRect();
     const op = Math.max(0, Math.min(1, -or.top / (or.height - innerHeight)));
-    const ft = reduce ? +(op > 0.45) : Math.max(0, Math.min(1, (op - 0.12) / 0.48));
-    const eased = ft * ft * (3 - 2 * ft);
-    flip.style.transform = `perspective(2400px) rotateY(${(eased * 180).toFixed(1)}deg)`;
+    const step = (from, to, v = op) => {
+      const t = Math.max(0, Math.min(1, (v - from) / (to - from)));
+      return t * t * (3 - 2 * t);
+    };
+    open.style.setProperty("--a", step(0, 0.3).toFixed(3));
+    open.style.setProperty("--f", step(0.3, 0.62).toFixed(3));
+    open.style.setProperty("--c", step(0.55, 0.75).toFixed(3));
+    /* The closing pass turns face up as its screen comes in, and stays put once it's there. */
+    close.style.setProperty(
+      "--fc",
+      reduce ? "1" : step(0.35, 0.95, Math.max(0, 1 - close.getBoundingClientRect().top / innerHeight)).toFixed(3),
+    );
     const wr = why.getBoundingClientRect();
     const onOpen = wr.bottom > 0 && wr.top < innerHeight;
     if (onOpen !== globeOn) {

@@ -358,14 +358,11 @@ a {
   position: absolute;
   right: 1.25em;
   top: 1.25em;
-  padding: 0.3em;
-  border-radius: 1.3em;
-  background: #fff;
   line-height: 0;
 }
 .idc .ph .pt {
-  --s: 9.6em;
-  border-radius: 1em;
+  --s: 10.2em;
+  border-radius: 1.2em;
 }
 /* The name reads up the side; fitText measures it along that length, so it still shrinks to fit. */
 .idc .sn {
@@ -7509,20 +7506,12 @@ html:has(.jr-page) {
   aspect-ratio: 4 / 3;
 }
 
-/* ---------- site nav: two links, sign in, and the demo as a plain link ---------- */
+/* ---------- site nav: three plain links, the demo among them ---------- */
 .cnav nav .signin,
 .s-links .signin {
   font: inherit;
   font-weight: 600;
   cursor: pointer;
-}
-.cnav nav .try,
-.s-links .try {
-  font-weight: 700;
-  text-decoration: underline;
-  text-underline-offset: 4px;
-  text-decoration-thickness: 2px;
-  text-decoration-color: var(--hivis);
 }
 .signin-pop {
   inset: 0;
