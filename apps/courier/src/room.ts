@@ -27,6 +27,7 @@ import {
 } from "./agent.ts";
 import { mintAccessToken, mintShopConnectionToken } from "./auth/oauth.ts";
 import {
+  type ChipQuote,
   collecting,
   collectShares,
   type GroupRun,
@@ -49,17 +50,20 @@ import {
 } from "./db.ts";
 import { type Friend, friendLine, friendsOf } from "./friends.ts";
 import { demoClientId, firstName } from "./pages/shared.ts";
-import { contactLine, contactsOf } from "./people.ts";
+import { type Contact, contactCourier, contactLine, contactsOf } from "./people.ts";
 import {
   addLine,
   changeRun,
+  faceOf,
   getRun,
   member,
   memberOf,
   newRun,
   present,
   RUN_LINE_MAX,
+  RUN_MEMBERS_MAX,
   type Run,
+  type RunLine,
   runOpen,
   runShop,
   runState,
@@ -120,7 +124,9 @@ export type ChatEvent =
   /** The link to a run, for the person to send to whoever they're doing it with. */
   | { t: "invite"; what: string; shop: string | null; url: string }
   /** Someone joined, or paid, in a run this chat is part of. */
-  | { t: "run"; text: string }
+  | { t: "run"; text: string; faces?: string[] }
+  /** Something another courier in the run said, word for word, with its face. */
+  | { t: "them"; name: string; face?: string; text: string }
   /** An amount the courier worked out, for the person to set as the budget with a tap or a yes. */
   | { t: "offer"; dollars: number; cents: number; what: string; change?: boolean; answered?: "ok" | "no" }
   /** The chat is over: it stays to read, and anything new is a new errand. */
@@ -142,6 +148,8 @@ export interface Relay {
   relay: string;
   from: string;
   notice?: boolean;
+  /** The portrait of the courier it came from. */
+  face?: string;
 }
 
 export interface RoomChat extends AgentMemory {
@@ -456,6 +464,7 @@ async function othersPay(chatId: string, groupId: string): Promise<void> {
     const kept = live.groups?.find((g) => g.groupId === groupId);
     if (kept) kept.collected = true;
     live.events.push(ticket);
+    if (kept) chipInPaid(live, kept, ticket);
     live.note = "";
     finishErrands(live);
     const short = ticket.payers.filter((p) => !p.paid);
@@ -485,6 +494,8 @@ const liveChat = (id: string) => running.get(id) ?? db.get<RoomChat>("room_chats
 
 /** Hands something said in a run to every other member's courier, after whatever each is doing now. */
 function relay(run: Run, fromHumanId: string, item: Relay): void {
+  const sender = memberOf(run, fromHumanId);
+  if (sender && !item.face) item = { ...item, face: faceOf(sender) };
   for (const m of present(run)) {
     if (m.humanId === fromHumanId) continue;
     const chat = liveChat(m.chatId);
@@ -495,6 +506,168 @@ function relay(run: Run, fromHumanId: string, item: Relay): void {
     touch(chat);
     if (!running.has(chat.id)) void drain(human, courier, chat);
   }
+}
+
+/* ---------------- demo friends: their couriers' side of the thread, on a short script ---------------- */
+
+/**
+ * Demo friends have nobody at the keyboard, so nothing would ever come back from their couriers. Their side of the run
+ * is written here instead: they join, answer with what their person can put in, and say when they've paid. The money is
+ * still worked out and paid in code, exactly as before; these lines only show it happening.
+ */
+const demoContact = (ownerId: string, humanId: string) =>
+  db.list<Contact>("contacts", (c) => c.ownerId === ownerId && c.humanId === humanId, 1)[0];
+
+/** Each run's script so far, so lines queued later still come after the ones before them. */
+const scripts = new Map<string, Promise<void>>();
+
+/** Adds lines to a run one after another, a beat apart, so the thread reads like couriers talking. */
+function scripted(runId: string, steps: (() => RunLine | null)[], gapMs = 900): void {
+  let next = scripts.get(runId) ?? Promise.resolve();
+  for (const step of steps)
+    next = next
+      .then(() => new Promise<void>((done) => setTimeout(done, gapMs).unref()))
+      .then(() => {
+        const line = step();
+        if (line) addLine(runId, line);
+      })
+      .catch((error) => console.warn("[errand] a scripted run line failed", error));
+  const last = next;
+  scripts.set(runId, last);
+  void last.then(() => {
+    if (scripts.get(runId) === last) scripts.delete(runId);
+  });
+}
+
+/** A demo friend's line, if they made it into the run by the time it's said. */
+const fromMember =
+  (runId: string, humanId: string, line: () => RunLine): (() => RunLine | null) =>
+  () => {
+    const run = getRun(runId);
+    return run && memberOf(run, humanId) ? line() : null;
+  };
+
+/** The run a chip-in happens in: this chat's own, with the demo friends asked along added as members. */
+function chipInRun(human: Human, courier: Courier, chat: RoomChat, q: ChipQuote): Run | undefined {
+  let run = getRun(chat.runId);
+  if (run && !runOpen(run)) return undefined;
+  if (!run) {
+    run = newRun(member(human, courier, chat.id, true), String(q.item.title ?? "Chipping in"), q.shop, "");
+    chat.runId = run.id;
+  }
+  const room = RUN_MEMBERS_MAX - present(run).length;
+  const joining = q.contacts.filter((c) => !memberOf(run!, c.humanId)).slice(0, Math.max(0, room));
+  const joined = new Set(joining.map((c) => c.id));
+  const each = new Map(q.split.shares.map((x) => [x.contact.id, x]));
+  const asked = q.split.shares
+    .filter((x) => memberOf(run!, x.contact.humanId) || joined.has(x.contact.id))
+    .map((x) => x.contact.name);
+  if (!asked.length) return run;
+  const runId = run.id;
+  const at = () => new Date().toISOString();
+  const steps: (() => RunLine | null)[] = [
+    () => ({
+      t: "say",
+      by: human.id,
+      text: `${q.item.title} at ${q.shop.name} is ${usd(q.priceCents)}. Asking ${asked.join(" and ")} in.`,
+      at: at(),
+    }),
+  ];
+  for (const c of joining) {
+    const theirs = contactCourier(c);
+    const them = db.get<Human>("humans", c.humanId);
+    if (!theirs || !them) continue;
+    steps.push(() => {
+      changeRun(runId, (r) => {
+        if (!memberOf(r, c.humanId)) r.members.push(member(them, theirs, ""));
+      });
+      return { t: "joined", by: c.humanId, at: at() };
+    });
+  }
+  for (const c of q.contacts) {
+    const x = each.get(c.id);
+    if (!x || !asked.includes(c.name)) continue;
+    steps.push(
+      fromMember(runId, c.humanId, () => ({
+        t: "say",
+        by: c.humanId,
+        text: x.short
+          ? `${c.courierName} here, for ${c.name}. ${c.name} can put in ${usd(x.cents)}, that's as far as they go.`
+          : `${c.courierName} here, for ${c.name}. ${c.name}'s in for ${usd(x.cents)}.`,
+        at: at(),
+      })),
+    );
+  }
+  scripted(runId, steps);
+  chat.events.push({
+    t: "run",
+    text: `${q.contacts.map((c) => c.courierName).join(" and ")} joined a thread to sort out the split.`,
+    faces: q.contacts.map((c) => faceOf({ courierId: c.humanId, courierName: c.courierName })),
+  });
+  return run;
+}
+
+/** Once the shares are paid: each demo friend's courier says so in the run, and the run marks them paid. */
+function chipInPaid(chat: RoomChat, g: GroupRun, ticket: GroupTicket): void {
+  const run = getRun(chat.runId);
+  if (!run) return;
+  const at = () => new Date().toISOString();
+  const steps: (() => RunLine | null)[] = [];
+  const mine = usd(g.mineCents).replace("$", "");
+  if (!run.lines.some((l) => l.t === "paid" && l.by === chat.humanId))
+    steps.push(() => ({ t: "paid", by: chat.humanId, total: mine, at: at() }));
+  g.shares.forEach((share, i) => {
+    const c = db.get<Contact>("contacts", share.contactId);
+    if (!c) return;
+    const paid = ticket.payers[i + 1]?.paid;
+    steps.push(
+      fromMember(run.id, c.humanId, () =>
+        paid
+          ? {
+              t: "say",
+              by: c.humanId,
+              text: `Paying ${c.name}'s ${usd(share.cents)} now, with their own PayPal.`,
+              at: at(),
+            }
+          : { t: "say", by: c.humanId, text: `${c.name}'s share didn't go through. I'll let them know.`, at: at() },
+      ),
+    );
+    if (paid)
+      steps.push(
+        fromMember(run.id, c.humanId, () => ({
+          t: "paid",
+          by: c.humanId,
+          total: usd(share.cents).replace("$", ""),
+          at: at(),
+        })),
+      );
+  });
+  const first = g.shares.map((x) => db.get<Contact>("contacts", x.contactId)).find(Boolean);
+  if (first && ticket.payers.every((p) => p.paid))
+    steps.push(
+      fromMember(run.id, first.humanId, () => ({
+        t: "say",
+        by: first.humanId,
+        text: "All square. Nice one.",
+        at: at(),
+      })),
+    );
+  scripted(run.id, steps, 700);
+}
+
+/** Demo friends' couriers acknowledge what's passed on to them, since nobody's there to answer. */
+function demoAck(run: Run, ownerId: string, fromHumanId: string): void {
+  const demo = present(run).filter((m) => m.humanId !== fromHumanId && demoContact(ownerId, m.humanId));
+  scripted(
+    run.id,
+    demo.map((m) => () => ({
+      t: "say",
+      by: m.humanId,
+      text: `Got it. I'll tell ${m.name}.`,
+      at: new Date().toISOString(),
+    })),
+    900,
+  );
 }
 
 /** Starts a run from this chat, or gives back the one it already has. */
@@ -521,6 +694,9 @@ export function joinRun(human: Human, courier: Courier, run: Run): RoomChat {
     {
       t: "run",
       text: `You joined ${host.name}’s run: ${run.what}${shop && !run.what.includes(shop.name) ? ` at ${shop.name}` : ""}.`,
+      faces: present(run)
+        .filter((m) => m.humanId !== human.id)
+        .map((m) => faceOf(m)),
     },
     {
       t: "say",
@@ -882,7 +1058,10 @@ function roomTools(human: Human, courier: Courier, chat: RoomChat, message: stri
           .slice(0, RUN_LINE_MAX);
         if (!text) return { text: "Say what to pass on.", isError: true };
         const after = addLine(run.id, { t: "say", by: human.id, text, at: new Date().toISOString() });
-        if (after) relay(after, human.id, { relay: text, from: courier.name });
+        if (after) {
+          relay(after, human.id, { relay: text, from: courier.name });
+          demoAck(after, human.id, human.id);
+        }
         return { text: "Passed on. Their couriers tell them, and you'll hear back here." };
       }
       case "order_status":
@@ -903,6 +1082,8 @@ function roomTools(human: Human, courier: Courier, chat: RoomChat, message: stri
           .map((c) => c.name)
           .sort()
           .join("+")}`;
+        // Their couriers answer in a thread the first time this split comes up.
+        if (key !== offeredBefore) chipInRun(human, courier, chat, quote);
         // Covering for someone is always asked first, and so is an item the person didn't name.
         const sure = key === offeredBefore || (!split.coverCents && itemNamedIn(String(quote.item.title), message));
         if (!sure) {
@@ -941,6 +1122,7 @@ function roomTools(human: Human, courier: Courier, chat: RoomChat, message: stri
         if (out.data.status === "paid") {
           collecting.add(run.groupId);
           const ticket = await collectShares(human, courier.name, run).finally(() => collecting.delete(run.groupId));
+          chipInPaid(chat, run, ticket);
           return {
             text: `Paid their share with their saved PayPal, and ${names} paid theirs. Say so in one short sentence.`,
             data: { ...data, group_ticket: ticket },
@@ -1097,9 +1279,11 @@ function courierBrief(human: Human, courier: Courier, chat: RoomChat, callTool: 
  * a budget, and the turn can't buy or answer the run: only the person can start that.
  */
 async function relayTurn(human: Human, courier: Courier, chat: RoomChat, item: Relay): Promise<void> {
-  if (item.notice) return push(chat, { t: "run", text: item.relay });
+  if (item.notice) return push(chat, { t: "run", text: item.relay, faces: item.face ? [item.face] : undefined });
   if (!getRun(chat.runId)) return;
-  if (!config.anthropicConfigured) return push(chat, { t: "say", text: `${item.from} says: “${item.relay}”` });
+  // Their words first, as theirs, with their face; then this courier says what it means for its person.
+  push(chat, { t: "them", name: item.from, face: item.face, text: item.relay });
+  if (!config.anthropicConfigured) return;
   const brief = courierBrief(human, courier, chat, roomTools(human, courier, chat, "", true));
   const out = await runAgent(
     brief,
@@ -1118,7 +1302,7 @@ async function roomTurn(human: Human, courier: Courier, chat: RoomChat, message:
     push(chat, { t: "say", text });
   };
   if (courier.revokedAt)
-    return say(`I’ve been revoked. You can restore me on the [Couriers](${config.courier.url}/app/couriers) page.`);
+    return say(`I’ve been revoked. You can restore me on your [Courier home](${config.courier.url}/app) page.`);
 
   let resume: { what: string; errandId: string } | undefined;
   // A yes to an amount the courier proposed sets it, as if they'd typed it. Anything else lets the offer go.

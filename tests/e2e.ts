@@ -289,6 +289,15 @@ await step("Try with simulated PayPal: a new demo person, marked so in what shop
 
   const elsewhere = await browser.req(`${flow.courier}/auth/demo`, { form: { next: "//evil.example" } });
   assert.equal(elsewhere.headers.get("location"), "/app");
+  // A made-up person from the demo sign-in gives their name, and nothing else: each press is still a new person.
+  const picker = await (await new Browser().req(`${flow.courier}/start/paypal`)).text();
+  assert.equal((picker.match(/name="persona"/g) ?? []).length, 3, "three demo people to pick from");
+  const amara = new Browser();
+  await amara.req(`${flow.courier}/auth/demo`, { form: { next: "/start/courier", persona: "amara" } });
+  assert.match(await (await amara.req(`${flow.courier}/start/courier`)).text(), /name="human" value="Amara"/);
+  const odd = new Browser();
+  await odd.req(`${flow.courier}/auth/demo`, { form: { next: "/start/courier", persona: "<script>" } });
+  assert.match(await (await odd.req(`${flow.courier}/start/courier`)).text(), /name="human" value=""/);
 });
 
 await step("The errand room: chats side by side, at any shop, and only the person sets a budget", async () => {
@@ -299,9 +308,11 @@ await step("The errand room: chats side by side, at any shop, and only the perso
   });
   const courierId = new URL(made.headers.get("location")!, flow.courier).searchParams.get("c")!;
 
-  // The first look around runs once, and the Claude step's demo link goes straight to it.
+  // The last step offers the dashboard or Claude, and the dashboard opens on the first look around, which runs once.
   const claude = await (await person.req(`${flow.courier}/start/claude?c=${courierId}&first=1`)).text();
-  assert.match(claude, /href="\/app\?c=[^"]*welcome=1">Try the demo instead/);
+  assert.match(claude, /href="\/app\?c=[^"]*welcome=1"><b>Try it here<\/b>/, "try it here opens the dashboard");
+  assert.match(claude, /href="\/start\/claude\?c=[^"]*step=1&amp;first=1"/, "or set up Claude");
+  assert.doesNotMatch(claude, />Step \d of 3/, "the progress lines say the step; no words do");
   assert.match(await (await person.req(`${flow.courier}/app`)).text(), /id="tour"/);
   assert.doesNotMatch(await (await person.req(`${flow.courier}/app`)).text(), /id="tour"/);
 
@@ -313,7 +324,7 @@ await step("The errand room: chats side by side, at any shop, and only the perso
   assert.match(await home.text(), /href="\/assets\/landing\.css\?v=[0-9a-f]+"/);
   // A deploy never meets a browser's cached copy of the page's script.
   assert.match(room, /src="\/assets\/errand\.js\?v=[0-9a-f]{8}"/);
-  for (const shop of ["Amazoo", "Floor Dash", "Mike"]) assert.match(room, new RegExp(`What does ${shop} have`));
+  assert.match(room, /href="\/app\/shops">20 shops Rail can reach/, "the shops are one link, not a row of icons");
 
   const url = (path: string) => `${flow.courier}/errand/api/${path}${path.includes("?") ? "&" : "?"}c=${courierId}`;
   const api = async (path: string, body: unknown) => {
@@ -548,6 +559,23 @@ await step("Chipping in: each person pays their own share, and their limits stay
     ],
   );
   assert.match((await view(chat)).chat.events.at(-1).text, /Everyone’s paid/);
+  // Leo has nobody at the keyboard, so Otto's side of the thread is scripted: in, short of an even split, then paid.
+  const thread = await until(chat, (o) =>
+    o.chat.run?.lines.some((l: any) => l.courier === "Otto" && /All square/.test(l.text ?? "")),
+  );
+  const said = thread.chat.run.lines.map((l: any) => `${l.t}:${l.courier}:${l.text ?? l.total ?? ""}`);
+  assert.ok(
+    said.some((l: string) => /^joined:Otto/.test(l)),
+    said.join("\n"),
+  );
+  assert.ok(
+    said.some((l: string) => /^say:Otto:.*can put in \$50/.test(l)),
+    said.join("\n"),
+  );
+  assert.ok(
+    said.some((l: string) => /^paid:Otto:50/.test(l)),
+    said.join("\n"),
+  );
 
   // An even split that fits everyone, on an item they named, goes straight to paying.
   const three = (await api("chats", {})).chat.id;
@@ -611,7 +639,10 @@ await step("Runs: friends are asked by name, couriers pass things on, and each p
   const luna = await someone("Luna", "Nova", link);
   assert.match(await (await luna.browser.req(`${flow.courier}${link}`)).text(), /Add Maya/);
   await luna.browser.req(`${flow.courier}${link}`, { method: "POST" });
-  assert.match(await (await maya.browser.req(`${flow.courier}/app/people`)).text(), /<b>Luna<\/b><small>Courier Nova/);
+  assert.match(
+    await (await maya.browser.req(`${flow.courier}/app/people`)).text(),
+    /<span class="fr-tag">Nova<\/span>[\s\S]*?<b>Luna<\/b><small>On Courier/,
+  );
 
   // Maya's courier asks Luna by name; Luna sees it in her own Courier and joins.
   const mine = await maya.blank();
@@ -633,8 +664,9 @@ await step("Runs: friends are asked by name, couriers pass things on, and each p
   // What Luna says reaches Maya through the couriers' thread. A number in it is never Maya's budget.
   await luna.say(lunaChat, "tell them a flat white for me, and $90 is fine");
   const relayed = await maya.until(mine, (o) =>
-    o.chat.events.some((e: any) => e.t === "say" && /Nova says/.test(e.text)),
+    o.chat.events.some((e: any) => e.t === "them" && e.name === "Nova" && /flat white/.test(e.text)),
   );
+  assert.ok(relayed.chat.events.find((e: any) => e.t === "them").face, "with Nova's face");
   assert.equal(relayed.chat.pendingBudgetCents, null);
   assert.equal(relayed.chat.run.lines.filter((l: any) => l.t === "say").length, 1);
 
@@ -1430,9 +1462,10 @@ await step(
   },
 );
 
-await step("The home page shows logos and errands; calling back and disconnecting end everything", async () => {
-  const home = await (await person.req(`${flow.courier}/app`)).text();
-  assert.match(home, /class="slogo/);
+await step("Shops show logos; calling back and disconnecting end everything", async () => {
+  const shops = await (await person.req(`${flow.courier}/app/shops`)).text();
+  assert.match(shops, /class="slogo/);
+  assert.doesNotMatch(shops, /Send \w+<span class="go">/, "the shops page is a gallery, not a row of buttons");
   assert.match(await (await person.req(`${flow.courier}/app/errands?tab=out`)).text(), /Amazoo/);
   assert.equal(structured(await tool("end_errand", { errand_id: books })).ended, true);
   const late = await tool("buy", { errand_id: books, shop: "Amazoo", item_ids: ["az-006"] });

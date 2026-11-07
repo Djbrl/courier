@@ -158,9 +158,16 @@
       </div>`;
   }
 
+  /** Something the courier said, with its portrait. `body` is already escaped. */
+  const said = (body) => `<div class="said">${boot.portrait}<div class="bub">${body}</div></div>`;
+  /** A courier's portrait in the run's thread. The server only ever sends a known portrait name. */
+  const face = (a) =>
+    /^[a-z]+$/.test(a || "") ? `<span class="pt"><img src="/assets/avatars/${a}.svg" alt=""></span>` : "";
+
   const DRAW = {
     me: (e) => `<div class="bub me">${esc(e.text)}</div>`,
-    say: (e) => `<div class="bub">${rich(e.text)}</div>`,
+    // The courier's face beside what it says, so the words stay black on a plain bubble.
+    say: (e) => said(rich(e.text)),
     dim: (e) => `<div class="bub dim">${esc(e.text)}</div>`,
     new: (e) =>
       `<div class="tk-mark"><span class="tk-line"><b>New errand</b> ${esc(e.what)} · up to ${usd(e.limitCents)}</span></div>`,
@@ -188,7 +195,10 @@
       `<div class="invite"><b>Invite link</b><small>${esc(e.what)}${e.shop && !e.what.includes(e.shop) ? ` · ${esc(e.shop)}` : ""}</small>
         <div class="invite-l"><code class="inp code sm">${esc(e.url)}</code><button type="button" class="btn sm" data-copy="${esc(e.url)}">Copy</button></div>
         <p class="fine">Send it to anyone. They sign in with their own PayPal, or as a demo person, and their courier joins this chat.</p></div>`,
-    run: (e) => `<div class="tk-mark run-mark"><span class="tk-line">${esc(e.text)}</span></div>`,
+    run: (e) =>
+      `<div class="tk-mark run-mark"><span class="tk-line">${e.faces?.length ? `<span class="faces">${e.faces.map(face).join("")}</span>` : ""}${esc(e.text)}</span></div>`,
+    them: (e) =>
+      `<div class="said them">${face(e.face)}<div class="bub"><b class="from">${esc(e.name)}</b>${esc(e.text)}</div></div>`,
     ended: (e) => `<div class="tk-mark end-mark"><span class="tk-line"><b>Ended</b> ${esc(e.text)}</span></div>`,
     // The amount comes from the courier; only the person's yes, here or in words, makes it the budget.
     offer: (e) =>
@@ -202,11 +212,11 @@
   };
 
   function typing() {
-    return `<div class="typing"><i></i><i></i><i></i><span class="typing-t">${esc(chat.note)}</span></div>`;
+    return `<div class="said">${boot.portrait}<div class="typing"><i></i><i></i><i></i><span class="typing-t">${esc(chat.note)}</span></div></div>`;
   }
 
   function drawLog() {
-    const hello = `<div class="bub">${rich(boot.welcome)}</div>`;
+    const hello = said(rich(boot.welcome));
     const atEnd = log.scrollHeight - log.scrollTop - log.clientHeight < 120;
     const grew = drawn !== chat.id;
     log.innerHTML = hello + chat.events.map((e) => DRAW[e.t]?.(e) ?? "").join("") + (chat.working ? typing() : "");
@@ -222,7 +232,7 @@
   function runLine(l) {
     const by = `<b>${esc(l.courier)}</b>`;
     if (l.t === "say")
-      return `<li class="${l.you ? "you" : ""}"><span class="by">${by}<small>${l.you ? "your courier" : `${esc(l.name)}’s courier`}</small></span><span>${esc(l.text)}</span></li>`;
+      return `<li class="${l.you ? "you" : ""}">${face(l.avatar)}<span class="by">${by}<small>${l.you ? "your courier" : `${esc(l.name)}’s courier`}</small></span><span>${esc(l.text)}</span></li>`;
     if (l.t === "joined") return `<li class="sys">${esc(l.name)} joined, with ${esc(l.courier)}.</li>`;
     if (l.t === "order")
       return `<li class="sys">${esc(l.name)} ordered ${esc((l.items || []).join(", "))}, $${esc(l.total)}.</li>`;
@@ -666,10 +676,6 @@
     const text = field.value;
     field.value = "";
     send(text);
-  });
-  document.querySelector(".rm-shops").addEventListener("click", (e) => {
-    const b = e.target.closest("button[data-say]");
-    if (b) send(b.dataset.say);
   });
   sugs.addEventListener("click", (e) => {
     const b = e.target.closest("button[data-say]");

@@ -44,6 +44,7 @@ import {
   courierChoice,
   courierForClient,
   DEMO_CLIENT_PREFIX,
+  DEMO_PEOPLE,
   errorPage,
   forShopsPage,
   installPage,
@@ -310,6 +311,7 @@ app.post("/auth/demo", (req, res) => {
     }
     const id = newId("hum");
     const now = new Date().toISOString();
+    const persona = DEMO_PEOPLE.find((p) => p.key === req.body.persona);
     db.put<Human>("humans", id, {
       id,
       payerId: `demo-${id}`,
@@ -318,7 +320,7 @@ app.post("/auth/demo", (req, res) => {
       simulated: true,
       ageRange: null,
       accountType: null,
-      displayName: null,
+      displayName: persona?.name ?? null,
       createdAt: now,
       lastLoginAt: now,
     });
@@ -747,7 +749,7 @@ for (const action of ["revoke", "restore"]) {
       const { revokedAt: _revokedAt, ...restored } = courier;
       saveCourier(restored as Courier);
     }
-    res.redirect(303, `/app/couriers?c=${encodeURIComponent(courier.id)}`);
+    res.redirect(303, `/app?c=${encodeURIComponent(courier.id)}`);
   });
 }
 

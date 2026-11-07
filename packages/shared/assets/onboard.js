@@ -1,3 +1,16 @@
+// Demo sign-in: the card shows who's sending it as you point at each person.
+(() => {
+  const sent = document.querySelector('#preview [data-f="human"]');
+  const people = document.querySelectorAll(".ob2-who");
+  if (!sent || !people.length) return;
+  const was = sent.textContent;
+  for (const p of people) {
+    const name = p.querySelector("b")?.textContent.split(" ")[0] ?? was;
+    p.addEventListener("pointerenter", () => (sent.textContent = name));
+    p.addEventListener("focus", () => (sent.textContent = name));
+    p.addEventListener("pointerleave", () => (sent.textContent = was));
+  }
+})();
 // Onboarding: the ID card preview follows what you type and pick.
 (() => {
   const form = document.getElementById("setup");

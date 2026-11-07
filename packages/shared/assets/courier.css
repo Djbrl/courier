@@ -5625,7 +5625,7 @@ html:has(body.app-page) {
 .shelf-g {
   list-style: none;
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
   gap: 16px;
   margin: 18px 0 26px;
   padding: 0;
@@ -7869,4 +7869,969 @@ main.solo {
 }
 .avp input:focus-visible + img {
   outline-color: var(--cobalt);
+}
+
+/* ---------- moving between pages: the old page lifts away, the new one settles in ---------- */
+@view-transition {
+  navigation: auto;
+}
+::view-transition-old(root) {
+  animation: vt-out 0.22s ease-in both;
+}
+::view-transition-new(root) {
+  animation: vt-in 0.42s var(--ease) both;
+}
+@keyframes vt-out {
+  to {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+}
+@keyframes vt-in {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+}
+/* The app's sidebar stays put while its pages change beside it. */
+.rail {
+  view-transition-name: rail;
+}
+::view-transition-old(rail),
+::view-transition-new(rail),
+::view-transition-group(rail) {
+  animation: none;
+}
+/* Coming into onboarding, its coloured stage sweeps in from the right; between steps it holds, and the card glides. */
+.ob2-r {
+  view-transition-name: ob2-stage;
+}
+.ob2-r .wiz-id {
+  view-transition-name: ob2-card;
+}
+::view-transition-new(ob2-stage):only-child {
+  animation: vt-wipe 0.6s var(--ease) both;
+}
+::view-transition-old(ob2-stage):only-child {
+  animation: vt-out 0.25s ease-in both;
+}
+::view-transition-group(ob2-card) {
+  animation-duration: 0.5s;
+  animation-timing-function: var(--ease);
+}
+@keyframes vt-wipe {
+  from {
+    clip-path: inset(0 0 0 100%);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation: none !important;
+  }
+}
+
+/* ---------- onboarding: the whole window, words on the left, the courier standing still on a quiet stage ---------- */
+body.ob2-page,
+html:has(body.ob2-page) {
+  background: #fff;
+}
+.ob2 {
+  display: grid;
+  grid-template-columns: minmax(400px, 1fr) minmax(0, 1fr);
+  min-height: 100svh;
+}
+.ob2-l {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding: clamp(22px, 3vw, 40px) clamp(24px, 6vw, 96px);
+}
+.ob2-top {
+  margin-bottom: 28px;
+}
+.ob2-top .logo {
+  font-size: 22px;
+  color: var(--cobalt);
+}
+.ob2-l > .prog {
+  margin: 0;
+  max-width: 440px;
+}
+.ob2-l > .prog i {
+  flex: 1;
+  width: auto;
+  height: 3px;
+}
+/* The words and their buttons sit together, centred in the column. */
+.ob2-body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  max-width: 440px;
+  margin-top: auto;
+  padding: 24px 0 0;
+}
+/* The landing page's voice, at a size that leaves room for the rest. */
+.ob2-h {
+  font-family: "Archivo", sans-serif;
+  font-style: italic;
+  font-weight: 900;
+  font-stretch: 125%;
+  letter-spacing: -0.04em;
+  line-height: 1;
+  font-size: clamp(30px, 2.6vw, 40px);
+  text-wrap: balance;
+  overflow-wrap: anywhere;
+}
+.ob2-lead {
+  font-size: 16px;
+  font-weight: 500;
+  line-height: 1.45;
+  color: var(--mute);
+}
+/* With no buttons under it, the words alone hold the middle. */
+.ob2-body:last-child {
+  margin-bottom: auto;
+  padding-bottom: 24px;
+}
+.ob2-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px 16px;
+  max-width: 440px;
+  margin-bottom: auto;
+  padding: 24px 0;
+}
+.ob2-foot > .btn:last-child:not(:first-child) {
+  margin-left: auto;
+}
+.ob2-foot:has(.btn-pp) {
+  flex-direction: column;
+  align-items: stretch;
+  text-align: center;
+}
+.ob2-foot .btn-pp {
+  width: 100%;
+}
+.ob2-foot .fine {
+  font-size: 13px;
+  color: var(--mute);
+}
+/* Buttons speak in the body font, so a page has one voice for titles and one for everything else. */
+.ob2 .btn {
+  height: 48px;
+  padding: 0 7px 0 20px;
+  gap: 10px;
+  font-family: var(--body), sans-serif;
+  font-style: normal;
+  font-stretch: 100%;
+  font-weight: 600;
+  font-size: 15px;
+  letter-spacing: 0;
+}
+.ob2 .btn.ghost {
+  padding: 0 20px;
+}
+.ob2 .btn .go {
+  width: 34px;
+  height: 34px;
+}
+/* Rows to choose from: demo people, and where to try the courier. Hairlines, no fills. */
+.ob2-people,
+.ob2-pick {
+  display: grid;
+  margin-top: 8px;
+  border-top: 1px solid var(--line);
+}
+.ob2-who,
+.ob2-opt {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  padding: 14px 4px;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+  background: none;
+  color: inherit;
+  text-align: left;
+  transition: padding 0.2s var(--ease);
+}
+.ob2-who:hover,
+.ob2-who:focus-visible,
+.ob2-opt:hover,
+.ob2-opt:focus-visible {
+  padding-left: 10px;
+}
+.ob2-mono {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--t);
+  font-size: 14px;
+  font-weight: 700;
+  flex: none;
+}
+.ob2-wt {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+}
+.ob2-wt b,
+.ob2-opt b {
+  font-size: 16px;
+  font-weight: 600;
+}
+.ob2-wt small,
+.ob2-opt span {
+  font-size: 14px;
+  color: var(--mute);
+}
+.ob2-opt {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  row-gap: 2px;
+}
+.ob2-opt b {
+  grid-column: 1;
+}
+.ob2-opt span {
+  grid-column: 1;
+}
+.ob2-opt > .go {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+}
+.ob2-who .go,
+.ob2-opt > .go {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--paper);
+  transition: background-color 0.15s;
+}
+.ob2-who .go svg,
+.ob2-opt > .go svg {
+  width: 14px;
+  height: 14px;
+}
+.ob2-who:hover .go,
+.ob2-opt:hover > .go {
+  background: var(--hivis);
+}
+/* Fields on the courier step. */
+.ob2-fields {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.ob2 .fld > span {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--mute);
+}
+.ob2 .fld .inp {
+  height: 46px;
+  font-size: 16px;
+  border-radius: 12px;
+}
+.ob2 .hint {
+  margin-top: -6px;
+  font-size: 13px;
+  color: var(--mute);
+}
+.ob2 .avp {
+  max-width: 440px;
+  gap: 6px;
+}
+.ob2 .fld.wiz-sw {
+  flex-direction: row;
+  align-items: center;
+  gap: 18px;
+}
+.ob2 .wiz-list {
+  margin: 0;
+  padding-left: 20px;
+  display: grid;
+  gap: 8px;
+  font-size: 16px;
+  color: var(--soft);
+}
+.ob2 .copy.inp {
+  height: auto;
+  min-height: 46px;
+  padding: 13px 16px;
+  border-radius: 12px;
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+.ob2 .wiz-alt summary {
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.ob2 .wiz-alt > *:not(summary) {
+  margin-top: 10px;
+}
+/* The stage: a quiet field, edge to edge, with the card standing on it. The card carries the only colour. */
+.ob2-r {
+  position: sticky;
+  top: 0;
+  height: 100svh;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  background: #f6f5f2;
+  border-left: 1px solid var(--line);
+}
+.ob2-r .wiz-id {
+  position: relative;
+  padding: 0;
+  font-size: clamp(10px, 1.15vw, 14px);
+  color: var(--ink);
+}
+@media (max-width: 860px) {
+  .ob2 {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .ob2-r {
+    position: relative;
+    order: -1;
+    height: auto;
+    min-height: 0;
+    padding: 64px 16px 28px;
+    border-left: 0;
+    border-bottom: 1px solid var(--line);
+  }
+  .ob2-r .wiz-id {
+    font-size: min(9px, 2.2vw);
+  }
+  .ob2-top {
+    position: absolute;
+    top: 16px;
+    left: 16px;
+    right: 16px;
+    z-index: 2;
+    margin: 0;
+  }
+  .ob2-l {
+    padding: 22px 16px 28px;
+  }
+  .ob2-body {
+    justify-content: flex-start;
+  }
+  .ob2-fields {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* ---------- home: the courier you can change, right there, with what it's been doing beside it ---------- */
+.shopg-t b {
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.25;
+}
+.chips {
+  margin-bottom: -8px;
+}
+.chip-add {
+  border-style: dashed !important;
+  color: var(--soft);
+  padding: 0 16px;
+}
+.hm4-asks {
+  display: grid;
+  gap: 10px;
+}
+.hm4-g {
+  display: grid;
+  grid-template-columns: minmax(0, 1.75fr) minmax(290px, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+.hm4-ed.cedit {
+  grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr);
+  border-radius: 24px;
+}
+.hm4-stage.ob2-r {
+  position: relative;
+  height: auto;
+  min-height: 460px;
+  padding: 28px 20px;
+  border-right: 1px solid var(--line);
+}
+.hm4-stage .ob2-word {
+  font-size: clamp(90px, 9vw, 150px);
+}
+.hm4-stage .wiz-id {
+  font-size: clamp(9px, 0.95vw, 12px);
+}
+.hm4-ed .cedit-f {
+  justify-content: flex-start;
+  gap: 12px;
+  padding: 24px;
+}
+.hm4-edh h2 {
+  font-size: 18px;
+  font-weight: 700;
+}
+.hm4-edh small {
+  font-size: 14px;
+  color: var(--mute);
+}
+.hm4-ed .fld > span {
+  font-size: 14px;
+}
+.hm4-ed .inp {
+  height: 46px;
+  font-size: 16px;
+  border-radius: 12px;
+}
+.hm4-ed .hint {
+  margin-top: -6px;
+  font-size: 12.5px;
+  color: var(--mute);
+}
+.hm4-ed .avp {
+  gap: 5px;
+}
+.hm4-save {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: auto;
+  padding-top: 6px;
+}
+.hm4-save .btn {
+  margin: 0;
+}
+.hm4-ok {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--green);
+  animation: vt-in 0.4s var(--ease) both;
+}
+.hm4-side {
+  display: grid;
+  gap: 16px;
+}
+.hm4-act .pg-st {
+  margin-bottom: 4px;
+}
+.hm4-act .feed {
+  margin: 0 -22px -20px;
+}
+.hm4-act .feed li {
+  padding: 12px 22px;
+}
+.hm4-ctl .li small {
+  font-size: 14px;
+}
+@media (max-width: 1100px) {
+  .hm4-g {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+@media (max-width: 640px) {
+  .hm4-ed.cedit {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .hm4-stage.ob2-r {
+    min-height: 320px;
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+  .hm4-stage .wiz-id {
+    font-size: min(9px, 2.3vw);
+  }
+}
+.hm4-ed .sw span {
+  width: 32px;
+  height: 32px;
+}
+
+/* ---------- shops: a quiet gallery, each shop's mark carrying its own colour ---------- */
+.shg {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: 10px;
+}
+.shg-t {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: #fff;
+  transition: border-color 0.15s;
+}
+.shg-t:hover {
+  border-color: var(--ink);
+}
+.shg-t .slogo {
+  width: 40px;
+  height: 40px;
+  border-radius: 11px;
+}
+.shg-b {
+  display: grid;
+  min-width: 0;
+}
+.shg-b b {
+  font-size: 15px;
+  font-weight: 600;
+}
+.shg-b small {
+  overflow: hidden;
+  font-size: 13px;
+  color: var(--mute);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* ---------- friends: each one in their courier's colour ---------- */
+.frg {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 14px;
+}
+.fr {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: #fff;
+  overflow: hidden;
+  text-align: left;
+  transition:
+    transform 0.25s var(--ease),
+    border-color 0.15s;
+}
+.fr:hover {
+  transform: translateY(-3px);
+  border-color: var(--ink);
+}
+.fr-top {
+  position: relative;
+  display: grid;
+  place-items: center;
+  height: 108px;
+  background: var(--al);
+  color: var(--ad);
+  overflow: hidden;
+}
+.fr-top .pt {
+  --s: 64px;
+  border-radius: 16px;
+  box-shadow: 0 14px 28px -16px rgba(20, 20, 20, 0.6);
+  transition: transform 0.35s var(--snap);
+}
+.fr:hover .fr-top .pt {
+  transform: rotate(-5deg) scale(1.06);
+}
+.fr-tag {
+  position: absolute;
+  left: 12px;
+  bottom: 12px;
+  padding: 5px 10px;
+  border-radius: 999px;
+  background: var(--ac);
+  color: var(--at);
+  font-size: 12px;
+  font-weight: 600;
+}
+.fr-b {
+  display: grid;
+  gap: 2px;
+  padding: 14px 16px 4px;
+}
+.fr-b b {
+  font-size: 17px;
+  font-weight: 700;
+}
+.fr-b small {
+  font-size: 14px;
+  color: var(--mute);
+}
+.fr > .btn {
+  margin: 12px 16px 16px;
+  justify-content: center;
+}
+.fr .fc-x {
+  top: 10px;
+  right: 10px;
+  z-index: 1;
+}
+.fr .fc-x button {
+  background: #fff;
+}
+.fr:hover .fc-x button {
+  opacity: 1;
+}
+.fr-add {
+  align-items: stretch;
+  border-style: dashed;
+  border-width: 2px;
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+}
+.fr-plus {
+  display: grid;
+  place-items: center;
+  height: 108px;
+  font-size: 40px;
+  font-weight: 300;
+  color: var(--mute);
+}
+.fr-add .fr-b {
+  padding-bottom: 18px;
+}
+@media (max-width: 560px) {
+  .frg,
+  .shg {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+  .fr-top,
+  .fr-plus {
+    height: 112px;
+  }
+  .fr-top .pt {
+    --s: 68px;
+  }
+  .fr > .btn {
+    margin: 10px 12px 12px;
+    padding: 0 10px;
+    font-size: 13.5px;
+  }
+}
+
+/* ---------- the chat: the courier's face beside its words, which stay black on a plain bubble ---------- */
+.said {
+  align-self: flex-start;
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  max-width: min(92%, 640px);
+}
+.said > .pt {
+  --s: 34px;
+  border-radius: 10px;
+}
+.said > .bub,
+.rm-log .said > .bub {
+  max-width: none;
+  background: var(--paper);
+  color: var(--ink);
+}
+.said > .typing {
+  background: var(--paper);
+}
+/* A run of messages shows the face once, on the last. */
+.said:has(+ .said) > .pt {
+  visibility: hidden;
+}
+.run-t li:not(.sys) {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr);
+  column-gap: 10px;
+  align-items: start;
+}
+.run-t li:not(.sys) > .pt {
+  --s: 28px;
+  grid-row: span 2;
+  border-radius: 8px;
+}
+.run-t li.you:not(.sys) {
+  background: #fff;
+}
+@media (max-width: 900px) {
+  .run-t li.you:not(.sys) {
+    background: var(--paper);
+  }
+}
+
+/* ---------- the errand room: the chat first, the courier's errands and its thread beside it, all on white ---------- */
+@media (min-width: 901px) {
+  .rm {
+    grid-template-columns: minmax(0, 1fr) 320px;
+  }
+  .rm-main {
+    grid-column: 1;
+    grid-row: 1;
+  }
+  .rm-side {
+    grid-column: 2;
+    grid-row: 1;
+    border-right: 0;
+    border-left: 1px solid var(--line);
+  }
+}
+.rm-side,
+.rm-tabs {
+  background: #fff;
+}
+.tk:hover {
+  background: var(--paper);
+}
+.tk.on {
+  background: #fff;
+}
+.run-t li:not(.sys),
+.run-t li.you:not(.sys) {
+  background: var(--paper);
+}
+.rm-tabs [data-view="chat"] {
+  order: -1;
+}
+
+/* ---------- the shops, as one line under the chat's header ---------- */
+.rm-main .rm-shops {
+  -webkit-mask: none;
+  mask: none;
+  padding: 10px 20px;
+}
+.rm-shops-l {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14.5px;
+  font-weight: 650;
+  color: var(--soft);
+}
+.rm-shops-l:hover {
+  color: var(--ink);
+}
+.rm-shops-l .go {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--paper);
+}
+.rm-shops-l .go svg {
+  width: 12px;
+  height: 12px;
+}
+
+/* ---------- other couriers in the chat: their own faces, stacked when there are several ---------- */
+.faces {
+  display: inline-flex;
+  vertical-align: middle;
+  margin-right: 8px;
+}
+.faces .pt {
+  --s: 22px;
+  border-radius: 7px;
+  box-shadow: 0 0 0 2px #fff;
+}
+.faces .pt + .pt {
+  margin-left: -8px;
+}
+.run-mark .tk-line {
+  display: inline-flex;
+  align-items: center;
+}
+.said.them > .bub {
+  background: #fff;
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+.said.them .from {
+  display: block;
+  margin-bottom: 2px;
+  font-size: 12.5px;
+  color: var(--mute);
+}
+.rm-side .rm-run,
+.rm-side .rm-run .compose {
+  background: #fff;
+}
+
+/* ---------- the app, calm: a white sidebar and a white page, edge to edge, with colour only in small doses ---------- */
+body.app-page,
+html:has(body.app-page) {
+  background: #fff;
+}
+.rail {
+  background: #fff;
+  color: var(--ink);
+  border-right: 1px solid var(--line);
+}
+.rail-logo .logo {
+  font-size: 22px;
+  color: var(--cobalt);
+}
+.rail nav a,
+.rail nav a:hover {
+  color: var(--soft);
+}
+.rail nav a {
+  height: 40px;
+  border-radius: 10px;
+  font-size: 15px;
+  font-weight: 500;
+}
+.rail nav a:hover {
+  background: var(--paper);
+}
+.rail nav a[aria-current] {
+  background: var(--paper);
+  color: var(--ink);
+  font-weight: 600;
+}
+.rail nav .n {
+  font:
+    600 12px / 22px var(--body),
+    sans-serif;
+}
+.rail-who {
+  padding: 14px 10px 0;
+  border-top: 1px solid var(--line);
+  border-radius: 0;
+  background: none;
+}
+.pane {
+  padding: 0;
+}
+.pg {
+  padding: 28px clamp(20px, 3vw, 40px) 32px;
+}
+.pg-in {
+  gap: 20px;
+}
+.pg-h .big {
+  font-size: clamp(26px, 2.2vw, 32px);
+  line-height: 1;
+}
+.pg-h p {
+  margin-top: 6px;
+  font-size: 15px;
+}
+.pg-st h2 {
+  font-size: 16px;
+  font-weight: 600;
+}
+.pg-st .n {
+  font:
+    600 13px / 1 var(--body),
+    sans-serif;
+}
+.app-page .card {
+  border: 1px solid var(--line);
+  border-radius: 16px;
+}
+.app-page .chip {
+  height: 36px;
+  border: 1px solid var(--line);
+  font-size: 14px;
+  font-weight: 600;
+}
+.app-page .chip[aria-current] {
+  border-color: var(--ink);
+  box-shadow: none;
+}
+/* Home: the courier and what it's doing, in one screen. */
+.hm4-g {
+  grid-template-columns: minmax(0, 1.6fr) minmax(280px, 1fr);
+}
+.hm4-ed.cedit {
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1fr);
+  border-radius: 16px;
+}
+.hm4-stage.ob2-r {
+  min-height: 0;
+  padding: 24px 16px;
+  border-left: 0;
+}
+.hm4-stage .wiz-id {
+  font-size: clamp(8px, 0.72vw, 10px);
+}
+.hm4-ed .cedit-f {
+  gap: 10px;
+  padding: 20px;
+}
+.hm4-edh h2 {
+  font-size: 16px;
+  font-weight: 600;
+}
+.hm4-ed .inp {
+  height: 40px;
+  font-size: 15px;
+  border-radius: 10px;
+}
+.hm4-ed .fld > span {
+  font-size: 13px;
+  color: var(--mute);
+}
+.hm4-ed .sw span {
+  width: 26px;
+  height: 26px;
+}
+.hm4-side {
+  gap: 12px;
+}
+.hm3-now {
+  padding: 16px 18px;
+}
+.hm3-fig b {
+  font-size: 32px;
+}
+.hm4-act .feed li {
+  padding: 10px 18px;
+}
+.hm4-act.pad {
+  padding: 16px 18px;
+}
+.hm4-act .feed {
+  margin: 0 -18px -16px;
+}
+.hm4-ctl .li {
+  padding: 12px 16px;
+}
+.hm4-ctl .li small {
+  font-size: 13px;
+}
+@media (max-width: 1100px) {
+  .hm4-g {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+@media (max-width: 640px) {
+  .hm4-ed.cedit {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .hm4-stage.ob2-r {
+    border-bottom: 1px solid var(--line);
+  }
+  .hm4-stage .wiz-id {
+    font-size: min(9px, 2.3vw);
+  }
+}
+@media (max-width: 900px) {
+  .rail {
+    background: #fff;
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+  .rail-menu {
+    background: var(--paper);
+    color: var(--ink);
+  }
+  .pg {
+    padding: 20px 16px 28px;
+  }
 }

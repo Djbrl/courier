@@ -67,6 +67,9 @@ const PERSONAS: SimPersona[] = [
   { key: "riley", name: "Riley Chen", payerId: "SIMPAYERRLY04", verified: true, ageRange: "13-17", note: "Under 18" },
 ];
 
+/** The accounts on the sign-in page. The others stay, unlisted, for the tests of who gets turned away. */
+const SHOWN = PERSONAS.filter((p) => p.verified && p.ageRange !== "13-17").slice(0, 3);
+
 interface SimOrder extends CreateOrderInput {
   id: string;
   status: "CREATED" | "APPROVED" | "COMPLETED" | "VOIDED";
@@ -113,8 +116,8 @@ function simBanner() {
 function personaButton(p: SimPersona, i: number) {
   return html`<button class="persona ${i === 0 ? "rec" : ""}" name="persona" value="${p.key}" type="submit">
     ${avatar(["#FFC629", "#D6FF2E", "#B7A3FF", "#FF8A3D", "#DEDDFF"][i % 5])}
-    <span><b>${p.name}</b><small>${p.note} · age ${p.ageRange}</small></span>
-    <span class="tagx">${i === 0 ? "Continue" : p.verified && p.ageRange !== "13-17" ? "Verified" : p.verified ? "Refused: under 18" : "Refused: unverified"}</span>
+    <span><b>${p.name}</b><small>${p.note} · demo account</small></span>
+    <span class="tagx">Continue</span>
   </button>`;
 }
 
@@ -135,15 +138,12 @@ export function simPaypalRouter(courierUrl: string): Router {
         body: html`
           ${simBanner()}
           <main class="sim-card">
-            <h1>Sign in as a test buyer.</h1>
-            <p class="lead">This stands in for Log in with ${PP}.</p>
+            <h1>Pick a demo account.</h1>
+            <p class="lead">This is a demo, so it doesn’t connect a real ${PP} account. Sign in as one of these made-up people.</p>
             <form method="post" action="/sim-paypal/login" class="personas">
               <input type="hidden" name="redirect_uri" value="${redirectUri}">
               <input type="hidden" name="state" value="${state}">
-              ${personaButton(PERSONAS[0]!, 0)}
-              <details class="wiz-alt"><summary>Other test accounts</summary>
-                <div class="personas">${PERSONAS.slice(1).map((p, i) => personaButton(p, i + 1))}</div>
-              </details>
+              ${SHOWN.map((p, i) => personaButton(p, i))}
             </form>
           </main>`,
       }),

@@ -207,7 +207,7 @@ function createGateway(connection: Connection, human: Human): McpServer {
         "unknown_courier",
       );
     if (courier.revokedAt)
-      return failed(`The user has revoked ${courier.name}. They can restore it on Courier's Couriers page.`, "revoked");
+      return failed(`The user has revoked ${courier.name}. They can restore it on their Courier home page.`, "revoked");
     return courier;
   };
 
@@ -423,7 +423,7 @@ function createGateway(connection: Connection, human: Human): McpServer {
       }
       const sending = request.ticket.courierName ?? listCouriers(human.id)[0]!.name;
       if (listCouriers(human.id).find((c) => c.name === sending)?.revokedAt)
-        return failed(`The user has revoked ${sending}. They can restore it on Courier's Couriers page.`, "revoked");
+        return failed(`The user has revoked ${sending}. They can restore it on their Courier home page.`, "revoked");
       const visa = issueErrand({
         connection,
         human,

@@ -33,7 +33,7 @@ import type { Approval, Connection, Courier, Human, Stamp } from "../db.ts";
 import type { Friend } from "../friends.ts";
 import type { Contact } from "../people.ts";
 import { capFields } from "./consent.ts";
-import { backBy, courierForErrand, courierLook, demoClientId, dots, firstName, lookForAgent, short } from "./shared.ts";
+import { backBy, courierForErrand, courierLook, demoClientId, firstName, lookForAgent, short } from "./shared.ts";
 
 /* ---------------- the app: shell ---------------- */
 
@@ -118,7 +118,6 @@ export function shell(
           ${item("errands", "Errands", "/app/errands", out)}
           ${item("shops", "Shops", "/app/shops")}
           ${item("people", "Friends", "/app/people")}
-          ${item("couriers", "Couriers", "/app/couriers")}
           ${item("settings", "Settings", "/app/settings")}
         </nav>
         <div class="rail-who">${avatar()}<span><b>${firstName(d.human) ?? "You"}</b>${d.human.simulated ? SIMULATED : VERIFIED}</span><a class="fine" ${signOut(d)}>Sign out</a></div>
@@ -145,14 +144,6 @@ function whereTo(d: Desk, v: VisaView): string {
   const been = [...new Set(d.stamps.filter((s) => s.visaId === v.id).map((s) => s.merchantName))];
   const shops = been.filter((name) => name !== "any shop");
   return shops.length ? shops.join(", ") : v.merchantName;
-}
-
-/** Every shop as a logo. */
-function shopGrid(): RawHtml {
-  return html`<nav class="shopg" aria-label="Shops">${SHOPS.map(
-    (s) =>
-      html`<a class="shopg-t" href="${config.store.url}/${s.slug}" target="_blank" rel="noopener">${shopLogo(s)}<b>${s.name}</b><small>${s.sells}</small></a>`,
-  )}</nav>`;
 }
 
 /** One errand as a row: who, what for, where, the last step, and the money. */
@@ -193,10 +184,10 @@ function tourSteps(look: { name: string }, courierId: string) {
     {
       target: "courier",
       title: `This is ${look.name}, your courier.`,
-      body: "You get one courier per AI provider, and each one can reach any shop.",
+      body: "Shops see this card. Change its name, face and colour here any time.",
     },
     {
-      target: "shops",
+      target: "rail-shops",
       title: "These are your shops.",
       body: `${look.name} can buy from any of them. They only ever see a pseudonym, never your name.`,
     },
@@ -209,19 +200,47 @@ function tourSteps(look: { name: string }, courierId: string) {
   ];
 }
 
-/** Shops to show first: where this person's couriers have been, then a few good places to start. */
-const STARTERS = ["floor-dash", "beanbucks", "juniper", "bookworm", "lord-knight", "itsy"];
-function topShops(d: Desk, n = 6) {
-  const visits = new Map<string, number>();
-  for (const s of d.stamps) visits.set(s.merchantName, (visits.get(s.merchantName) ?? 0) + 1);
-  const been = SHOPS.filter((s) => visits.has(s.name)).sort((a, b) => visits.get(b.name)! - visits.get(a.name)!);
-  const rest = STARTERS.map((slug) => SHOPS.find((s) => s.slug === slug)).filter(
-    (s): s is (typeof SHOPS)[number] => !!s && !been.includes(s),
-  );
-  return { shops: [...been, ...rest].slice(0, n), visited: been.length > 0 };
+/** The courier's card and everything that changes it: the card on a quiet stage, then name, face and colour beside it. */
+function courierEditor(d: Desk, sel: Courier, saved: boolean): RawHtml {
+  const look = courierLook(d.human, sel);
+  const you = firstName(d.human);
+  const swatch = (c: CourierColor) =>
+    html`<label title="${COLOR_LABEL[c] ?? c}"><input type="radio" name="color" value="${c}" ${look.color === c ? raw("checked") : ""} aria-label="${COLOR_LABEL[c] ?? c}"><span style="--c:${COURIER_COLORS[c].ac}"></span></label>`;
+  return html`<form class="cedit hm4-ed" method="post" action="/start/courier" id="setup" data-tour="courier">
+      <div class="cedit-stage cstage ob2-r hm4-stage">
+        <div class="wiz-id" id="preview" data-vars="${JSON.stringify(Object.fromEntries(COLORS.map((c) => [c, courierVars(c)])))}">${idCard(look, you)}</div></div>
+      <div class="cedit-f">
+        <div class="hm4-edh"><h2>Your courier</h2><small>Shops see this card. Make it yours.</small></div>
+        <input type="hidden" name="c" value="${sel.id}"><input type="hidden" name="human" value="${you ?? "You"}">
+        <label class="fld"><span>Name</span><input class="inp" name="name" value="${look.name}" minlength="2" maxlength="${COURIER_NAME_MAX}" pattern="${COURIER_NAME_PATTERN}" title="${COURIER_NAME_HINT}" required autocomplete="off" autocapitalize="words" spellcheck="false"></label>
+        <small class="hint" id="name-hint">${COURIER_NAME_HINT}</small>
+        ${avatarPicker(look.avatar ?? avatarFor(look.name))}
+        <div class="fld"><span>Colour</span><div class="sw">${COLORS.filter((c) => COLOR_LABEL[c]).map(swatch)}</div></div>
+        <div class="hm4-save"><button class="btn sm" type="submit">Save card</button>${saved ? html`<span class="hm4-ok" role="status">${raw("&check;")} Saved</span>` : ""}</div>
+      </div>
+    </form>`;
 }
 
-export function homePage(d: Desk, opts: { welcome: boolean; courierId?: string; tour?: boolean }): string {
+/** What else a courier can do, and stop doing. */
+function courierControls(d: Desk, sel: Courier): RawHtml {
+  const inClaude = d.connections.length > 0;
+  return html`<div class="card list hm4-ctl">
+      <div class="li"><span class="dot ${inClaude ? "on" : ""}"></span><span class="li-t"><b>Claude</b><small>${inClaude ? `Connected. Say “send ${sel.name}” in any chat.` : "Send it from your own Claude"}</small></span>
+        <a class="btn ${inClaude ? "ghost" : ""} sm" href="${inClaude ? "/app/settings" : `/start/claude?c=${sel.id}`}">${inClaude ? "Manage" : "Connect"}</a></div>
+      ${
+        sel.revokedAt
+          ? html`<div class="li"><span class="dot no"></span><span class="li-t"><b>Revoked</b><small>It can't start errands. Revoked ${timeAgo(sel.revokedAt)}.</small></span>
+            <form method="post" action="/app/couriers/${sel.id}/restore"><button class="btn ghost sm" type="submit">Restore</button></form></div>`
+          : html`<div class="li"><span class="dot"></span><span class="li-t"><b>Revoke ${sel.name}</b><small>Ends its open errands now and stops new ones.</small></span>
+            <form method="post" action="/app/couriers/${sel.id}/revoke" data-sure="Revoke ${sel.name}?" data-sure-body="Its open errands end now." data-sure-yes="Revoke"><button class="btn danger sm" type="submit">Revoke</button></form></div>`
+      }
+    </div>`;
+}
+
+export function homePage(
+  d: Desk,
+  opts: { welcome: boolean; courierId?: string; tour?: boolean; saved?: boolean },
+): string {
   const { human, couriers, visas, approvals } = d;
   const sel = couriers.find((c) => c.id === opts.courierId) ?? couriers[0]!;
   const look = courierLook(human, sel);
@@ -237,56 +256,51 @@ export function homePage(d: Desk, opts: { welcome: boolean; courierId?: string; 
       : `${look.name} is ready when you are.`;
   const ask = `Get me a burger on Floor Dash. I have about $15.`;
   const spent = visas.reduce((sum, v) => sum + v.spentCents, 0);
-  const others = couriers.filter((c) => c.id !== sel.id).slice(0, 2);
   const steps = d.stamps.slice(0, 4);
-  const { shops, visited } = topShops(d);
 
-  const body = html`<div class="hm3-g">
-      <section class="tile li cstage hm3-stage" data-tour="courier" aria-label="Your couriers">${dots()}
-        <div class="hm3-stack">
-          ${others.map(
-            (c) =>
-              html`<a class="hm3-peek cc" style="${courierVars(c.color)}" href="/app?c=${c.id}"><b>${c.name}</b><small class="mono">${c.idNo}</small></a>`,
-          )}
-          <a class="hm3-card" href="/app/couriers?c=${sel.id}" aria-label="${look.name}’s details"><div class="idwrap">${idCard(look, name)}</div></a>
-        </div>
-      </section>
-      <section class="card hm3-now" data-tour="now">
-        <div class="hm3-fig"><small>Spent so far</small><b>${short(spent)}</b><span>${visas.length ? `across ${visas.length} ${visas.length === 1 ? "errand" : "errands"}` : "No errands yet"}</span></div>
-        <div class="hm3-state">
-          ${approvals.map((a) => {
+  const body = html`
+    ${
+      approvals.length
+        ? html`<div class="hm4-asks">${approvals.map((a) => {
             const v = visaById.get(a.visaId);
             const al = v ? lookForAgent(human, v.clientId, v.agentName) : look;
             return html`<a class="ask cc" style="${courierVars(al.color)}" href="/approvals/${a.id}">${portrait(al)}
               <span><b>${al.name} asks: ${a.items.map((i) => i.title.replace(/ \(.*\)$/, "")).join(", ")}, ${money(a.totalCents)}?</b><small>${a.reason}</small></span>
               <span class="btn sm">Answer</span></a>`;
-          })}
-          ${out.length ? html`<div class="rows">${out.slice(0, 2).map((v) => errandRow(d, v))}</div>` : ""}
-        </div>
-        ${
-          inClaude
-            ? html`<div class="hm3-claude"><small>In any Claude chat</small><code class="copy inp code sm">${ask}</code></div>`
-            : html`<a class="hm3-claude link-row" href="/start/claude?c=${sel.id}"><span><b>Connect Claude</b><small>Send ${look.name} from any chat</small></span>${CHEVRON}</a>`
-        }
-      </section>
-    </div>
-    <section data-tour="shops"><div class="pg-st"><h2>${visited ? "Your shops" : "Shops to try"}</h2><a class="link fine" href="/app/shops">All shops</a></div>
-      <nav class="shopg shopg-row" aria-label="Shops">${shops.map(
-        (s) =>
-          html`<a class="shopg-t" href="${config.store.url}/${s.slug}" target="_blank" rel="noopener">${shopLogo(s)}<b>${s.name}</b><small>${s.sells}</small></a>`,
-      )}</nav></section>
-    <section>
-      <div class="pg-st"><h2>Activity</h2>${visas.length ? html`<a class="link fine" href="/app/errands">All errands</a>` : ""}</div>
-      <div class="card pad">${
-        steps.length
-          ? html`<ul class="feed tight" ${out.length ? raw('data-autorefresh="8000"') : ""}>${steps.map((s) => {
-              const ic = STAMP_ICON[s.kind];
-              const v = visaById.get(s.visaId);
-              return html`<li><span class="k ${ic.cls}" aria-hidden="true">${ic.k}</span><div><b>${s.title}</b><span class="d">${v ? lookForAgent(human, v.clientId, v.agentName).name : look.name}${s.detail ? ` · ${s.detail}` : ""}</span></div><time>${timeAgo(s.at)}</time></li>`;
-            })}</ul>`
-          : html`<p class="fine">What ${look.name} browses and buys shows up here.</p>`
-      }</div>
-    </section>`;
+          })}</div>`
+        : ""
+    }
+    <nav class="chips" aria-label="Your couriers">${couriers.map(
+      (c) =>
+        html`<a class="chip cc" style="${courierVars(c.color)}" href="/app?c=${c.id}" ${c.id === sel.id ? raw('aria-current="true"') : ""}>${portrait(c)}${c.name}</a>`,
+    )}<a class="chip chip-add" href="/start/courier?new=1">+ New courier</a></nav>
+    <div class="hm4-g">
+      ${courierEditor(d, sel, Boolean(opts.saved))}
+      <div class="hm4-side">
+        <section class="card hm3-now" data-tour="now">
+          <div class="hm3-fig"><small>Spent so far</small><b>${short(spent)}</b><span>${visas.length ? `across ${visas.length} ${visas.length === 1 ? "errand" : "errands"}` : "No errands yet"}</span></div>
+          ${out.length ? html`<div class="hm3-state"><div class="rows">${out.slice(0, 2).map((v) => errandRow(d, v))}</div></div>` : ""}
+          ${
+            inClaude
+              ? html`<div class="hm3-claude"><small>In any Claude chat</small><code class="copy inp code sm">${ask}</code></div>`
+              : html`<a class="hm3-claude link-row" href="/errand?c=${sel.id}"><span><b>Chat with ${look.name}</b><small>Ask for anything, with a budget</small></span>${CHEVRON}</a>`
+          }
+        </section>
+        <section class="card pad hm4-act">
+          <div class="pg-st"><h2>Activity</h2>${visas.length ? html`<a class="link fine" href="/app/errands">All errands</a>` : ""}</div>
+          ${
+            steps.length
+              ? html`<ul class="feed tight" ${out.length ? raw('data-autorefresh="8000"') : ""}>${steps.map((s) => {
+                  const ic = STAMP_ICON[s.kind];
+                  const v = visaById.get(s.visaId);
+                  return html`<li><span class="k ${ic.cls}" aria-hidden="true">${ic.k}</span><div><b>${s.title}</b><span class="d">${v ? lookForAgent(human, v.clientId, v.agentName).name : look.name}${s.detail ? ` · ${s.detail}` : ""}</span></div><time>${timeAgo(s.at)}</time></li>`;
+                })}</ul>`
+              : html`<p class="fine">What ${look.name} browses and buys shows up here.</p>`
+          }
+        </section>
+        ${courierControls(d, sel)}
+      </div>
+    </div>`;
   const main = page(
     `${opts.welcome || !visas.length ? "Welcome" : "Hi"}${name ? `, ${name}` : ""}.`,
     lead,
@@ -301,7 +315,7 @@ export function homePage(d: Desk, opts: { welcome: boolean; courierId?: string; 
     opts.tour
       ? html`${main}${raw(`<script type="application/json" id="tour">${JSON.stringify(tourSteps(look, sel.id)).replace(/</g, "\\u003c")}</script>`)}`
       : main,
-    { scripts: opts.tour ? ["/assets/tour.js"] : [] },
+    { scripts: ["/assets/onboard.js", ...(opts.tour ? ["/assets/tour.js"] : [])] },
   );
 }
 
@@ -394,12 +408,24 @@ function errandDetail(d: Desk, v: VisaView): RawHtml {
 /* ---------------- shops ---------------- */
 
 export function shopsPage(d: Desk): string {
-  const body = html`${shopGrid()}<p class="fine">Demo shops with made-up names and products, not affiliated with any real brand. No real money moves.</p>`;
+  const visits = new Map<string, number>();
+  for (const st of d.stamps) visits.set(st.merchantName, (visits.get(st.merchantName) ?? 0) + 1);
+  const body = html`<div class="shg">${SHOPS.map(
+    (s) =>
+      html`<a class="shg-t" href="${config.store.url}/${s.slug}" target="_blank" rel="noopener">${shopLogo(s)}<span class="shg-b"><b>${s.name}</b><small>${visits.has(s.name) ? `Visited ${visits.get(s.name)}×` : s.sells}</small></span></a>`,
+  )}</div>
+    <p class="fine">Demo shops with made-up names and products, not affiliated with any real brand. No real money moves.</p>`;
   return shell(
     "Shops",
     d,
     "shops",
-    page("Shops", "Every shop your couriers can reach. Name one when you ask, with a budget.", "", body),
+    page(
+      "Shops",
+      `${SHOPS.length} shops your couriers can buy from. Each sees a pseudonym, never you.`,
+      "",
+      body,
+      "pg-wide",
+    ),
   );
 }
 
@@ -416,46 +442,44 @@ export function peoplePage(
   link: string,
 ): string {
   const mine = d.couriers.find((c) => !c.revokedAt) ?? d.couriers[0]!;
+  const look = courierLook(d.human, mine);
   const ask = (say: string) => `/errand?c=${mine.id}&say=${encodeURIComponent(say)}`;
   const card = (
-    look: { name: string; color: Courier["color"] } | undefined,
+    face: { name: string; avatar?: Courier["avatar"] } | undefined,
     color: Courier["color"],
     who: string,
     sub: string,
+    courierName: string | undefined,
     href: string,
     remove?: RawHtml,
-  ) => html`<div class="fc cc" style="${courierVars(color)}">
-      ${remove ?? ""}${look ? portrait(look) : html`<span class="pt pt-empty"></span>`}
-      <b>${who}</b><small>${sub}</small>
-      <a class="btn ghost sm" href="${href}">Ask to an errand</a>
+  ) => html`<div class="fr cc" style="${courierVars(color)}">
+      <div class="fr-top">${face ? portrait(face) : html`<span class="pt pt-empty">?</span>`}${courierName ? html`<span class="fr-tag">${courierName}</span>` : ""}</div>
+      ${remove ?? ""}
+      <div class="fr-b"><b>${who}</b><small>${sub}</small></div>
+      <a class="btn ghost sm" href="${href}">Ask ${who} along</a>
     </div>`;
-  const body = html`<section aria-label="Your friends on Courier">
+  const body = html`<section aria-label="Demo friends">
+      <div class="pg-st"><h2>Try it with these</h2><span class="fine">Made-up people with simulated PayPal</span></div>
+      <div class="frg">${people.map(({ contact: c, courier, idea }) =>
+        card(courier, c.color, c.name, `Your ${c.relation}`, c.courierName, ask(`Chip in with ${c.name} on ${idea}`)),
+      )}</div>
+    </section>
+    <section aria-label="Your friends on Courier">
       <div class="pg-st"><h2>On Courier</h2><span class="n">${friends.length}</span></div>
-      <div class="fgrid">
+      <div class="frg">
         ${friends.map((f) =>
           card(
             f.courier,
             f.courier?.color ?? "ink",
             f.name,
-            f.courier ? `Courier ${f.courier.name}` : "No courier yet",
+            f.courier ? "On Courier" : "No courier yet",
+            f.courier?.name,
             ask(`Ask ${f.name} if they want to come along`),
             html`<form class="fc-x" method="post" action="/app/people/remove" data-sure="Remove ${f.name}?" data-sure-body="Your couriers won't be able to ask each other to errands." data-sure-yes="Remove"><input type="hidden" name="h" value="${f.human.id}"><button type="submit" aria-label="Remove ${f.name}">${X_ICON}</button></form>`,
           ),
         )}
-        <button type="button" class="fc fc-add" data-copy="${link}"><span class="pt pt-empty">+</span><b>Add a friend</b><small>Copies your invite link</small></button>
+        <button type="button" class="fr fr-add" data-copy="${link}"><span class="fr-plus" aria-hidden="true">+</span><span class="fr-b"><b>Add a friend</b><small>Copies your invite link</small></span></button>
       </div>
-    </section>
-    <section aria-label="Demo friends">
-      <div class="pg-st"><h2>Demo friends</h2><span class="fine">Made-up people with simulated PayPal</span></div>
-      <div class="fgrid">${people.map(({ contact: c, courier, idea }) =>
-        card(
-          courier,
-          c.color,
-          c.name,
-          `Your ${c.relation} · courier ${c.courierName}`,
-          ask(`Chip in with ${c.name} on ${idea}`),
-        ),
-      )}</div>
     </section>`;
   return shell(
     "Friends",
@@ -463,74 +487,18 @@ export function peoplePage(
     "people",
     page(
       "Friends",
-      `${mine.name} can ask them to errands by name. Each pays their own share.`,
+      `${look.name} can ask a friend’s courier along. Each person pays their own share.`,
       html`<button type="button" class="btn sm" data-copy="${link}">Copy invite link</button>`,
       body,
+      "pg-wide",
     ),
   );
 }
 
-/* ---------------- couriers: the card is the page ---------------- */
+/* ---------------- couriers: colours ---------------- */
 
 const COLORS = Object.keys(COURIER_COLORS) as CourierColor[];
 const COLOR_LABEL: Record<string, string> = { cobalt: "Cobalt", tang: "Orange", ink: "Ink", hivis: "Hi-vis" };
-
-export function couriersPage(d: Desk, opts: { courierId?: string }): string {
-  const sel = d.couriers.find((c) => c.id === opts.courierId) ?? d.couriers[0]!;
-  const look = courierLook(d.human, sel);
-  const you = firstName(d.human);
-  const mine = d.visas.filter((v) => courierForErrand(d.human.id, v.clientId, v.agentName)?.id === sel.id);
-  const inClaude = d.connections.length > 0;
-  const spent = mine.reduce((sum, v) => sum + v.spentCents, 0);
-  const swatch = (c: CourierColor) =>
-    html`<label title="${COLOR_LABEL[c] ?? c}"><input type="radio" name="color" value="${c}" ${look.color === c ? raw("checked") : ""} aria-label="${COLOR_LABEL[c] ?? c}"><span style="--c:${COURIER_COLORS[c].ac}"></span></label>`;
-  const body = html`
-    ${
-      d.couriers.length > 1
-        ? html`<nav class="chips" aria-label="Your couriers">${d.couriers.map(
-            (c) =>
-              html`<a class="chip cc" style="${courierVars(c.color)}" href="/app/couriers?c=${c.id}" ${c.id === sel.id ? raw('aria-current="true"') : ""}>${portrait(c)}${c.name}</a>`,
-          )}</nav>`
-        : ""
-    }
-    <form class="cedit card" method="post" action="/start/courier" id="setup">
-      <div class="cedit-stage cstage">${dots()}<div class="wiz-id" id="preview" data-vars="${JSON.stringify(Object.fromEntries(COLORS.map((c) => [c, courierVars(c)])))}">${idCard(look, you)}</div></div>
-      <div class="cedit-f">
-        <input type="hidden" name="c" value="${sel.id}"><input type="hidden" name="human" value="${you ?? "You"}">
-        <label class="fld"><span>Name</span><input class="inp" name="name" value="${look.name}" minlength="2" maxlength="${COURIER_NAME_MAX}" pattern="${COURIER_NAME_PATTERN}" title="${COURIER_NAME_HINT}" required autocomplete="off" autocapitalize="words" spellcheck="false"></label>
-        <small class="hint" id="name-hint">${COURIER_NAME_HINT}</small>
-        ${avatarPicker(look.avatar ?? avatarFor(look.name))}
-        <div class="fld"><span>Colour</span><div class="sw">${COLORS.filter((c) => COLOR_LABEL[c]).map(swatch)}</div></div>
-        <button class="btn sm" type="submit">Save card</button>
-        <p class="cedit-n">${mine.length} ${mine.length === 1 ? "errand" : "errands"} · ${short(spent)} spent · since ${new Date(sel.createdAt).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}</p>
-      </div>
-    </form>
-    <div class="card list">
-      <div class="li"><span class="dot ${inClaude ? "on" : ""}"></span><span class="li-t"><b>Claude</b><small>${inClaude ? `Connected. Say “send ${sel.name}” in any chat.` : "Not connected yet"}</small></span>
-        <a class="btn ${inClaude ? "ghost" : ""} sm" href="${inClaude ? "/app/settings" : `/start/claude?c=${sel.id}`}">${inClaude ? "Manage" : "Connect"}</a></div>
-      <div class="li"><span class="dot on"></span><span class="li-t"><b>Errand room</b><small>Chat with ${sel.name} on this website</small></span>
-        <a class="btn ghost sm" href="/errand?c=${sel.id}">Open</a></div>
-      ${
-        sel.revokedAt
-          ? html`<div class="li"><span class="dot no"></span><span class="li-t"><b>Revoked</b><small>It can't start errands. Revoked ${timeAgo(sel.revokedAt)}.</small></span>
-            <form method="post" action="/app/couriers/${sel.id}/restore"><button class="btn ghost sm" type="submit">Restore</button></form></div>`
-          : html`<div class="li"><span class="dot"></span><span class="li-t"><b>Revoke ${look.name}</b><small>Ends its open errands now and stops new ones.</small></span>
-            <form method="post" action="/app/couriers/${sel.id}/revoke" data-sure="Revoke ${look.name}?" data-sure-body="Its open errands end now." data-sure-yes="Revoke"><button class="btn danger sm" type="submit">Revoke</button></form></div>`
-      }
-    </div>`;
-  return shell(
-    look.name,
-    d,
-    "couriers",
-    page(
-      "Couriers",
-      "Your courier’s card is what shops see. Make it yours.",
-      html`<a class="btn ghost sm" href="/start/courier?new=1">New courier</a>`,
-      body,
-    ),
-    { scripts: ["/assets/onboard.js"] },
-  );
-}
 
 /* ---------------- settings ---------------- */
 

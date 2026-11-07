@@ -31,10 +31,10 @@ import {
   claudeSetupPage,
   connectingPage,
   courierSetupPage,
-  couriersPage,
   DEMO_CLIENT_PREFIX,
   type Desk,
   deleteAccountPage,
+  demoPayPalPage,
   errandRoom,
   errandsPage,
   errorPage,
@@ -44,7 +44,6 @@ import {
   runInvitePage,
   settingsPage,
   shopsPage,
-  signInPage,
   signInStepPage,
   welcomePage,
 } from "../pages/index.ts";
@@ -127,6 +126,15 @@ appRouter.get("/start/sign-in", (req, res) => {
   res.redirect(302, findCourier(human.id) ? "/app" : "/start/courier");
 });
 
+appRouter.get("/start/paypal", (req, res) => {
+  const human = currentHuman(req);
+  if (!human) {
+    res.send(demoPayPalPage());
+    return;
+  }
+  res.redirect(302, findCourier(human.id) ? "/app" : "/start/courier");
+});
+
 appRouter.get("/start/how", (_req, res) => {
   res.redirect(302, "/start/courier");
 });
@@ -193,7 +201,7 @@ appRouter.post("/start/courier", (req, res) => {
     reqId
       ? `/consent/${reqId}`
       : editing
-        ? `/app/couriers?c=${id}`
+        ? `/app?c=${id}&saved=1`
         : `/start/claude?c=${id}${firstRun ? "&first=1" : ""}`,
   );
 });
@@ -203,7 +211,7 @@ appRouter.get("/start/claude", (req, res) => {
   if (!ctx) return;
   if (ctx.courier.mode !== "claude") saveCourier({ ...ctx.courier, mode: "claude" });
   res.send(
-    claudeSetupPage(ctx.human, ctx.courier, { onboarding: req.query.first === "1", step: Number(req.query.step) || 1 }),
+    claudeSetupPage(ctx.human, ctx.courier, { onboarding: req.query.first === "1", step: Number(req.query.step) || 0 }),
   );
 });
 
@@ -238,7 +246,7 @@ function desk(human: Human): Desk {
 function requireDesk(req: express.Request, res: express.Response): Desk | null {
   const human = currentHuman(req);
   if (!human) {
-    res.send(signInPage());
+    res.redirect(302, "/start");
     return null;
   }
   const d = desk(human);
@@ -257,7 +265,14 @@ appRouter.get("/app", (req, res) => {
   // The tour runs once, on the first visit, and is marked here so a reload doesn't start it again.
   const tour = !d.human.touredAt;
   if (tour) db.put<Human>("humans", d.human.id, { ...d.human, touredAt: new Date().toISOString() });
-  res.send(homePage(d, { welcome: req.query.welcome === "1", courierId: q(req.query.c), tour }));
+  res.send(
+    homePage(d, {
+      welcome: req.query.welcome === "1",
+      courierId: q(req.query.c),
+      tour,
+      saved: req.query.saved === "1",
+    }),
+  );
 });
 
 appRouter.get("/app/account/delete", (req, res) => {
@@ -326,9 +341,9 @@ appRouter.post("/friend/:token", (req, res) => {
   res.redirect(303, findCourier(viewer.id) ? "/app/people" : "/start/courier");
 });
 
+// The courier's card lives on Home now; old links still land there.
 appRouter.get("/app/couriers", (req, res) => {
-  const d = requireDesk(req, res);
-  if (d) res.send(couriersPage(d, { courierId: q(req.query.c) }));
+  res.redirect(302, typeof req.query.c === "string" ? `/app?c=${encodeURIComponent(req.query.c)}` : "/app");
 });
 
 appRouter.get("/app/settings", (req, res) => {

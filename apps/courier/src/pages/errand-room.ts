@@ -1,17 +1,4 @@
-import {
-  ARROW,
-  config,
-  courierVars,
-  html,
-  LOGO,
-  MONEY,
-  PP,
-  paypalFor,
-  portrait,
-  raw,
-  SHOPS,
-  shopLogo,
-} from "@courier/shared";
+import { ARROW, config, courierVars, html, LOGO, MONEY, PP, paypalFor, portrait, raw, SHOPS } from "@courier/shared";
 import type { Courier } from "../db.ts";
 import { contactsOf } from "../people.ts";
 import { FREE_MESSAGES, messagesLeft } from "../room.ts";
@@ -40,7 +27,7 @@ export function errandRoom(d: Desk, courier: Courier, chat: unknown, list: unkno
   const boot = {
     courier: { ...look, id: courier.id, vars: courierVars(look.color) },
     human,
-    welcome: `Hey ${human}, welcome to the Courier demo! I’m ${look.name}. The real Courier experience is [connecting Courier’s MCP server](${config.courier.url}${connect}) to your Claude or any agent you use. This window is the demo, with ${FREE_MESSAGES} free messages. Use them on whatever you like.\n\nBy the way, you can invite people to an errand and chip in together, each paying their own share. ${people} are here to try it with: say “chip in with Leo on a gift for Dad”, or find them on the [People](${config.courier.url}/app/people) page.`,
+    welcome: `Hey ${human}, welcome to the Courier demo! I’m ${look.name}. The real Courier experience is [connecting Courier’s MCP server](${config.courier.url}${connect}) to your Claude or any agent you use. This window is the demo, with ${FREE_MESSAGES} free messages. Use them on whatever you like.\n\nBy the way, you can invite people to an errand and chip in together, each paying their own share. ${people} are here to try it with: say “chip in with Leo on a gift for Dad”, or find them on the [Friends](${config.courier.url}/app/people) page. Their couriers talk it over with me in a thread you can watch.`,
     free: FREE_MESSAGES,
     left: messagesLeft(d.human),
     origins: [new URL(config.courier.url).origin, new URL(config.store.url).origin],
@@ -80,9 +67,7 @@ export function errandRoom(d: Desk, courier: Courier, chat: unknown, list: unkno
       </aside>
       <div class="rm-main">
       <div class="rm-budget" id="budget" hidden></div>
-      <div class="rm-shops" role="group" aria-label="Shops ${look.name} can reach">
-        ${SHOPS.map((s) => html`<button type="button" title="${s.name}: ${s.sells}" aria-label="What does ${s.name} have?" data-say="What does ${s.name} have?">${shopLogo(s)}</button>`)}
-      </div>
+      <div class="rm-shops"><a class="rm-shops-l" href="/app/shops">${SHOPS.length} shops ${look.name} can reach${ARROW}</a></div>
       <div class="log rm-log" id="log" aria-live="polite"></div>
       <div class="rm-foot">
         <div class="rm-over" id="over" hidden>

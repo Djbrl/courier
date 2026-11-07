@@ -1,4 +1,14 @@
-import { type CourierColor, config, newId, randomToken, SHOPS, type Shop } from "@courier/shared";
+import {
+  type Avatar,
+  avatarFor,
+  type CourierColor,
+  config,
+  isAvatar,
+  newId,
+  randomToken,
+  SHOPS,
+  type Shop,
+} from "@courier/shared";
 import { type Courier, db, type Human } from "./db.ts";
 import { firstName } from "./pages/shared.ts";
 
@@ -59,6 +69,12 @@ export const present = (run: Run) => run.members.filter((m) => !m.leftAt);
 export const runFull = (run: Run) => present(run).length >= RUN_MEMBERS_MAX;
 export const memberOf = (run: Run, humanId: string) => run.members.find((m) => m.humanId === humanId);
 export const getRun = (id: string | undefined) => (id ? db.get<Run>("runs", id) : undefined);
+
+/** A member's courier's portrait: the one they picked, or the steady one from its name. */
+export function faceOf(m: Pick<RunMember, "courierId" | "courierName">): Avatar {
+  const saved = db.get<Courier>("couriers", m.courierId)?.avatar;
+  return isAvatar(saved) ? saved : avatarFor(m.courierName);
+}
 
 export function runByToken(token: string): Run | undefined {
   if (!/^[\w-]{16,64}$/.test(token)) return undefined;
@@ -144,7 +160,15 @@ export function runView(run: Run, humanId: string) {
       .map((id) => firstName(db.get<Human>("humans", id) ?? null) ?? "Someone"),
     lines: run.lines.slice(-40).map((line) => {
       const m = who(run, line.by);
-      return { ...line, by: undefined, name: m?.name ?? "", courier: m?.courierName ?? "", you: line.by === humanId };
+      const avatar = m ? faceOf(m) : null;
+      return {
+        ...line,
+        by: undefined,
+        name: m?.name ?? "",
+        courier: m?.courierName ?? "",
+        avatar,
+        you: line.by === humanId,
+      };
     }),
   };
 }
