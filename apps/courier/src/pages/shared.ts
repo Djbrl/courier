@@ -121,6 +121,16 @@ export function navLinks(human: Human | null, here = ""): RawHtml {
       }`;
 }
 
+/** A sign-out link's attributes: it asks first, since a demo person can't be signed back into. */
+export const signOut = (human: Human) =>
+  raw(
+    `href="/logout" data-sure="Sign out?" data-sure-yes="Sign out" data-sure-body="${
+      human.simulated
+        ? "This demo person and their chats go with it. Trying the demo again starts a new one."
+        : "You can sign back in with PayPal any time."
+    }"`,
+  );
+
 export function cnav(human: Human | null, here = ""): RawHtml {
   return html`<header class="cnav">
     <a href="/" aria-label="Courier home">${LOGO}</a>

@@ -11,7 +11,7 @@ import {
 } from "@courier/shared";
 import { type Courier, db, findCourier, type Human, listCouriers } from "../db.ts";
 import { type Run, runShop } from "../runs.ts";
-import { courierLook, cpage, dots, firstName } from "./shared.ts";
+import { courierLook, cpage, dots, firstName, signOut } from "./shared.ts";
 
 /**
  * What someone sees when they open a run's link: who asked, for what, who's in, and one way in. Signed out, that's
@@ -61,7 +61,7 @@ export function runInvitePage(run: Run, viewer: Human | null, couriers: Courier[
       <p class="fine">Your courier talks to ${host.courierName} for you. You choose your own things and pay for them with your own PayPal. Nobody else sees your PayPal, and the shop never learns your name.</p>
     </div>
     <div class="wiz-foot run-foot">${join}</div>
-    <p class="fine">${viewer ? html`Signed in as ${you ?? "a demo person"}. <a class="link" href="/logout">Sign out</a>` : paypal.mode === "sandbox" ? "PayPal sandbox: sign in with a sandbox buyer account, no real money." : MONEY[paypal.mode].note}</p>`;
+    <p class="fine">${viewer ? html`Signed in as ${you ?? "a demo person"}. <a class="link" ${signOut(viewer)}>Sign out</a>` : paypal.mode === "sandbox" ? "PayPal sandbox: sign in with a sandbox buyer account, no real money." : MONEY[paypal.mode].note}</p>`;
 
   return cpage(
     `${host.name} invited you`,

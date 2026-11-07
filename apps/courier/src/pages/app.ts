@@ -33,19 +33,18 @@ import type { Approval, Connection, Courier, Human, Stamp } from "../db.ts";
 import type { Friend } from "../friends.ts";
 import type { Contact } from "../people.ts";
 import { capFields } from "./consent.ts";
-import { backBy, courierForErrand, courierLook, demoClientId, firstName, lookForAgent, short } from "./shared.ts";
+import {
+  backBy,
+  courierForErrand,
+  courierLook,
+  demoClientId,
+  firstName,
+  lookForAgent,
+  short,
+  signOut,
+} from "./shared.ts";
 
 /* ---------------- the app: shell ---------------- */
-
-/** A sign-out link, which asks first. A demo person can't be signed back into. */
-const signOut = (d: Pick<Desk, "human">) =>
-  raw(
-    `href="/logout" data-sure="Sign out?" data-sure-yes="Sign out" data-sure-body="${
-      d.human.simulated
-        ? "This demo person and their chats go with it. Trying the demo again starts a new one."
-        : "You can sign back in with PayPal any time."
-    }"`,
-  );
 
 export type VisaView = Visa & { remainingCents: number; effective: string };
 
@@ -120,7 +119,7 @@ export function shell(
           ${item("people", "Friends", "/app/people")}
           ${item("settings", "Settings", "/app/settings")}
         </nav>
-        <div class="rail-who">${avatar()}<span><b>${firstName(d.human) ?? "You"}</b>${d.human.simulated ? SIMULATED : VERIFIED}</span><a class="fine" ${signOut(d)}>Sign out</a></div>
+        <div class="rail-who">${avatar()}<span><b>${firstName(d.human) ?? "You"}</b>${d.human.simulated ? SIMULATED : VERIFIED}</span><a class="fine" ${signOut(d.human)}>Sign out</a></div>
         </div>
       </aside>
       <main class="pane">${main}</main>
@@ -542,7 +541,7 @@ export function settingsPage(d: Desk, savedEmail?: string | null | false): strin
         ${capFields(d.human)}<button class="btn sm" type="submit">Save</button></div>
     </form>`,
     account: html`<div class="card list">
-      ${row(firstName(d.human) ?? "You", "Your name is never shared with shops.", html`<a class="btn ghost sm" ${signOut(d)}>Sign out</a>`)}
+      ${row(firstName(d.human) ?? "You", "Your name is never shared with shops.", html`<a class="btn ghost sm" ${signOut(d.human)}>Sign out</a>`)}
       ${row("Delete account", "Erase everything and start again from scratch.", html`<a class="btn danger sm" href="/app/account/delete">Delete</a>`)}
     </div>`,
   };
